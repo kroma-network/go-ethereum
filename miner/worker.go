@@ -1019,6 +1019,8 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	}
 	if genParams.gasLimit != nil { // override gaslimit if specified
 		header.GasLimit = *genParams.gasLimit
+	} else if w.chain.Config().Optimism != nil { // if unspecified but still optimism, then adjust pending gaslimit
+		header.GasLimit = w.config.GasCeil
 	}
 	// Run the consensus preparation with the default or customized consensus engine.
 	if err := w.engine.Prepare(w.chain, header); err != nil {
