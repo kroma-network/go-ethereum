@@ -1,12 +1,13 @@
 package types
 
 import (
+	"math/big"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/tests/fuzzerutils"
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/require"
-	"math/big"
-	"testing"
 )
 
 // FuzzTransactionMarshallingRoundTrip executes a fuzz test which constructs arbitrary transactions of various types
