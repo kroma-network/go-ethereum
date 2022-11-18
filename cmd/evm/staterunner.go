@@ -24,7 +24,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/tests"
 
@@ -58,7 +57,7 @@ func stateTestCmd(ctx *cli.Context) error {
 	log.Root().SetHandler(glogger)
 
 	// Configure the EVM logger
-	config := &logger.Config{
+	config := &vm.LogConfig{
 		EnableMemory:     !ctx.Bool(DisableMemoryFlag.Name),
 		DisableStack:     ctx.Bool(DisableStackFlag.Name),
 		DisableStorage:   ctx.Bool(DisableStorageFlag.Name),
@@ -66,18 +65,18 @@ func stateTestCmd(ctx *cli.Context) error {
 	}
 	var (
 		tracer   vm.EVMLogger
-		debugger *logger.StructLogger
+		debugger *vm.StructLogger
 	)
 	switch {
 	case ctx.Bool(MachineFlag.Name):
-		tracer = logger.NewJSONLogger(config, os.Stderr)
+		tracer = vm.NewJSONLogger(config, os.Stderr)
 
 	case ctx.Bool(DebugFlag.Name):
-		debugger = logger.NewStructLogger(config)
+		debugger = vm.NewStructLogger(config)
 		tracer = debugger
 
 	default:
-		debugger = logger.NewStructLogger(config)
+		debugger = vm.NewStructLogger(config)
 	}
 	// Load the test content from the input file
 	src, err := os.ReadFile(ctx.Args().First())
@@ -118,7 +117,7 @@ func stateTestCmd(ctx *cli.Context) error {
 			if ctx.Bool(DebugFlag.Name) {
 				if debugger != nil {
 					fmt.Fprintln(os.Stderr, "#### TRACE ####")
-					logger.WriteTrace(os.Stderr, debugger.StructLogs())
+					vm.WriteTrace(os.Stderr, debugger.StructLogs())
 				}
 			}
 		}

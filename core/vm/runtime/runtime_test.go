@@ -33,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
-	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/params"
 
 	// force-load js tracers to trigger registration
@@ -473,7 +472,7 @@ func BenchmarkSimpleLoop(b *testing.B) {
 		byte(vm.JUMP),
 	}
 
-	//tracer := logger.NewJSONLogger(nil, os.Stdout)
+	//tracer := vm.NewJSONLogger(nil, os.Stdout)
 	//Execute(loopingCode, nil, &Config{
 	//	EVMConfig: vm.Config{
 	//		Debug:  true,
@@ -515,7 +514,7 @@ func TestEip2929Cases(t *testing.T) {
 		Execute(code, nil, &Config{
 			EVMConfig: vm.Config{
 				Debug:     true,
-				Tracer:    logger.NewMarkdownLogger(nil, os.Stdout),
+				Tracer:    vm.NewMarkdownLogger(nil, os.Stdout),
 				ExtraEips: []int{2929},
 			},
 		})
@@ -669,7 +668,7 @@ func TestColdAccountAccessCost(t *testing.T) {
 			// [Scroll: END]
 		},
 	} {
-		tracer := logger.NewStructLogger(nil)
+		tracer := vm.NewStructLogger(nil)
 		Execute(tc.code, nil, &Config{
 			EVMConfig: vm.Config{
 				Debug:  true,
