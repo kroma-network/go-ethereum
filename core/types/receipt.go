@@ -75,6 +75,11 @@ type Receipt struct {
 	L1GasUsed  *big.Int   `json:"l1GasUsed,omitempty"`
 	L1Fee      *big.Int   `json:"l1Fee,omitempty"`
 	FeeScalar  *big.Float `json:"l1FeeScalar,omitempty"`
+
+	// [Scroll: START]
+	// The value of evm execution result.
+	ReturnValue []byte `json:"returnValue,omitempty"`
+	// [Scroll: END]
 }
 
 type receiptMarshaling struct {
