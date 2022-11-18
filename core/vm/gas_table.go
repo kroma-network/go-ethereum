@@ -420,6 +420,10 @@ func gasStaticCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memo
 	return gas, nil
 }
 
+// [Scroll: START]
+/*
+NOTE: SELFDESTRUCT is disabled in Voost. This is not meant to disable
+forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
 func gasSelfdestruct(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var gas uint64
 	// EIP150 homestead gas reprice fork:
@@ -442,3 +446,5 @@ func gasSelfdestruct(evm *EVM, contract *Contract, stack *Stack, mem *Memory, me
 	}
 	return gas, nil
 }
+*/
+// [Scroll: END]

@@ -819,6 +819,10 @@ func opStop(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	return nil, errStopToken
 }
 
+// [Scroll: START]
+/*
+NOTE: SELFDESTRUCT is disabled in Voost. This is not meant to disable
+forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
 func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	if interpreter.readOnly {
 		return nil, ErrWriteProtection
@@ -833,6 +837,8 @@ func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	}
 	return nil, errStopToken
 }
+*/
+// [Scroll: END]
 
 // following functions are used by the instruction jump  table
 
