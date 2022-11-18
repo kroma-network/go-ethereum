@@ -167,6 +167,13 @@ func (t *prestateTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64,
 	}
 }
 
+// [Scroll: START]
+// NOTE(chokobole): This part is different from scroll
+func (t *prestateTracer) CaptureStateAfter(pc uint64, op vm.OpCode, gas, cost uint64, _ *vm.ScopeContext, rData []byte, depth int, err error) {
+}
+
+// [Scroll: END]
+
 // CaptureFault implements the EVMLogger interface to trace an execution fault.
 func (t *prestateTracer) CaptureFault(pc uint64, op vm.OpCode, gas, cost uint64, _ *vm.ScopeContext, depth int, err error) {
 }

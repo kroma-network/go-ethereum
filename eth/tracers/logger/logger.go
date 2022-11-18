@@ -214,6 +214,12 @@ func (l *StructLogger) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, s
 	l.logs = append(l.logs, log)
 }
 
+// [Scroll:START]
+func (l *StructLogger) CaptureStateAfter(pc uint64, op vm.OpCode, gas, cost uint64, scope *vm.ScopeContext, rData []byte, depth int, err error) {
+}
+
+// [Scroll:END]
+
 // CaptureFault implements the EVMLogger interface to trace an execution fault
 // while running an opcode.
 func (l *StructLogger) CaptureFault(pc uint64, op vm.OpCode, gas, cost uint64, scope *vm.ScopeContext, depth int, err error) {
@@ -381,6 +387,13 @@ func (t *mdLogger) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, scope
 		fmt.Fprintf(t.out, "Error: %v\n", err)
 	}
 }
+
+// [Scroll:START]
+// CaptureStateAfter for special needs, tracks SSTORE ops and records the storage change.
+func (t *mdLogger) CaptureStateAfter(pc uint64, op vm.OpCode, gas, cost uint64, scope *vm.ScopeContext, rData []byte, depth int, err error) {
+}
+
+// [Scroll:END]
 
 func (t *mdLogger) CaptureFault(pc uint64, op vm.OpCode, gas, cost uint64, scope *vm.ScopeContext, depth int, err error) {
 	fmt.Fprintf(t.out, "\nError: at pc=%d, op=%v: %v\n", pc, op, err)
