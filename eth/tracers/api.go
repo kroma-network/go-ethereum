@@ -1000,5 +1000,13 @@ func APIs(backend Backend) []rpc.API {
 			Namespace: "debug",
 			Service:   NewAPI(backend),
 		},
+		// [Scroll: START]
+		{
+			Namespace: "voost",
+			Version:   "1.0",
+			Service:   TraceBlock(NewAPI(backend)),
+			Public:    true,
+		},
+		// [Scroll: END]
 	}
 }
