@@ -116,10 +116,14 @@ func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
 }
 
 // deriveHash computes the state root according to the genesis specification.
-func (ga *GenesisAlloc) deriveHash() (common.Hash, error) {
+// [Scroll: START]
+func (ga *GenesisAlloc) deriveHash(trieCfg *trie.Config) (common.Hash, error) {
+	// [Scroll: END]
 	// Create an ephemeral in-memory database for computing hash,
 	// all the derived states will be discarded to not pollute disk.
-	db := state.NewDatabase(rawdb.NewMemoryDatabase())
+	// [Scroll: START]
+	db := state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), trieCfg)
+	// [Scroll: END]
 	statedb, err := state.New(common.Hash{}, db, nil)
 	if err != nil {
 		return common.Hash{}, err
@@ -138,8 +142,8 @@ func (ga *GenesisAlloc) deriveHash() (common.Hash, error) {
 // flush is very similar with deriveHash, but the main difference is
 // all the generated states will be persisted into the given database.
 // Also, the genesis state specification will be flushed as well.
-func (ga *GenesisAlloc) flush(db ethdb.Database) error {
-	statedb, err := state.New(common.Hash{}, state.NewDatabaseWithConfig(db, &trie.Config{Preimages: true}), nil)
+func (ga *GenesisAlloc) flush(db ethdb.Database, Zktrie bool) error {
+	statedb, err := state.New(common.Hash{}, state.NewDatabaseWithConfig(db, &trie.Config{Zktrie: Zktrie, Preimages: true}), nil)
 	if err != nil {
 		return err
 	}
@@ -172,6 +176,7 @@ func (ga *GenesisAlloc) flush(db ethdb.Database) error {
 // hash and commits them into the given database handler.
 func CommitGenesisState(db ethdb.Database, hash common.Hash) error {
 	var alloc GenesisAlloc
+	Zktrie := false
 	blob := rawdb.ReadGenesisStateSpec(db, hash)
 	if len(blob) != 0 {
 		if err := alloc.UnmarshalJSON(blob); err != nil {
@@ -198,11 +203,12 @@ func CommitGenesisState(db ethdb.Database, hash common.Hash) error {
 		}
 		if genesis != nil {
 			alloc = genesis.Alloc
+			Zktrie = genesis.Config.Zktrie
 		} else {
 			return errors.New("not found")
 		}
 	}
-	return alloc.flush(db)
+	return alloc.flush(db, Zktrie)
 }
 
 // GenesisAccount is an account in the state of the genesis block.
@@ -323,7 +329,23 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	// We have the genesis block in database(perhaps in ancient database)
 	// but the corresponding state is missing.
 	header := rawdb.ReadHeader(db, stored, 0)
-	if _, err := state.New(header.Root, state.NewDatabaseWithConfig(db, nil), nil); err != nil {
+
+	// [Scroll: START]
+	var trieCfg *trie.Config
+
+	if genesis == nil {
+		storedcfg := rawdb.ReadChainConfig(db, stored)
+		if storedcfg == nil {
+			log.Warn("Found genesis block without chain config")
+		} else {
+			trieCfg = &trie.Config{Zktrie: storedcfg.Zktrie}
+		}
+	} else {
+		trieCfg = &trie.Config{Zktrie: genesis.Config.Zktrie}
+	}
+
+	if _, err := state.New(header.Root, state.NewDatabaseWithConfig(db, trieCfg), nil); err != nil {
+		// [Scroll: END]
 		if genesis == nil {
 			genesis = DefaultGenesisBlock()
 		}
@@ -444,7 +466,13 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 
 // ToBlock returns the genesis block according to genesis specification.
 func (g *Genesis) ToBlock() *types.Block {
-	root, err := g.Alloc.deriveHash()
+	// [Scroll: START]
+	var trieCfg *trie.Config
+	if g.Config != nil {
+		trieCfg = &trie.Config{Zktrie: g.Config.Zktrie}
+	}
+	root, err := g.Alloc.deriveHash(trieCfg)
+	// [Scroll: END]
 	if err != nil {
 		panic(err)
 	}
@@ -498,7 +526,7 @@ func (g *Genesis) Commit(db ethdb.Database) (*types.Block, error) {
 	// All the checks has passed, flush the states derived from the genesis
 	// specification as well as the specification itself into the provided
 	// database.
-	if err := g.Alloc.flush(db); err != nil {
+	if err := g.Alloc.flush(db, config.Zktrie); err != nil {
 		return nil, err
 	}
 	rawdb.WriteTd(db, block.Hash(), block.NumberU64(), block.Difficulty())
@@ -619,7 +647,10 @@ func DeveloperGenesisBlock(period uint64, gasLimit uint64, faucet common.Address
 			common.BytesToAddress([]byte{7}): {Balance: big.NewInt(1)}, // ECScalarMul
 			common.BytesToAddress([]byte{8}): {Balance: big.NewInt(1)}, // ECPairing
 			common.BytesToAddress([]byte{9}): {Balance: big.NewInt(1)}, // BLAKE2b
-			faucet:                           {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(9))},
+			// [Scroll: START]
+			// LSH 250 due to finite field limitation
+			faucet: {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 250), big.NewInt(9))},
+			// [Scroll: END]
 		},
 	}
 }

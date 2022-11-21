@@ -241,6 +241,15 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	if _, ok := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !ok {
 		return nil, genesisErr
 	}
+
+	// [Scroll: START]
+	// override snapshot setting
+	if chainConfig.Zktrie && cacheConfig.SnapshotLimit > 0 {
+		log.Warn("snapshot has been disabled by zktrie")
+		cacheConfig.SnapshotLimit = 0
+	}
+	// [Scroll: END]
+
 	log.Info("")
 	log.Info(strings.Repeat("-", 153))
 	for _, line := range strings.Split(chainConfig.Description(), "\n") {
@@ -258,6 +267,9 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 			Cache:     cacheConfig.TrieCleanLimit,
 			Journal:   cacheConfig.TrieCleanJournal,
 			Preimages: cacheConfig.Preimages,
+			// [Scroll: START]
+			Zktrie: chainConfig.Zktrie,
+			// [Scroll: END]
 		}),
 		quit:          make(chan struct{}),
 		chainmu:       syncx.NewClosableMutex(),

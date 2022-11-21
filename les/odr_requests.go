@@ -524,10 +524,13 @@ type readTraceDB struct {
 
 // Get returns a stored node
 func (db *readTraceDB) Get(k []byte) ([]byte, error) {
-	if db.reads == nil {
-		db.reads = make(map[string]struct{})
+	// NOTE(chokobole): This part is different from scroll
+	if !trie.IsMagicHash(k) {
+		if db.reads == nil {
+			db.reads = make(map[string]struct{})
+		}
+		db.reads[string(k)] = struct{}{}
 	}
-	db.reads[string(k)] = struct{}{}
 	return db.db.Get(k)
 }
 
