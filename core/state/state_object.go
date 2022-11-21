@@ -26,12 +26,16 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/codehash"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
-var emptyCodeHash = crypto.Keccak256(nil)
+// [Scroll: START]
+var emptyCodeHash = codehash.EmptyCodeHash.Bytes()
+
+// [Scroll: END]
 
 type Code []byte
 

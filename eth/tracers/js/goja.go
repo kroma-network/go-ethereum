@@ -443,6 +443,9 @@ func (t *jsTracer) setBuiltinFunctions() {
 			return nil
 		}
 		code = common.CopyBytes(code)
+		// [Scroll: START]
+		// when calculating CREATE2 address, we use Keccak256 not Poseidon
+		// [Scroll: END]
 		codeHash := crypto.Keccak256(code)
 		b := crypto.CreateAddress2(addr, common.HexToHash(salt), codeHash).Bytes()
 		res, err := t.toBuf(vm, b)
