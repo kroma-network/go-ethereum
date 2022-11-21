@@ -356,6 +356,50 @@ func (s *StateDB) GetProofByHash(addrHash common.Hash) ([][]byte, error) {
 	return proof, err
 }
 
+// [Scroll: START]
+func (s *StateDB) GetLiveStateAccount(addr common.Address) *types.StateAccount {
+	obj, ok := s.stateObjects[addr]
+	if !ok {
+		return nil
+	}
+	return &obj.data
+}
+
+func (s *StateDB) GetRootHash() common.Hash {
+	return s.trie.Hash()
+}
+
+// StorageTrieProof is not in Db interface and used explicitly for reading proof in storage trie (not the dirty value)
+func (s *StateDB) GetStorageTrieProof(a common.Address, key common.Hash) ([][]byte, error) {
+
+	// try the trie in stateObject first, else we would create one
+	stateObject := s.getStateObject(a)
+	if stateObject == nil {
+		return nil, errors.New("storage trie for requested address does not exist")
+	}
+
+	trie := stateObject.trie
+	var err error
+	if trie == nil {
+		// use a new, temporary trie
+		trie, err = s.db.OpenStorageTrie(stateObject.db.originalRoot, stateObject.addrHash, stateObject.data.Root)
+		if err != nil {
+			return nil, fmt.Errorf("can't create storage trie on root %s: %v ", stateObject.data.Root, err)
+		}
+	}
+
+	var proof proofList
+	if s.IsZktrie() {
+		key_s, _ := zkt.ToSecureKeyBytes(key.Bytes())
+		err = trie.Prove(key_s.Bytes(), 0, &proof)
+	} else {
+		err = trie.Prove(crypto.Keccak256(key.Bytes()), 0, &proof)
+	}
+	return proof, err
+}
+
+// [Scroll: END]
+
 // GetStorageProof returns the Merkle proof for given storage slot.
 func (s *StateDB) GetStorageProof(a common.Address, key common.Hash) ([][]byte, error) {
 	var proof proofList
