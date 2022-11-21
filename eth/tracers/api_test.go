@@ -219,6 +219,13 @@ func (b *testBackend) ChainConfig() *params.ChainConfig {
 	return b.chainConfig
 }
 
+// [Scroll: START]
+func (b *testBackend) CacheConfig() *core.CacheConfig {
+	return b.chain.CacheConfig()
+}
+
+// [Scroll: END]
+
 func (b *testBackend) Engine() consensus.Engine {
 	return b.engine
 }
