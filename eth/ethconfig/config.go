@@ -221,6 +221,11 @@ type Config struct {
 	RollupHistoricalRPC string
 
 	RollupDisableTxPoolGossip bool
+
+	// [Scroll: START]
+	// Trace option
+	MPTWitness int
+	// [Scroll: END]
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain configuration.

@@ -46,6 +46,8 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/zkproof"
+
 	lru "github.com/hashicorp/golang-lru"
 )
 
@@ -135,6 +137,9 @@ type CacheConfig struct {
 	TrieTimeLimit       time.Duration // Time limit after which to flush the current in-memory trie to disk
 	SnapshotLimit       int           // Memory allowance (MB) to use for caching snapshot entries in memory
 	Preimages           bool          // Whether to store preimage of trie key to the disk
+	// [Scroll: START]
+	MPTWitness int // How to generate witness data for mpt circuit, 0: nothing, 1: natural
+	// [Scroll: END]
 
 	SnapshotNoBuild bool // Whether the background generation is allowed
 	SnapshotWait    bool // Wait for snapshot construction on startup. TODO(karalabe): This is a dirty hack for testing, nuke it
@@ -148,6 +153,9 @@ var defaultCacheConfig = &CacheConfig{
 	TrieTimeLimit:  5 * time.Minute,
 	SnapshotLimit:  256,
 	SnapshotWait:   true,
+	// [Scroll: START]
+	MPTWitness: int(zkproof.MPTWitnessNothing),
+	// [Scroll: END]
 }
 
 // BlockChain represents the canonical chain given a database with a genesis
@@ -1753,6 +1761,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		substart = time.Now()
 		var status WriteStatus
 		if !setHead {
+			// [Scroll: START]
+			// EvmTraces & StorageTrace being nil is safe because l2geth's p2p server is stoped and the code will not execute there.
+			// [Scroll: END]
 			// Don't set the head, only insert the block
 			err = bc.writeBlockWithState(block, receipts, statedb)
 		} else {
