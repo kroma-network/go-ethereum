@@ -1026,12 +1026,19 @@ func newFrontierInstructionSet() JumpTable {
 			maxStack:   maxStack(2, 0),
 			memorySize: memoryReturn,
 		},
-		SELFDESTRUCT: {
-			execute:    opSelfdestruct,
-			dynamicGas: gasSelfdestruct,
-			minStack:   minStack(1, 0),
-			maxStack:   maxStack(1, 0),
-		},
+		// [Scroll: START]
+		/*
+			NOTE: SELFDESTRUCT is disabled in Voost. This is not meant to disable
+			forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
+			SELFDESTRUCT: {
+				execute:    opSelfdestruct,
+				dynamicGas: gasSelfdestruct,
+				minStack:   minStack(1, 0),
+				maxStack:   maxStack(1, 0),
+			},
+		*/
+		SELFDESTRUCT: nil,
+		// [Scroll: END]
 	}
 
 	// Fill all unassigned slots with opUndefined.

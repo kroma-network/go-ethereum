@@ -25,11 +25,14 @@ import (
 	cmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/codehash"
 	"github.com/ethereum/go-ethereum/params"
 )
 
-var emptyCodeHash = crypto.Keccak256Hash(nil)
+// [Scroll: START]
+var emptyCodeHash = codehash.EmptyCodeHash
+
+// [Scroll: END]
 
 // StateTransition represents a state transition.
 //

@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/internal/debug"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/ethereum/go-ethereum/internal/version"
@@ -150,6 +151,9 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	if ctx.IsSet(utils.EthStatsURLFlag.Name) {
 		cfg.Ethstats.URL = ctx.String(utils.EthStatsURLFlag.Name)
 	}
+	// [Scroll: START]
+	applyTraceConfig(ctx, &cfg.Eth)
+	// [Scroll: END]
 	applyMetricConfig(ctx, &cfg)
 
 	return stack, cfg
@@ -230,6 +234,14 @@ func dumpConfig(ctx *cli.Context) error {
 
 	return nil
 }
+
+// [Scroll: START]
+func applyTraceConfig(ctx *cli.Context, cfg *ethconfig.Config) {
+	subCfg := debug.ConfigTrace(ctx)
+	cfg.MPTWitness = subCfg.MPTWitness
+}
+
+// [Scroll: END]
 
 func applyMetricConfig(ctx *cli.Context, cfg *gethConfig) {
 	if ctx.IsSet(utils.MetricsEnabledFlag.Name) {

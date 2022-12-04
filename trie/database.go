@@ -70,6 +70,13 @@ var (
 type Database struct {
 	diskdb ethdb.KeyValueStore // Persistent storage for matured trie nodes
 
+	// [Scroll: START]
+	// zktrie related stuff
+	Zktrie bool
+	// TODO: It's a quick&dirty implementation. FIXME later.
+	rawDirties KvMap
+	// [Scroll: END]
+
 	cleans  *fastcache.Cache            // GC friendly memory cache of clean node RLPs
 	dirties map[common.Hash]*cachedNode // Data and references relationships of dirty trie nodes
 	oldest  common.Hash                 // Oldest tracked node, flush-list head
@@ -268,6 +275,9 @@ type Config struct {
 	Cache     int    // Memory allowance (MB) to use for caching trie nodes in memory
 	Journal   string // Journal of clean cache to survive node restarts
 	Preimages bool   // Flag whether the preimage of trie key is recorded
+	// [Scroll: START]
+	Zktrie bool // use zktrie
+	// [Scroll: END]
 }
 
 // NewDatabase creates a new trie database to store ephemeral trie content before
@@ -300,6 +310,10 @@ func NewDatabaseWithConfig(diskdb ethdb.KeyValueStore, config *Config) *Database
 			children: make(map[common.Hash]uint16),
 		}},
 		preimages: preimage,
+		// [Scroll: START]
+		Zktrie:     config != nil && config.Zktrie,
+		rawDirties: make(KvMap),
+		// [Scroll: END]
 	}
 	return db
 }
@@ -640,6 +654,25 @@ func (db *Database) Commit(node common.Hash, report bool, callback func(common.H
 	start := time.Now()
 	batch := db.diskdb.NewBatch()
 
+	// [Scroll: START]
+	db.lock.Lock()
+	for _, v := range db.rawDirties {
+		batch.Put(v.K, v.V)
+	}
+	for k := range db.rawDirties {
+		delete(db.rawDirties, k)
+	}
+	db.lock.Unlock()
+	if err := batch.Write(); err != nil {
+		return err
+	}
+	batch.Reset()
+
+	if (node == common.Hash{}) {
+		return nil
+	}
+	// [Scroll: END]
+
 	// Move all of the accumulated preimages into a write batch
 	if db.preimages != nil {
 		if err := db.preimages.commit(true); err != nil {
@@ -917,3 +950,16 @@ func (db *Database) CommitPreimages() error {
 	}
 	return db.preimages.commit(true)
 }
+
+// [Scroll: START]
+// EmptyRoot indicate what root is for an empty trie, it depends on its underlying implement (zktrie or common trie)
+func (db *Database) EmptyRoot() common.Hash {
+
+	if db.Zktrie {
+		return common.Hash{}
+	} else {
+		return emptyRoot
+	}
+}
+
+// [Scroll: END]

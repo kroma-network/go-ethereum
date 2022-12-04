@@ -37,7 +37,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
@@ -83,6 +82,9 @@ type Backend interface {
 	GetTransaction(ctx context.Context, txHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error)
 	RPCGasCap() uint64
 	ChainConfig() *params.ChainConfig
+	// [Scroll: START]
+	CacheConfig() *core.CacheConfig
+	// [Scroll: END]
 	Engine() consensus.Engine
 	ChainDb() ethdb.Database
 	StateAtBlock(ctx context.Context, block *types.Block, reexec uint64, base *state.StateDB, readOnly bool, preferDisk bool) (*state.StateDB, StateReleaseFunc, error)
@@ -174,7 +176,7 @@ func (api *API) blockByNumberAndHash(ctx context.Context, number rpc.BlockNumber
 
 // TraceConfig holds extra parameters to trace functions.
 type TraceConfig struct {
-	*logger.Config
+	*vm.LogConfig
 	Tracer  *string
 	Timeout *string
 	Reexec  *uint64
@@ -193,7 +195,7 @@ type TraceCallConfig struct {
 
 // StdTraceConfig holds extra parameters to standard-json trace functions.
 type StdTraceConfig struct {
-	logger.Config
+	vm.LogConfig
 	Reexec *uint64
 	TxHash common.Hash
 }
@@ -716,11 +718,11 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 
 	// Retrieve the tracing configurations, or use default values
 	var (
-		logConfig logger.Config
+		logConfig vm.LogConfig
 		txHash    common.Hash
 	)
 	if config != nil {
-		logConfig = config.Config
+		logConfig = config.LogConfig
 		txHash = config.TxHash
 	}
 	logConfig.Debug = true
@@ -745,7 +747,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 		chainConfigCopy := new(params.ChainConfig)
 		*chainConfigCopy = *chainConfig
 		chainConfig = chainConfigCopy
-		if berlin := config.Config.Overrides.BerlinBlock; berlin != nil {
+		if berlin := config.LogConfig.Overrides.BerlinBlock; berlin != nil {
 			chainConfig.BerlinBlock = berlin
 			canon = false
 		}
@@ -778,7 +780,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 			writer = bufio.NewWriter(dump)
 			vmConf = vm.Config{
 				Debug:                   true,
-				Tracer:                  logger.NewJSONLogger(&logConfig, writer),
+				Tracer:                  vm.NewJSONLogger(&logConfig, writer),
 				EnablePreimageRecording: true,
 			}
 		}
@@ -958,7 +960,7 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 		config = &TraceConfig{}
 	}
 	// Default tracer is the struct logger
-	tracer = logger.NewStructLogger(config.Config)
+	tracer = vm.NewStructLogger(config.LogConfig)
 	if config.Tracer != nil {
 		tracer, err = New(*config.Tracer, txctx, config.TracerConfig)
 		if err != nil {
@@ -998,5 +1000,13 @@ func APIs(backend Backend) []rpc.API {
 			Namespace: "debug",
 			Service:   NewAPI(backend),
 		},
+		// [Scroll: START]
+		{
+			Namespace: "voost",
+			Version:   "1.0",
+			Service:   TraceBlock(NewAPI(backend)),
+			Public:    true,
+		},
+		// [Scroll: END]
 	}
 }

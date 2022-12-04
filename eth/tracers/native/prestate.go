@@ -159,6 +159,9 @@ func (t *prestateTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64,
 		offset := stackData[stackLen-2]
 		size := stackData[stackLen-3]
 		init := scope.Memory.GetCopy(int64(offset.Uint64()), int64(size.Uint64()))
+		// [Scroll: START]
+		// when calculating CREATE2 address, we use Keccak256 not Poseidon
+		// [Scroll: END]
 		inithash := crypto.Keccak256(init)
 		salt := stackData[stackLen-4]
 		addr := crypto.CreateAddress2(caller, salt.Bytes32(), inithash)
@@ -166,6 +169,13 @@ func (t *prestateTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64,
 		t.created[addr] = true
 	}
 }
+
+// [Scroll: START]
+// NOTE(chokobole): This part is different from scroll
+func (t *prestateTracer) CaptureStateAfter(pc uint64, op vm.OpCode, gas, cost uint64, _ *vm.ScopeContext, rData []byte, depth int, err error) {
+}
+
+// [Scroll: END]
 
 // CaptureFault implements the EVMLogger interface to trace an execution fault.
 func (t *prestateTracer) CaptureFault(pc uint64, op vm.OpCode, gas, cost uint64, _ *vm.ScopeContext, depth int, err error) {

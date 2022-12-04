@@ -26,12 +26,16 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/codehash"
 	"github.com/ethereum/go-ethereum/params"
 )
 
 // emptyCodeHash is used by create to ensure deployment is disallowed to already
 // deployed contract addresses (relevant after the account abstraction).
-var emptyCodeHash = crypto.Keccak256Hash(nil)
+// [Scroll: START]
+var emptyCodeHash = codehash.EmptyCodeHash
+
+// [Scroll: END]
 
 type (
 	// CanTransferFunc is the signature of a transfer guard function
@@ -86,8 +90,11 @@ type BlockContext struct {
 // All fields can change between transactions.
 type TxContext struct {
 	// Message information
-	Origin   common.Address // Provides information for ORIGIN
-	GasPrice *big.Int       // Provides information for GASPRICE
+	Origin common.Address // Provides information for ORIGIN
+	// [Scroll: START]
+	To *common.Address // Provides information for trace
+	// [Scroll: END]
+	GasPrice *big.Int // Provides information for GASPRICE
 }
 
 // EVM is the Ethereum Virtual Machine base object and provides
@@ -401,6 +408,9 @@ type codeAndHash struct {
 
 func (c *codeAndHash) Hash() common.Hash {
 	if c.hash == (common.Hash{}) {
+		// [Scroll: START]
+		// when calculating CREATE2 address, we use Keccak256 not Poseidon
+		// [Scroll: END]
 		c.hash = crypto.Keccak256Hash(c.code)
 	}
 	return c.hash
