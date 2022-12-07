@@ -39,6 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/urfave/cli/v2"
 )
 
@@ -453,14 +454,22 @@ func parseDumpConfig(ctx *cli.Context, stack *node.Node) (*state.DumpConfig, eth
 }
 
 func dump(ctx *cli.Context) error {
-	stack, _ := makeConfigNode(ctx)
+	// [Scroll: START]
+	// NOTE(chokobole): This part is different from scroll
+	stack, gethConfig := makeConfigNode(ctx)
+	// [Scroll: END]
 	defer stack.Close()
 
 	conf, db, root, err := parseDumpConfig(ctx, stack)
 	if err != nil {
 		return err
 	}
-	state, err := state.New(root, state.NewDatabase(db), nil)
+	// [Scroll: START]
+	// NOTE(chokobole): This part is different from scroll
+	state, err := state.New(root, state.NewDatabaseWithConfig(db, &trie.Config{
+		Zktrie: gethConfig.Eth.Genesis.Config.Zktrie,
+	}), nil)
+	// [Scroll: END]
 	if err != nil {
 		return err
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 // Config is a basic type specifying certain configuration flags for running
@@ -111,7 +112,12 @@ func Execute(code, input []byte, cfg *Config) ([]byte, *state.StateDB, error) {
 	setDefaults(cfg)
 
 	if cfg.State == nil {
-		cfg.State, _ = state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+		// [Scroll: START]
+		// NOTE(chokobole): This part is different from scroll
+		cfg.State, _ = state.New(common.Hash{}, state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), &trie.Config{
+			Zktrie: cfg.ChainConfig.Zktrie,
+		}), nil)
+		// [Scroll: END]
 	}
 	var (
 		address = common.BytesToAddress([]byte("contract"))
