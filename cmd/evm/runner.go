@@ -39,6 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/urfave/cli/v2"
 )
 
@@ -138,7 +139,12 @@ func runCmd(ctx *cli.Context) error {
 		genesisConfig = gen
 		db := rawdb.NewMemoryDatabase()
 		genesis := gen.MustCommit(db)
-		statedb, _ = state.New(genesis.Root(), state.NewDatabase(db), nil)
+		// [Scroll: START]
+		// NOTE(chokobole): This part is different from scroll
+		statedb, _ = state.New(genesis.Root(), state.NewDatabaseWithConfig(db, &trie.Config{
+			Zktrie: genesisConfig.Config.Zktrie,
+		}), nil)
+		// [Scroll: END]
 		chainConfig = gen.Config
 	} else {
 		statedb, _ = state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)

@@ -100,9 +100,10 @@ func (req *TrieRequest) StoreResult(db ethdb.Database) {
 
 // CodeRequest is the ODR request type for retrieving contract code
 type CodeRequest struct {
-	Id   *TrieID // references storage trie of the account
-	Hash common.Hash
-	Data []byte
+	Id                     *TrieID // references storage trie of the account
+	Hash                   common.Hash
+	Data                   []byte
+	UsePoseidonForCodeHash bool
 }
 
 // StoreResult stores the retrieved data in local database

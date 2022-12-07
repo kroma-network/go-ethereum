@@ -70,6 +70,11 @@ type TxPool struct {
 
 	istanbul bool // Fork indicator whether we are in the istanbul stage.
 	eip2718  bool // Fork indicator whether we are in the eip2718 stage.
+
+	// [Scroll: START]
+	// NOTE(chokobole): This part is different from scroll
+	zktrie bool
+	// [Scroll: END]
 }
 
 // TxRelayBackend provides an interface to the mechanism that forwards transactions to the
@@ -104,6 +109,10 @@ func NewTxPool(config *params.ChainConfig, chain *LightChain, relay TxRelayBacke
 		chainDb:     chain.Odr().Database(),
 		head:        chain.CurrentHeader().Hash(),
 		clearIdx:    chain.CurrentHeader().Number.Uint64(),
+		// [Scroll: START]
+		// NOTE(chokobole): This part is different from scroll
+		zktrie: config.Zktrie,
+		// [Scroll: END]
 	}
 	// Subscribe events from blockchain
 	pool.chainHeadSub = pool.chain.SubscribeChainHeadEvent(pool.chainHeadCh)
@@ -114,7 +123,10 @@ func NewTxPool(config *params.ChainConfig, chain *LightChain, relay TxRelayBacke
 
 // currentState returns the light state of the current head header
 func (pool *TxPool) currentState(ctx context.Context) *state.StateDB {
-	return NewState(ctx, pool.chain.CurrentHeader(), pool.odr)
+	// [Scroll: START]
+	// NOTE(chokobole): This part is different from scroll
+	return NewState(ctx, pool.chain.CurrentHeader(), pool.odr, pool.zktrie)
+	// [Scroll: END]
 }
 
 // GetNonce returns the "pending" nonce of a given address. It always queries

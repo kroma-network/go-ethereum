@@ -4188,11 +4188,13 @@ func TestPoseidonCodeHash(t *testing.T) {
 	var callCreateCode = common.Hex2Bytes("cf5ba53f0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000005c6080604052348015600f57600080fd5b50603f80601d6000396000f3fe6080604052600080fdfea2646970667358221220707985753fcb6578098bb16f3709cf6d012993cba6dd3712661cf8f57bbc0d4d64736f6c6343000807003300000000")
 	var callCreate2Code = common.Hex2Bytes("f4754f660000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000005c6080604052348015600f57600080fd5b50603f80601d6000396000f3fe6080604052600080fdfea2646970667358221220707985753fcb6578098bb16f3709cf6d012993cba6dd3712661cf8f57bbc0d4d64736f6c6343000807003300000000")
 
+	config := *params.TestChainConfig
+	config.Zktrie = true
 	var (
 		key1, _       = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 		addr1         = crypto.PubkeyToAddress(key1.PublicKey)
 		db            = rawdb.NewMemoryDatabase()
-		gspec         = &Genesis{Config: params.TestChainConfig, Alloc: GenesisAlloc{addr1: {Balance: big.NewInt(10000000000000000)}}}
+		gspec         = &Genesis{Config: &config, Alloc: GenesisAlloc{addr1: {Balance: big.NewInt(10000000000000000)}}}
 		genesis       = gspec.MustCommit(db)
 		signer        = types.LatestSigner(gspec.Config)
 		engine        = ethash.NewFaker()
@@ -4207,7 +4209,7 @@ func TestPoseidonCodeHash(t *testing.T) {
 	assert.Equal(t, codeHash, common.HexToHash("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"), "code hash mismatch")
 
 	// deploy contract through transaction
-	chain, receipts := GenerateChain(params.TestChainConfig, genesis, engine, db, 1, func(i int, gen *BlockGen) {
+	chain, receipts := GenerateChain(&config, genesis, engine, db, 1, func(i int, gen *BlockGen) {
 		tx, _ := types.SignTx(types.NewContractCreation(gen.TxNonce(addr1), new(big.Int), 1000000, gen.header.BaseFee, deployCode), signer, key1)
 		gen.AddTx(tx)
 	})
@@ -4227,7 +4229,7 @@ func TestPoseidonCodeHash(t *testing.T) {
 	assert.Equal(t, codeHash, common.HexToHash("0x28ec09723b285e17caabc4a8d52dbd097feddf408aee115cbb57c3c9c814d2b2"), "code hash mismatch")
 
 	// deploy contract through another contract (CREATE and CREATE2)
-	chain, receipts = GenerateChain(params.TestChainConfig, blockchain.CurrentBlock(), engine, db, 1, func(i int, gen *BlockGen) {
+	chain, receipts = GenerateChain(&config, blockchain.CurrentBlock(), engine, db, 1, func(i int, gen *BlockGen) {
 		tx, _ := types.SignTx(types.NewTransaction(gen.TxNonce(addr1), contractAddress, new(big.Int), 1000000, gen.header.BaseFee, callCreateCode), signer, key1)
 		gen.AddTx(tx)
 

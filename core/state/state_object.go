@@ -239,7 +239,7 @@ func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Has
 		}
 	}
 	var value common.Hash
-	if db.TrieDB().Zktrie {
+	if db.IsZktrie() {
 		value = common.BytesToHash(enc)
 	} else {
 		if len(enc) > 0 {
@@ -348,7 +348,7 @@ func (s *stateObject) updateTrie(db Database) Trie {
 			s.setError(tr.TryDelete(key[:]))
 			s.db.StorageDeleted += 1
 		} else {
-			if db.TrieDB().Zktrie {
+			if db.IsZktrie() {
 				v = common.CopyBytes(value[:])
 			} else {
 				// Encoding []byte cannot fail, ok to ignore the error.
