@@ -197,10 +197,7 @@ func (s *StateDB) Error() error {
 // [Scroll: START]
 // NOTE(chokobole): This part is different from scroll
 func (s *StateDB) IsZktrie() bool {
-	if s.db.TrieDB() == nil {
-		return false
-	}
-	return s.db.TrieDB().Zktrie
+	return s.db.IsZktrie()
 }
 
 func (s *StateDB) GetEmptyRoot() common.Hash {

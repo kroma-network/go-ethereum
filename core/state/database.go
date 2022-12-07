@@ -59,6 +59,12 @@ type Database interface {
 
 	// TrieDB retrieves the low level trie database used for data storage.
 	TrieDB() *trie.Database
+
+	// [Scroll: START]
+	// NOTE(chokobole): This part is different from scroll
+	// Returns whether it uses Zktrie.
+	IsZktrie() bool
+	// [Scroll: END]
 }
 
 // Trie is a Ethereum Merkle Patricia trie.
@@ -250,3 +256,12 @@ func (db *cachingDB) DiskDB() ethdb.KeyValueStore {
 func (db *cachingDB) TrieDB() *trie.Database {
 	return db.db
 }
+
+// [Scroll: START]
+// NOTE(chokobole): This part is different from scroll
+// Returns whether it uses Zktrie.
+func (db *cachingDB) IsZktrie() bool {
+	return db.zktrie
+}
+
+// [Scroll: END]
