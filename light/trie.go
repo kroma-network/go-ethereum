@@ -88,7 +88,7 @@ func (db *odrDatabase) ContractCode(addrHash, codeHash common.Hash) ([]byte, err
 	}
 	id := *db.id
 	id.AccKey = addrHash[:]
-	req := &CodeRequest{Id: &id, Hash: codeHash}
+	req := &CodeRequest{Id: &id, Hash: codeHash, UsePoseidonForCodeHash: db.IsZktrie()}
 	err := db.backend.Retrieve(db.ctx, req)
 	return req.Data, err
 }

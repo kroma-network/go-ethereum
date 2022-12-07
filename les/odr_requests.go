@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/codehash"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/light"
@@ -284,8 +285,15 @@ func (r *CodeRequest) Validate(db ethdb.Database, msg *Msg) error {
 
 	// Verify the data and store if checks out
 	// [Scroll: START]
-	if hash := codehash.CodeHash(data); r.Hash != hash {
-		// [Scroll: END]
+	// NOTE(chokobole): This part is different from scroll
+	var hash common.Hash
+	if r.UsePoseidonForCodeHash {
+		hash = codehash.CodeHash(data)
+	} else {
+		hash = crypto.Keccak256Hash(data)
+	}
+	// [Scroll: END]
+	if r.Hash != hash {
 		return errDataHashMismatch
 	}
 	r.Data = data

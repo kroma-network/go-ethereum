@@ -129,6 +129,8 @@ type StateDB struct {
 	StorageUpdated int
 	AccountDeleted int
 	StorageDeleted int
+
+	codeHashFn func([]byte) common.Hash
 }
 
 // New creates a new state from a given trie.
@@ -156,6 +158,13 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 			sdb.snapDestructs = make(map[common.Hash]struct{})
 			sdb.snapAccounts = make(map[common.Hash][]byte)
 			sdb.snapStorage = make(map[common.Hash]map[common.Hash][]byte)
+		}
+	}
+	if db.IsZktrie() {
+		sdb.codeHashFn = codehash.CodeHash
+	} else {
+		sdb.codeHashFn = func(data []byte) common.Hash {
+			return crypto.Keccak256Hash(data)
 		}
 	}
 	return sdb, nil
@@ -488,7 +497,7 @@ func (s *StateDB) SetCode(addr common.Address, code []byte) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		// [Scroll: START]
-		stateObject.SetCode(codehash.CodeHash(code), code)
+		stateObject.SetCode(s.codeHashFn(code), code)
 		// [Scroll: END]
 	}
 }
@@ -738,6 +747,7 @@ func (s *StateDB) Copy() *StateDB {
 		preimages:           make(map[common.Hash][]byte, len(s.preimages)),
 		journal:             newJournal(),
 		hasher:              crypto.NewKeccakState(),
+		codeHashFn:          s.codeHashFn,
 	}
 	// Copy the dirty states, logs, and preimages
 	for addr := range s.journal.dirties {
