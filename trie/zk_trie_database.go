@@ -19,8 +19,7 @@ type ZktrieDatabase struct {
 
 func NewZktrieDatabase(diskdb ethdb.KeyValueStore) *ZktrieDatabase {
 	// NOTE(chokobole): This part is different from scroll
-	// TODO(chokobole): We need to know Preimages is required. If we don't set here, some tests are failed.
-	return &ZktrieDatabase{db: NewDatabaseWithConfig(diskdb, &Config{Preimages: true, Zktrie: true}), prefix: []byte{}}
+	return &ZktrieDatabase{db: NewDatabaseWithConfig(diskdb, &Config{Zktrie: true}), prefix: []byte{}}
 }
 
 // adhoc wrapper...
