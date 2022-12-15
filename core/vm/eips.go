@@ -143,7 +143,7 @@ func enable2929(jt *JumpTable) {
 	jt[DELEGATECALL].dynamicGas = gasDelegateCallEIP2929
 
 	// [Scroll: START]
-	// NOTE: SELFDESTRUCT is disabled in Voost. This is not meant to disable
+	// NOTE: SELFDESTRUCT is disabled in Kanvas. This is not meant to disable
 	// forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
 	// jt[SELFDESTRUCT].constantGas = params.SelfdestructGasEIP150
 	// jt[SELFDESTRUCT].dynamicGas = gasSelfdestructEIP2929
@@ -158,7 +158,7 @@ func enable3529(jt *JumpTable) {
 	jt[SSTORE].dynamicGas = gasSStoreEIP3529
 
 	// [Scroll: START]
-	// NOTE: SELFDESTRUCT is disabled in Voost. This is not meant to disable
+	// NOTE: SELFDESTRUCT is disabled in Kanvas. This is not meant to disable
 	// forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
 	// jt[SELFDESTRUCT].dynamicGas = gasSelfdestructEIP3529
 	// [Scroll: END]

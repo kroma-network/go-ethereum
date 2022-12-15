@@ -1028,7 +1028,7 @@ func newFrontierInstructionSet() JumpTable {
 		},
 		// [Scroll: START]
 		/*
-			NOTE: SELFDESTRUCT is disabled in Voost. This is not meant to disable
+			NOTE: SELFDESTRUCT is disabled in Kanvas. This is not meant to disable
 			forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
 			SELFDESTRUCT: {
 				execute:    opSelfdestruct,

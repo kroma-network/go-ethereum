@@ -422,7 +422,7 @@ func gasStaticCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memo
 
 // [Scroll: START]
 /*
-NOTE: SELFDESTRUCT is disabled in Voost. This is not meant to disable
+NOTE: SELFDESTRUCT is disabled in Kanvas. This is not meant to disable
 forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
 func gasSelfdestruct(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var gas uint64
