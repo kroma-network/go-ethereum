@@ -225,7 +225,7 @@ var (
 
 // [Scroll: START]
 /*
-SELFDESTRUCT is disabled in Voost
+SELFDESTRUCT is disabled in Kanvas
 // makeSelfdestructGasFn can create the selfdestruct dynamic gas function for EIP-2929 and EIP-2539
 func makeSelfdestructGasFn(refundsEnabled bool) gasFunc {
 	gasFunc := func(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {

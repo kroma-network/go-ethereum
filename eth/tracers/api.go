@@ -1002,7 +1002,7 @@ func APIs(backend Backend) []rpc.API {
 		},
 		// [Scroll: START]
 		{
-			Namespace: "voost",
+			Namespace: "kanvas",
 			Version:   "1.0",
 			Service:   TraceBlock(NewAPI(backend)),
 			Public:    true,

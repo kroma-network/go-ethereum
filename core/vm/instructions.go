@@ -821,7 +821,7 @@ func opStop(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 
 // [Scroll: START]
 /*
-NOTE: SELFDESTRUCT is disabled in Voost. This is not meant to disable
+NOTE: SELFDESTRUCT is disabled in Kanvas. This is not meant to disable
 forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
 func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	if interpreter.readOnly {
