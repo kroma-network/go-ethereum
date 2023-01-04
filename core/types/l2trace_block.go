@@ -30,6 +30,7 @@ type TransactionTrace struct {
 	From     common.Address  `json:"from"`
 	To       *common.Address `json:"to"`
 	ChainId  *hexutil.Big    `json:"chainId"`
+	Mint     *hexutil.Big    `json:"mint"`
 	Value    *hexutil.Big    `json:"value"`
 	Data     string          `json:"data"`
 	IsCreate bool            `json:"isCreate"`
@@ -72,6 +73,7 @@ func newTraceTransaction(tx *Transaction, blockNumber uint64, config *params.Cha
 		Gas:      tx.Gas(),
 		GasPrice: (*hexutil.Big)(tx.GasPrice()),
 		To:       tx.To(),
+		Mint:     (*hexutil.Big)(tx.Mint()),
 		Value:    (*hexutil.Big)(tx.Value()),
 		Data:     hexutil.Encode(tx.Data()),
 		IsCreate: tx.To() == nil,
