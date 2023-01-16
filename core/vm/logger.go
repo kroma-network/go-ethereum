@@ -500,6 +500,13 @@ func (l *StructLogger) Error() error { return l.err }
 // Output returns the VM return value captured by the trace.
 func (l *StructLogger) Output() []byte { return l.output }
 
+func (l *StructLogger) MaybeAddFeeRecipientsToStatesAffected(tx *types.Transaction) {
+	if !tx.IsDepositTx() {
+		l.statesAffected[params.OptimismBaseFeeRecipient] = struct{}{}
+		l.statesAffected[params.OptimismL1FeeRecipient] = struct{}{}
+	}
+}
+
 // WriteTrace writes a formatted trace to the given writer
 // [Scroll: START]
 func WriteTrace(writer io.Writer, logs []*StructLog) {
