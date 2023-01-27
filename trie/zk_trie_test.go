@@ -33,7 +33,8 @@ import (
 )
 
 func newEmptyZkTrie() *ZkTrie {
-	trie, _ := NewZkTrie(common.Hash{}, NewZktrieDatabase(memorydb.New()))
+	triedb := NewZktrieDatabaseFromTriedb(NewDatabaseWithConfig(memorydb.New(), &Config{Preimages: true}))
+	trie, _ := NewZkTrie(common.Hash{}, triedb)
 	return trie
 }
 
