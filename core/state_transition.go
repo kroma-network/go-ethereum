@@ -431,10 +431,10 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		st.state.AddBalance(st.evm.Context.Coinbase, fee)
 	}
 
-	if optimismConfig := st.evm.ChainConfig().Optimism; optimismConfig != nil {
-		st.state.AddBalance(params.OptimismBaseFeeRecipient, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
+	if kanvasConfig := st.evm.ChainConfig().Kanvas; kanvasConfig != nil {
+		st.state.AddBalance(params.KanvasBaseFeeRecipient, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
 		if cost := st.evm.Context.L1CostFunc(st.evm.Context.BlockNumber.Uint64(), st.msg); cost != nil {
-			st.state.AddBalance(params.OptimismL1FeeRecipient, cost)
+			st.state.AddBalance(params.KanvasL1FeeRecipient, cost)
 		}
 	}
 

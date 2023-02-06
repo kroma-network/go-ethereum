@@ -357,7 +357,7 @@ func TestTraceCall(t *testing.T) {
 			expectErr: fmt.Errorf("block #%d %w", genBlocks+1, ethereum.NotFound),
 			//expect:    nil,
 		},
-		// Optimism: Trace block on the historical chain
+		// Kanvas: Trace block on the historical chain
 		{
 			blockNumber: rpc.BlockNumber(777),
 			call: ethapi.TransactionArgs{
@@ -369,7 +369,7 @@ func TestTraceCall(t *testing.T) {
 			expectErr: nil,
 			expect:    `{"gas":21000,"failed":false,"returnValue":"777","structLogs":[]}`,
 		},
-		// Optimism: Trace block that doesn't exist anywhere
+		// Kanvas: Trace block that doesn't exist anywhere
 		{
 			blockNumber: rpc.BlockNumber(39347856),
 			call: ethapi.TransactionArgs{
@@ -380,7 +380,7 @@ func TestTraceCall(t *testing.T) {
 			config:    nil,
 			expectErr: fmt.Errorf("block #39347856 %w", ethereum.NotFound),
 		},
-		// Optimism: Trace block with failing historical upstream
+		// Kanvas: Trace block with failing historical upstream
 		{
 			blockNumber: rpc.BlockNumber(12345),
 			call: ethapi.TransactionArgs{
@@ -563,7 +563,7 @@ func TestTraceBlock(t *testing.T) {
 			blockNumber: rpc.BlockNumber(genBlocks + 1),
 			expectErr:   fmt.Errorf("block #%d %w", genBlocks+1, ethereum.NotFound),
 		},
-		// Optimism: Trace block on the historical chain
+		// Kanvas: Trace block on the historical chain
 		{
 			blockNumber: rpc.BlockNumber(999),
 			want:        `[{"result":"0xabba"}]`,
