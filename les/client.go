@@ -67,8 +67,7 @@ type LightEthereum struct {
 	pruner             *pruner
 	merger             *consensus.Merger
 
-	seqRPCService        *rpc.Client
-	historicalRPCService *rpc.Client
+	seqRPCService *rpc.Client
 
 	bloomRequests chan chan *bloombits.Retrieval // Channel receiving bloom data retrieval requests
 	bloomIndexer  *core.ChainIndexer             // Bloom indexer operating during block imports
@@ -207,16 +206,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 			return nil, err
 		}
 		leth.seqRPCService = client
-	}
-
-	if config.RollupHistoricalRPC != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		client, err := rpc.DialContext(ctx, config.RollupHistoricalRPC)
-		cancel()
-		if err != nil {
-			return nil, err
-		}
-		leth.historicalRPCService = client
 	}
 
 	leth.netRPCService = ethapi.NewNetAPI(leth.p2pServer, leth.config.NetworkId)

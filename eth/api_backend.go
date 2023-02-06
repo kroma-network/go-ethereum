@@ -391,10 +391,6 @@ func (b *EthAPIBackend) StateAtTransaction(ctx context.Context, block *types.Blo
 	return b.eth.stateAtTransaction(block, txIndex, reexec)
 }
 
-func (b *EthAPIBackend) HistoricalRPCService() *rpc.Client {
-	return b.eth.historicalRPCService
-}
-
 func (b *EthAPIBackend) Genesis() *types.Block {
 	return b.eth.blockchain.Genesis()
 }

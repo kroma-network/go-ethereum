@@ -89,7 +89,6 @@ type Backend interface {
 	ChainDb() ethdb.Database
 	StateAtBlock(ctx context.Context, block *types.Block, reexec uint64, base *state.StateDB, readOnly bool, preferDisk bool) (*state.StateDB, StateReleaseFunc, error)
 	StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, StateReleaseFunc, error)
-	HistoricalRPCService() *rpc.Client
 }
 
 // API is the collection of tracing APIs exposed over the private debugging endpoint.
@@ -458,14 +457,7 @@ func (api *API) traceChain(start, end *types.Block, config *TraceConfig, closed 
 // EVM and returns them as a JSON object.
 func (api *API) TraceBlockByNumber(ctx context.Context, number rpc.BlockNumber, config *TraceConfig) ([]*txTraceResult, error) {
 	block, err := api.blockByNumber(ctx, number)
-	if errors.Is(err, ethereum.NotFound) && api.backend.HistoricalRPCService() != nil {
-		var histResult []*txTraceResult
-		err = api.backend.HistoricalRPCService().CallContext(ctx, &histResult, "debug_traceBlockByNumber", number, config)
-		if err != nil && err.Error() == "not found" {
-			return nil, fmt.Errorf("block #%d %w", number, ethereum.NotFound)
-		}
-		return histResult, err
-	} else if err != nil {
+	if err != nil {
 		return nil, err
 	}
 	return api.traceBlock(ctx, block, config)
@@ -475,14 +467,7 @@ func (api *API) TraceBlockByNumber(ctx context.Context, number rpc.BlockNumber, 
 // EVM and returns them as a JSON object.
 func (api *API) TraceBlockByHash(ctx context.Context, hash common.Hash, config *TraceConfig) ([]*txTraceResult, error) {
 	block, err := api.blockByHash(ctx, hash)
-	if errors.Is(err, ethereum.NotFound) && api.backend.HistoricalRPCService() != nil {
-		var histResult []*txTraceResult
-		err = api.backend.HistoricalRPCService().CallContext(ctx, &histResult, "debug_traceBlockByHash", hash, config)
-		if err != nil && err.Error() == "not found" {
-			return nil, fmt.Errorf("block #%d %w", hash, ethereum.NotFound)
-		}
-		return histResult, err
-	} else if err != nil {
+	if err != nil {
 		return nil, err
 	}
 	return api.traceBlock(ctx, block, config)
@@ -830,12 +815,7 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 		return nil, err
 	}
 	if tx == nil {
-		var histResult []*txTraceResult
-		err = api.backend.HistoricalRPCService().CallContext(ctx, &histResult, "debug_traceTransaction", hash, config)
-		if err != nil && err.Error() == "not found" {
-			return nil, fmt.Errorf("transaction %s %w", hash, ethereum.NotFound)
-		}
-		return histResult, err
+		return nil, fmt.Errorf("transaction %s %w", hash, ethereum.NotFound)
 	}
 	// It shouldn't happen in practice.
 	if blockNumber == 0 {
@@ -887,29 +867,6 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 	} else {
 		return nil, errors.New("invalid arguments; neither block nor hash specified")
 	}
-
-	// If block still holds no value, but we have an error, then one of the two previous conditions
-	// was entered, meaning:
-	// 1. blockNrOrHash has either a valid block or hash
-	// 2. we don't have that block locally
-	if block == nil && errors.Is(err, ethereum.NotFound) && api.backend.HistoricalRPCService() != nil {
-		var histResult json.RawMessage
-		err = api.backend.HistoricalRPCService().CallContext(ctx, &histResult, "debug_traceCall", args, blockNrOrHash, config)
-		if err != nil && err.Error() == "not found" {
-			// Not found locally or in history. We need to return different errors based on the input
-			// in order match geth's native behavior
-			if hash, ok := blockNrOrHash.Hash(); ok {
-				return nil, fmt.Errorf("block %s %w", hash, ethereum.NotFound)
-			} else if number, ok := blockNrOrHash.Number(); ok {
-				return nil, fmt.Errorf("block #%d %w", number, ethereum.NotFound)
-			}
-		} else if err != nil {
-			return nil, fmt.Errorf("error querying historical RPC: %w", err)
-		}
-
-		return histResult, nil
-	}
-
 	if err != nil {
 		return nil, err
 	}
