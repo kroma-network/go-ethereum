@@ -37,9 +37,9 @@ type BuildPayloadArgs struct {
 	FeeRecipient common.Address // The provided recipient address for collecting transaction fee
 	Random       common.Hash    // The provided randomness value
 
-	NoTxPool     bool                 // Optimism addition: option to disable tx pool contents from being included
-	Transactions []*types.Transaction // Optimism addition: txs forced into the block via engine API
-	GasLimit     *uint64              // Optimism addition: override gas limit of the block to build
+	NoTxPool     bool                 // Kanvas addition: option to disable tx pool contents from being included
+	Transactions []*types.Transaction // Kanvas addition: txs forced into the block via engine API
+	GasLimit     *uint64              // Kanvas addition: override gas limit of the block to build
 }
 
 // Payload wraps the built payload(block waiting for sealing). According to the
