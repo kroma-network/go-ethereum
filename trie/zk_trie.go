@@ -218,8 +218,8 @@ func VerifyProofSMT(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueRead
 	if err != nil {
 		return nil, err
 	}
-
-	proof, n, err := zktrie.BuildZkTrieProof(h, k, len(key)*8, func(key *zkt.Hash) (*zktrie.Node, error) {
+	kHash := zkt.NewHashFromBigInt(k)
+	proof, n, err := zktrie.BuildZkTrieProof(h, kHash, zktrie.GetPath(len(key)*8, kHash[:]), func(key *zkt.Hash) (*zktrie.Node, error) {
 		buf, _ := proofDb.Get(key[:])
 		if buf == nil {
 			return nil, zktrie.ErrKeyNotFound
