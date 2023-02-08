@@ -218,7 +218,6 @@ type Config struct {
 	SyncTarget *types.Block
 
 	RollupSequencerHTTP string
-	RollupHistoricalRPC string
 
 	RollupDisableTxPoolGossip bool
 

@@ -1057,11 +1057,7 @@ func (e *revertError) ErrorData() interface{} {
 // useful to execute and retrieve values.
 func (s *BlockChainAPI) Call(ctx context.Context, args TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride) (hexutil.Bytes, error) {
 	result, err := DoCall(ctx, s.b, args, blockNrOrHash, overrides, s.b.RPCEVMTimeout(), s.b.RPCGasCap())
-	if errors.Is(err, ethereum.NotFound) && s.b.HistoricalRPCService() != nil {
-		var histResult hexutil.Bytes
-		err = s.b.HistoricalRPCService().CallContext(ctx, &histResult, "eth_call", args, blockNrOrHash, overrides)
-		return histResult, err
-	} else if err != nil {
+	if err != nil {
 		return nil, err
 	}
 	// If the result contains a revert reason, try to unpack and return it.
@@ -1200,11 +1196,7 @@ func (s *BlockChainAPI) EstimateGas(ctx context.Context, args TransactionArgs, b
 	}
 
 	res, err := DoEstimateGas(ctx, s.b, args, bNrOrHash, s.b.RPCGasCap())
-	if errors.Is(err, ethereum.NotFound) && s.b.HistoricalRPCService() != nil {
-		var result hexutil.Uint64
-		err := s.b.HistoricalRPCService().CallContext(ctx, &result, "eth_estimateGas", args, blockNrOrHash)
-		return result, err
-	} else if err != nil {
+	if err != nil {
 		return 0, err
 	}
 
