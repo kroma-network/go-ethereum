@@ -217,10 +217,6 @@ type Config struct {
 	// development purposes.
 	SyncTarget *types.Block
 
-	RollupSequencerHTTP string
-
-	RollupDisableTxPoolGossip bool
-
 	// [Scroll: START]
 	// Trace option
 	MPTWitness int
