@@ -25,7 +25,6 @@ type opOrderer interface {
 type iterateOp []*types.AccountWrapper
 
 func (ops *iterateOp) next() *types.AccountWrapper {
-
 	sl := *ops
 
 	if len(sl) == 0 {
@@ -72,7 +71,6 @@ func (od *simpleOrderer) end_absorb() opIterator {
 type multiOpIterator []opIterator
 
 func (opss *multiOpIterator) next() *types.AccountWrapper {
-
 	sl := *opss
 	if len(sl) == 0 {
 		return nil
@@ -81,7 +79,6 @@ func (opss *multiOpIterator) next() *types.AccountWrapper {
 	op := sl[0].next()
 
 	for op == nil {
-
 		sl = sl[1:]
 		*opss = sl
 		if len(sl) == 0 {
@@ -113,7 +110,6 @@ type rwTblOrderer struct {
 func NewSimpleOrderer() *simpleOrderer { return &simpleOrderer{} }
 
 func NewRWTblOrderer(inited map[common.Address]*types.StateAccount) *rwTblOrderer {
-
 	initedAcc := make(map[common.Address]*types.AccountWrapper)
 	for addr, data := range inited {
 		if data == nil {
@@ -134,7 +130,6 @@ func NewRWTblOrderer(inited map[common.Address]*types.StateAccount) *rwTblOrdere
 				CodeHash: common.BytesToHash(data.CodeHash),
 			}
 		}
-
 	}
 
 	return &rwTblOrderer{
@@ -204,17 +199,14 @@ func (od *rwTblOrderer) absorbStorage(st *types.AccountWrapper, before *types.St
 				} else {
 					m[keyStr] = stg
 				}
-
 			}
 		}
 
 		m[keyStr] = stg
 	}
-
 }
 
 func (od *rwTblOrderer) absorb(st *types.AccountWrapper) {
-
 	initedRef, existed := od.initedData[st.Address]
 	if !existed {
 		panic("encounter unprepared status")
@@ -279,7 +271,6 @@ func (od *rwTblOrderer) absorb(st *types.AccountWrapper) {
 		traced.Balance = st.Balance
 		traced.CodeHash = st.CodeHash
 	}
-
 }
 
 func (od *rwTblOrderer) end_absorb() opIterator {
@@ -297,7 +288,6 @@ func (od *rwTblOrderer) end_absorb() opIterator {
 	var iterStorage []*types.AccountWrapper
 
 	for _, addrStr := range sortedAddrs {
-
 		if v, existed := od.opAccNonce[addrStr]; existed {
 			iterNonce = append(iterNonce, v)
 		}
@@ -311,7 +301,6 @@ func (od *rwTblOrderer) end_absorb() opIterator {
 		}
 
 		if stgM, existed := od.opStorage[addrStr]; existed {
-
 			tracedStatus := od.traced[addrStr]
 			if tracedStatus == nil {
 				panic("missed traced status found in storage slot")
@@ -329,9 +318,7 @@ func (od *rwTblOrderer) end_absorb() opIterator {
 				iterStorage = append(iterStorage, st)
 			}
 		}
-
 	}
-
 	var finalRet []opIterator
 	for _, arr := range [][]*types.AccountWrapper{iterNonce, iterBalance, iterCodeHash, iterStorage} {
 		wrappedIter := iterateOp(arr)

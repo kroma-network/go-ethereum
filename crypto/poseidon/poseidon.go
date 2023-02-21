@@ -57,7 +57,6 @@ func mix(state []*ff.Element, t int, m [][]*ff.Element) []*ff.Element {
 }
 
 func permute(state []*ff.Element, t int) []*ff.Element {
-
 	nRoundsF := NROUNDSF
 	nRoundsP := NROUNDSP[t-2]
 	C := c.c[t-2]
@@ -151,7 +150,6 @@ func HashWithCap(inpBI []*big.Int, width int, cap int64) (*big.Int, error) {
 			absorb = utils.BigIntArrayToElementArray(inpBI[:rate])
 			inpBI = inpBI[rate:]
 		}
-
 	}
 
 	//last time sponge (padding with unabsorb items)
@@ -165,7 +163,6 @@ func HashWithCap(inpBI []*big.Int, width int, cap int64) (*big.Int, error) {
 	r := big.NewInt(0)
 	rE.ToBigIntRegular(r)
 	return r, nil
-
 }
 
 // Hash computes the Poseidon hash for the given fixed-size inputs, select specs automatically from the size, no capacity flag is applied

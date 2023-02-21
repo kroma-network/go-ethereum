@@ -42,7 +42,6 @@ func newZkTrieImplWithRoot(storage *ZktrieDatabase, root *zkt.Hash, maxLevels in
 // AddWord
 // Deprecated: Add a Bytes32 kv to ZkTrieImpl, only for testing
 func (mt *zkTrieImplTestWrapper) AddWord(kPreimage, vPreimage *zkt.Byte32) error {
-
 	k, err := kPreimage.Hash()
 	if err != nil {
 		return err
@@ -220,7 +219,6 @@ func TestMerkleTree_AddUpdateGetWord(t *testing.T) {
 }
 
 func TestMerkleTree_UpdateAccount(t *testing.T) {
-
 	mt := newTestingMerkle(t, 10)
 
 	acc1 := &types.StateAccount{
