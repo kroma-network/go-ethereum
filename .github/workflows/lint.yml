@@ -1,0 +1,19 @@
+name: Lint
+
+on:
+  - push
+
+jobs:
+  lint:
+    name: Lint check
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: check
+        run: make lint

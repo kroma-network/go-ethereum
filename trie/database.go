@@ -954,7 +954,6 @@ func (db *Database) CommitPreimages() error {
 // [Scroll: START]
 // EmptyRoot indicate what root is for an empty trie, it depends on its underlying implement (zktrie or common trie)
 func (db *Database) EmptyRoot() common.Hash {
-
 	if db.Zktrie {
 		return common.Hash{}
 	} else {

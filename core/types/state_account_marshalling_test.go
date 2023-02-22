@@ -42,5 +42,4 @@ func TestAccountMarshalling(t *testing.T) {
 			t.Errorf("hash <%d> unmatched, expected [%x], get [%x]", i, h2.Bytes(), h1.Bytes())
 		}
 	}
-
 }

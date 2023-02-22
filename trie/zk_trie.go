@@ -52,7 +52,7 @@ func sanityCheckByte32Key(b []byte) {
 
 // NOTE(chokobole): This part is different from scroll
 func IsMagicHash(k []byte) bool {
-	return bytes.Compare(k, magicHash) == 0
+	return bytes.Equal(k, magicHash)
 }
 
 // NewZkTrie creates a trie
@@ -212,7 +212,6 @@ func (t *ZkTrie) Prove(key []byte, fromLevel uint, proofDb ethdb.KeyValueWriter)
 // key in a trie with the given root hash. VerifyProof returns an error if the
 // proof contains invalid trie nodes or the wrong value.
 func VerifyProofSMT(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueReader) (value []byte, err error) {
-
 	h := zkt.NewHashFromBytes(rootHash.Bytes())
 	k, err := zkt.ToSecureKey(key)
 	if err != nil {

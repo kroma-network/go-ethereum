@@ -16,17 +16,17 @@
 
 package ethtest
 
+// [Scroll: START]
+/*
+TODO(chokobole): Reenable this test.
+NOTE: Disabled this test because codeHash is changed to use poseidon and
+this invalidates block headers especially root, parentHash, mixDigest and so on.
 var (
 	genesisFile   = "./testdata/genesis.json"
 	halfchainFile = "./testdata/halfchain.rlp"
 	fullchainFile = "./testdata/chain.rlp"
 )
 
-// [Scroll: START]
-/*
-TODO(chokobole): Reenable this test.
-NOTE: Disabled this test because codeHash is changed to use poseidon and
-this invalidates block headers especially root, parentHash, mixDigest and so on.
 func TestEthSuite(t *testing.T) {
 	geth, err := runGeth()
 	if err != nil {

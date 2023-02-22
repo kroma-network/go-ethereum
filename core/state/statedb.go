@@ -377,7 +377,6 @@ func (s *StateDB) GetRootHash() common.Hash {
 
 // StorageTrieProof is not in Db interface and used explicitly for reading proof in storage trie (not the dirty value)
 func (s *StateDB) GetStorageTrieProof(a common.Address, key common.Hash) ([][]byte, error) {
-
 	// try the trie in stateObject first, else we would create one
 	stateObject := s.getStateObject(a)
 	if stateObject == nil {

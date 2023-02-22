@@ -37,11 +37,12 @@ var (
 
 // Hash of StateAccount
 // AccountHash = Hash(
-//	Hash(nonce, balance),
-//  Hash(
-//	  Root,
-//	  Hash(codeHashFirst16, codeHashLast16)
-//  ))
+//
+//		Hash(nonce, balance),
+//	 Hash(
+//		  Root,
+//		  Hash(codeHashFirst16, codeHashLast16)
+//	 ))
 func (s *StateAccount) Hash() (*big.Int, error) {
 	nonce := new(big.Int).SetUint64(s.Nonce)
 	if s.Balance == nil {

@@ -177,7 +177,6 @@ func randomZktrie(t *testing.T, n int) (*ZkTrie, map[string]*kv) {
 	mt := &zkTrieImplTestWrapper{tr.Tree()}
 	vals := make(map[string]*kv)
 	for i := byte(0); i < 100; i++ {
-
 		value := &kv{common.LeftPadBytes([]byte{i}, 32), bytes.Repeat([]byte{i}, 32), false}
 		value2 := &kv{common.LeftPadBytes([]byte{i + 10}, 32), bytes.Repeat([]byte{i}, 32), false}
 
