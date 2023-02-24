@@ -19,6 +19,8 @@ package snap
 import (
 	"bytes"
 	"fmt"
+	zktrie "github.com/light-scale/zktrie/trie"
+	zkt "github.com/light-scale/zktrie/types"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -283,7 +285,7 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 		req.Bytes = softResponseLimit
 	}
 	// Retrieve the requested state and bail out if non existent
-	tr, err := trie.New(trie.StateTrieID(req.Root), chain.StateCache().TrieDB())
+	tr, err := chain.StateCache().OpenTrie(req.Root)
 	if err != nil {
 		return nil, nil
 	}
@@ -297,6 +299,7 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 		size     uint64
 		last     common.Hash
 	)
+	rightPath := SelectZkPath(req.Limit.Big())
 	for it.Next() {
 		hash, account := it.Hash(), common.CopyBytes(it.Account())
 
@@ -310,7 +313,10 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 			Body: account,
 		})
 		// If we've exceeded the request threshold, abort
-		if bytes.Compare(hash[:], req.Limit[:]) >= 0 {
+		if chain.Config().Zktrie && bytes.Compare(trie.GetBytePath(hash[:]), rightPath) >= 0 {
+			break
+		}
+		if !chain.Config().Zktrie && bytes.Compare(hash[:], req.Limit[:]) >= 0 {
 			break
 		}
 		if size > req.Bytes {
@@ -321,9 +327,28 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 
 	// Generate the Merkle proofs for the first and last account
 	proof := light.NewNodeSet()
-	if err := tr.Prove(req.Origin[:], 0, proof); err != nil {
-		log.Warn("Failed to prove account range", "origin", req.Origin, "err", err)
-		return nil, nil
+	if chain.Config().Zktrie {
+		zkTrie := tr.(*trie.ZkTrie)
+		zkTrie.ProveByPath(SelectZkBoolPath(req.Origin.Big()), 0, func(n *zktrie.Node) error {
+			key, err := n.Key()
+			if err != nil {
+				return err
+			}
+			if n.Type == zktrie.NodeTypeLeaf {
+				preImage := zkTrie.GetKey(n.NodeKey.Bytes())
+				if len(preImage) > 0 {
+					n.KeyPreimage = &zkt.Byte32{}
+					copy(n.KeyPreimage[:], preImage)
+				}
+			}
+			return proof.Put(key[:], n.Value())
+		})
+		proof.Put(trie.MagicHash, zktrie.ProofMagicBytes())
+	} else {
+		if err := tr.Prove(req.Origin[:], 0, proof); err != nil {
+			log.Warn("Failed to prove account range", "origin", req.Origin, "err", err)
+			return nil, nil
+		}
 	}
 	if last != (common.Hash{}) {
 		if err := tr.Prove(last[:], 0, proof); err != nil {

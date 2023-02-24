@@ -90,7 +90,7 @@ require (
 	github.com/iden3/go-iden3-crypto v0.0.13 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20210311194329-9aa0e372d097 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/light-scale/zktrie v0.3.2-0.20230207023546-b16bd9c55470 // indirect
+	github.com/light-scale/zktrie v0.3.2-0.20230208123605-f4ae74d58a15 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/mitchellh/pointerstructure v1.2.0 // indirect

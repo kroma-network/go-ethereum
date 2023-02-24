@@ -20,10 +20,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/log"
+	zktrie "github.com/light-scale/zktrie/trie"
+	zkt "github.com/light-scale/zktrie/types"
 )
 
 // Prove constructs a merkle proof for key. The result contains all encoded nodes
@@ -114,7 +116,7 @@ func (t *StateTrie) Prove(key []byte, fromLevel uint, proofDb ethdb.KeyValueWrit
 func VerifyProof(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueReader) (value []byte, err error) {
 	// [Scroll: START]
 	// test the type of proof (for trie or SMT)
-	if buf, _ := proofDb.Get(magicHash); buf != nil {
+	if buf, _ := proofDb.Get(MagicHash); buf != nil {
 		return VerifyProofSMT(rootHash, key, proofDb)
 	}
 	// [Scroll: END]
@@ -615,4 +617,306 @@ func get(tn node, key []byte, skipResolved bool) ([]byte, node) {
 			panic(fmt.Sprintf("%T: invalid node: %v", tn, tn))
 		}
 	}
+}
+
+func ZkVerifyRangeProof(
+	rootHash common.Hash,
+	leftPath []byte,
+	rightPath []byte,
+	keys [][]byte,
+	values [][]zkt.Byte32,
+	flags []uint32,
+	proof ethdb.KeyValueReader,
+) (bool, error) {
+	if len(keys) != len(values) {
+		return false, fmt.Errorf("inconsistent proof data, keys: %d, values: %d", len(keys), len(values))
+	}
+	//// Ensure the received batch is monotonic increasing and contains no deletions
+	//for i := 0; i < len(keys)-1; i++ {
+	//	if bytes.Compare(keys[i], keys[i+1]) >= 0 {
+	//		return false, errors.New("range is not monotonically increasing")
+	//	}
+	//}
+	for _, value := range values {
+		if len(value) == 0 {
+			return false, errors.New("range contains deletion")
+		}
+	}
+
+	// Special case, there is no edge proof at all. The given range is expected
+	// to be the whole leaf-set in the trie.
+	if proof == nil {
+		return false, nil // No more elements
+	}
+	buf, _ := proof.Get(zkt.ReverseByteOrder(rootHash[:]))
+	if buf == nil {
+		return false, fmt.Errorf("root zk node (hash %064x) missing", rootHash)
+	}
+	root, err := zktrie.NewNodeFromBytes(buf)
+	if err != nil {
+		return false, fmt.Errorf("bad proof zk node %v", err)
+	}
+	// Special case, there is a provided edge proof but zero key/value pairs, ensure there are no more accounts / slots in the trie.
+	// pairs, ensure there are no more accounts / slots in the trie.
+	if len(keys) == 0 {
+		if zkHasRightElement(NewZkTrieVisitorFromKey(root, leftPath, &zkNodeReader{proof})) {
+			return false, errors.New("more entries available")
+		}
+		return false, nil
+	}
+	// Special case, there is only one element and two edge keys are same.
+	// In this case, we can't construct two edge paths. So handle it here.
+	if len(keys) == 1 && bytes.Equal(leftPath, rightPath) {
+		root, _, err := zkProofToPath(rootHash, nil, leftPath, proof, false)
+		if err != nil {
+			return false, err
+		}
+		if err != nil {
+			return false, err
+		}
+		if !bytes.Equal(leftPath, keys[0]) {
+			return false, errors.New("correct proof but invalid key")
+		}
+		//if !bytes.Equal(val, values[0]) {
+		//	return false, errors.New("correct proof but invalid data")
+		//}
+		return zkHasRightElement(NewZkTrieVisitorFromKey(root, leftPath, &zkNodeReader{proof})), nil
+	}
+	// Ok, in all other cases, we require two edge paths available.
+	// First check the validity of edge keys.
+	if bytes.Compare(leftPath, rightPath) >= 0 {
+		return false, errors.New("invalid zk path")
+	}
+	// todo(rjl493456442) different length edge keys should be supported
+	if len(leftPath) != len(rightPath) {
+		return false, errors.New("inconsistent edge keys")
+	}
+	// Remove all internal references. All the removed parts should
+	// be re-filled(or re-constructed) by the given leaves range.
+	empty, err := zkUnsetInternal(root, leftPath, rightPath, &zkNodeReader{proof})
+	if err != nil {
+		return false, err
+	}
+	// Rebuild the trie with the leaf stream, the shape of trie
+	// should be same with the original one.
+	var tr *ZkTrie
+	if empty {
+		tr, err = NewZkTrie(common.Hash{}, NewZktrieDatabase(&readonlyKeyValueStore{memorydb.New(), proof}))
+	} else {
+		tr, err = NewZkTrie(rootHash, NewZktrieDatabase(&readonlyKeyValueStore{memorydb.New(), proof}))
+	}
+	if err != nil {
+		return false, err
+	}
+	for index, key := range keys {
+		tr.Tree().TryUpdate((*zkt.Hash)(key), flags[index], values[index])
+	}
+	if tr.Hash() != rootHash {
+		return false, fmt.Errorf("invalid proof, want hash %x, got %x", rootHash, tr.Hash())
+	}
+	visitor := NewZkTrieVisitor(
+		root,
+		newZkRangeProofKey(keys[len(keys)-1]).hash[:],
+		&zkNodeReader{proof},
+	)
+	return zkHasRightElement(visitor), nil
+}
+
+// proofToPath converts a merkle proof to trie node path. The main purpose of
+// this function is recovering a node path from the merkle proof stream. All
+// necessary nodes will be resolved and leave the remaining as hashnode.
+//
+// The given edge proof is allowed to be an existent or non-existent proof.
+func zkProofToPath(rootHash common.Hash, root *zktrie.Node, key []byte, proofDb ethdb.KeyValueReader, allowNonExistent bool) (*zktrie.Node, []byte, error) {
+	// resolveNode retrieves and resolves trie node from merkle proof stream
+	resolveNode := func(hash common.Hash) (*zktrie.Node, error) {
+		buf, _ := proofDb.Get(zkt.ReverseByteOrder(hash[:]))
+		if buf == nil {
+			return nil, fmt.Errorf("proof node (hash %064x) missing.", hash)
+		}
+		n, err := zktrie.NewNodeFromBytes(buf)
+		if err != nil {
+			return nil, fmt.Errorf("bad proof node %v", err)
+		}
+		return n, err
+	}
+	// If the root node is empty, resolve it first.
+	// Root node must be included in the proof.
+	if root == nil {
+		n, err := resolveNode(rootHash)
+		if err != nil {
+			return nil, nil, err
+		}
+		root = n
+	}
+	n, err := VerifyProofSMTNodeFromZkHash(rootHash, (*zkt.Hash)(key), zktrie.GetPath(256, key), proofDb)
+	if n == nil {
+		if allowNonExistent {
+			return root, nil, err
+		}
+		return nil, nil, err
+	}
+	return root, nil, err
+}
+
+// unsetInternal removes all internal node references(hashnode, embedded node).
+// It should be called after a trie is constructed with two edge paths. Also
+// the given boundary keys must be the one used to construct the edge paths.
+//
+// It's the key step for range proof. All visited nodes should be marked dirty
+// since the node content might be modified. Besides it can happen that some
+// fullnodes only have one child which is disallowed. But if the proof is valid,
+// the missing children will be filled, otherwise it will be thrown anyway.
+//
+// Note we have the assumption here the given boundary keys are different
+// and right is larger than left.
+func zkUnsetInternal(root *zktrie.Node, leftPath []byte, rightPath []byte, reader *zkNodeReader) (bool, error) {
+	if root.Type != zktrie.NodeTypeMiddle {
+		return true, nil
+	}
+	leftVisitor, rightVisitor := NewZkTrieVisitorFromKey(root, leftPath, reader), NewZkTrieVisitorFromKey(root, rightPath, reader)
+	for leftVisitor.IsMiddleNode() {
+		if leftVisitor.IsRight() != rightVisitor.IsRight() {
+			leftVisitor.MoveDown()
+			rightVisitor.MoveDown()
+			zkUnset(leftVisitor, true)
+			zkUnset(rightVisitor, false)
+			return false, nil
+		}
+		leftVisitor.MoveDown()
+		rightVisitor.node = leftVisitor.node
+		rightVisitor.pos = leftVisitor.pos
+	}
+	return false, nil
+}
+
+func zkUnset(visitor *ZkTrieVisitor, removeRight bool) {
+	for visitor.IsMiddleNode() {
+		if visitor.IsRight() {
+			if !removeRight {
+				//visitor.node.ChildL = nil
+			}
+		} else {
+			if removeRight {
+				//visitor.node.ChildR = nil
+			}
+		}
+		visitor.MoveDown()
+	}
+}
+
+// hasRightElement returns the indicator whether there exists more elements
+// on the right side of the given path. The given path can point to an existent
+// key or a non-existent one. This function has the assumption that the whole
+// path should already be resolved.
+func zkHasRightElement(visitor *ZkTrieVisitor) bool {
+	for visitor.IsMiddleNode() {
+		if !visitor.IsRight() && *visitor.node.ChildR != zkt.HashZero {
+			return true
+		}
+		if success := visitor.MoveDown(); !success {
+			return *visitor.GetChildHash() != zkt.HashZero
+		}
+		if visitor.err != nil {
+			panic(visitor.err)
+		}
+	}
+	return false
+}
+
+type zkRangeProofKey struct {
+	bytes []byte
+	paths []byte
+	hash  *zkt.Hash
+}
+
+func newZkRangeProofKey(b []byte) *zkRangeProofKey {
+	var h zkt.Hash
+	copy(h[:], b)
+	return &zkRangeProofKey{bytes: b, paths: GetBytePath(b), hash: &h}
+}
+
+type readonlyKeyValueStore struct {
+	ethdb.KeyValueStore
+	db ethdb.KeyValueReader
+}
+
+func (z *readonlyKeyValueStore) Has(key []byte) (bool, error) {
+	return z.db.Has(key)
+}
+
+func (z *readonlyKeyValueStore) Get(key []byte) ([]byte, error) {
+	return z.db.Get(key)
+}
+
+type zkNodeReader struct {
+	db ethdb.KeyValueReader
+}
+
+func (r *zkNodeReader) Node(hash *zkt.Hash) (*zktrie.Node, error) {
+	buf, err := r.db.Get(hash[:])
+	if err != nil {
+		return nil, err
+	}
+	n, err := zktrie.NewNodeFromBytes(buf)
+	if err != nil {
+		return nil, err
+	}
+	return n, nil
+}
+
+func GetBytePath(k []byte) []byte {
+	maxLevel := 256
+	path := make([]byte, maxLevel)
+	for n := 0; n < maxLevel; n++ {
+		if zkt.TestBit(k[:], uint(n)) {
+			path[n] = 1
+		} else {
+			path[n] = 0
+		}
+	}
+	return path
+}
+
+func NewZkTrieVisitor(root *zktrie.Node, k []byte, reader *zkNodeReader) *ZkTrieVisitor {
+	return &ZkTrieVisitor{GetBytePath(k), 0, reader, root, nil}
+}
+
+func NewZkTrieVisitorFromKey(root *zktrie.Node, path []byte, reader *zkNodeReader) *ZkTrieVisitor {
+	return &ZkTrieVisitor{path, 0, reader, root, nil}
+}
+
+type ZkTrieVisitor struct {
+	// 0 left
+	// 1 right
+	path   []byte
+	pos    int
+	reader *zkNodeReader
+	node   *zktrie.Node
+	err    error
+}
+
+func (v *ZkTrieVisitor) IsRight() bool      { return v.path[v.pos] == 1 }
+func (v *ZkTrieVisitor) IsMiddleNode() bool { return v.node.Type == zktrie.NodeTypeMiddle }
+
+func (v *ZkTrieVisitor) GetChildHash() *zkt.Hash {
+	if v.IsRight() {
+		return v.node.ChildR
+	}
+	return v.node.ChildL
+}
+
+func (v *ZkTrieVisitor) MoveDown() bool {
+	if v.node.Type == zktrie.NodeTypeMiddle {
+		hash := v.GetChildHash()
+		n, err := v.reader.Node(hash)
+		if err != nil {
+			v.err = err
+			return false
+		}
+		v.node = n
+		v.pos++
+		return true
+	}
+	panic("not middle node")
 }

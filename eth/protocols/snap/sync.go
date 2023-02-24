@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/ethdb/memorydb"
+	zkt "github.com/light-scale/zktrie/types"
 	gomath "math"
 	"math/big"
 	"math/rand"
@@ -324,8 +326,9 @@ type accountTask struct {
 	codeTasks  map[common.Hash]struct{}    // Code hashes that need retrieval
 	stateTasks map[common.Hash]common.Hash // Account hashes->roots that need full state retrieval
 
-	genBatch ethdb.Batch     // Batch used by the node generator
-	genTrie  *trie.StackTrie // Node generator from storage slots
+	genBatch  ethdb.Batch     // Batch used by the node generator
+	genTrie   *trie.StackTrie // Node generator from storage slots
+	genZkTrie *trie.ZkTrie    // Node generator from storage slots
 
 	done bool // Flag whether the task can be removed
 }
@@ -421,6 +424,7 @@ type SyncPeer interface {
 //   - The peer delivers a refusal to serve the requested state
 type Syncer struct {
 	db ethdb.KeyValueStore // Database to store the trie nodes into (and dedup)
+	zk bool
 
 	root    common.Hash    // Current state trie root being synced
 	tasks   []*accountTask // Current account task set being synced
@@ -488,10 +492,10 @@ type Syncer struct {
 
 // NewSyncer creates a new snapshot syncer to download the Ethereum state over the
 // snap protocol.
-func NewSyncer(db ethdb.KeyValueStore) *Syncer {
+func NewSyncer(db ethdb.KeyValueStore, zk bool) *Syncer {
 	return &Syncer{
-		db: db,
-
+		db:       db,
+		zk:       zk,
 		peers:    make(map[string]SyncPeer),
 		peerJoin: new(event.Feed),
 		peerDrop: new(event.Feed),
@@ -584,7 +588,7 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 	s.lock.Lock()
 	s.root = root
 	s.healer = &healTask{
-		scheduler: state.NewStateSync(root, s.db, s.onHealState),
+		scheduler: state.NewStateSync(root, s.db, s.zk, s.onHealState),
 		trieTasks: make(map[string]common.Hash),
 		codeTasks: make(map[common.Hash]struct{}),
 	}
@@ -746,7 +750,12 @@ func (s *Syncer) loadSyncStatus() {
 						s.accountBytes += common.StorageSize(len(key) + len(value))
 					},
 				}
-				task.genTrie = trie.NewStackTrie(task.genBatch)
+				if s.zk {
+					zktrie, _ := trie.NewZkTrie(common.Hash{}, trie.NewZktrieDatabase(&readonlyKeyValueStore{memorydb.New(), task.genBatch}))
+					task.genZkTrie = zktrie
+				} else {
+					task.genTrie = trie.NewStackTrie(task.genBatch)
+				}
 
 				for accountHash, subtasks := range task.SubTasks {
 					for _, subtask := range subtasks {
@@ -808,16 +817,34 @@ func (s *Syncer) loadSyncStatus() {
 				s.accountBytes += common.StorageSize(len(key) + len(value))
 			},
 		}
+		var zktrie *trie.ZkTrie
+		if s.zk {
+			zktrie, _ = trie.NewZkTrie(common.Hash{}, trie.NewZktrieDatabase(&readonlyKeyValueStore{memorydb.New(), batch}))
+		}
 		s.tasks = append(s.tasks, &accountTask{
-			Next:     next,
-			Last:     last,
-			SubTasks: make(map[common.Hash][]*storageTask),
-			genBatch: batch,
-			genTrie:  trie.NewStackTrie(batch),
+			Next:      next,
+			Last:      last,
+			SubTasks:  make(map[common.Hash][]*storageTask),
+			genBatch:  batch,
+			genTrie:   trie.NewStackTrie(batch),
+			genZkTrie: zktrie,
 		})
 		log.Debug("Created account sync task", "from", next, "last", last)
 		next = common.BigToHash(new(big.Int).Add(last.Big(), common.Big1))
 	}
+}
+
+type readonlyKeyValueStore struct {
+	ethdb.KeyValueStore
+	db ethdb.KeyValueWriter
+}
+
+func (z *readonlyKeyValueStore) Put(key []byte, value []byte) error {
+	return z.db.Put(key, value)
+}
+
+func (z *readonlyKeyValueStore) Delete(key []byte) error {
+	return z.db.Delete(key)
 }
 
 // saveSyncStatus marshals the remaining sync tasks into leveldb.
@@ -1837,7 +1864,7 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 			}
 		}
 		// Check if the account is a contract with an unknown storage trie
-		if account.Root != emptyRoot {
+		if (s.zk && account.Root != common.Hash{}) || (!s.zk && account.Root != emptyRoot) {
 			if ok, err := s.db.Has(account.Root[:]); err != nil || !ok {
 				// If there was a previous large state retrieval in progress,
 				// don't restart it from scratch. This happens if a sync cycle
@@ -2281,6 +2308,11 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 		// If the task is complete, drop it into the stack trie to generate
 		// account trie nodes for it
 		if !task.needHeal[i] {
+			if s.zk {
+				value, flag := res.accounts[i].MarshalFields()
+				task.genZkTrie.Tree().TryUpdate((*zkt.Hash)(hash[:]), flag, value)
+				continue
+			}
 			full, err := snapshot.FullAccountRLP(slim) // TODO(karalabe): Slim parsing can be omitted
 			if err != nil {
 				panic(err) // Really shouldn't ever happen
@@ -2309,8 +2341,14 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 	// flush after finalizing task.done. It's fine even if we crash and lose this
 	// write as it will only cause more data to be downloaded during heal.
 	if task.done {
-		if _, err := task.genTrie.Commit(); err != nil {
-			log.Error("Failed to commit stack account", "err", err)
+		if s.zk {
+			if _, _, err := task.genZkTrie.Commit(true); err != nil {
+				log.Error("Failed to commit stack account", "err", err)
+			}
+		} else {
+			if _, err := task.genTrie.Commit(); err != nil {
+				log.Error("Failed to commit stack account", "err", err)
+			}
 		}
 	}
 	if task.genBatch.ValueSize() > ethdb.IdealBatchSize || task.done {
@@ -2399,20 +2437,56 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 	if len(keys) > 0 {
 		end = keys[len(keys)-1]
 	}
-	cont, err := trie.VerifyRangeProof(root, req.origin[:], end, keys, accounts, proofdb)
-	if err != nil {
-		logger.Warn("Account range failed proof", "err", err)
-		// Signal this request as failed, and ready for rescheduling
-		s.scheduleRevertAccountRequest(req)
-		return err
-	}
-	accs := make([]*types.StateAccount, len(accounts))
-	for i, account := range accounts {
-		acc := new(types.StateAccount)
-		if err := rlp.DecodeBytes(account, acc); err != nil {
-			panic(err) // We created these blobs, we must be able to decode them
+	var (
+		cont bool
+		err  error
+		accs []*types.StateAccount
+	)
+	if proofdb.HasZk() {
+		accs = make([]*types.StateAccount, len(accounts))
+		values := make([][]zkt.Byte32, len(accounts))
+		flags := make([]uint32, len(accounts))
+		for i, account := range accounts {
+			fullAccount, _ := snapshot.FullAccount(account)
+			acc := &types.StateAccount{
+				Nonce:    fullAccount.Nonce,
+				Balance:  fullAccount.Balance,
+				Root:     common.BytesToHash(fullAccount.Root),
+				CodeHash: fullAccount.CodeHash,
+			}
+			value, vFlag := acc.MarshalFields()
+			accs[i] = acc
+			values[i] = value
+			flags[i] = vFlag
 		}
-		accs[i] = acc
+		leftPath := SelectZkPath(req.origin.Big())
+		var rightPath []byte
+		if len(end) > 0 {
+			rightPath = trie.GetBytePath(end)
+		}
+		cont, err = trie.ZkVerifyRangeProof(root, leftPath, rightPath, keys, values, flags, proofdb)
+		if err != nil {
+			logger.Warn("Account range failed proof", "err", err)
+			// Signal this request as failed, and ready for rescheduling
+			s.scheduleRevertAccountRequest(req)
+			return err
+		}
+	} else {
+		cont, err = trie.VerifyRangeProof(root, req.origin[:], end, keys, accounts, proofdb)
+		if err != nil {
+			logger.Warn("Account range failed proof", "err", err)
+			// Signal this request as failed, and ready for rescheduling
+			s.scheduleRevertAccountRequest(req)
+			return err
+		}
+		accs = make([]*types.StateAccount, len(accounts))
+		for i, account := range accounts {
+			acc := new(types.StateAccount)
+			if err := rlp.DecodeBytes(account, acc); err != nil {
+				panic(err) // We created these blobs, we must be able to decode them
+			}
+			accs[i] = acc
+		}
 	}
 	response := &accountResponse{
 		task:     req.task,
@@ -2426,6 +2500,32 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 	case <-req.stale:
 	}
 	return nil
+}
+
+func SelectZkPath(index *big.Int) []byte {
+	maxLevel := 256
+	combination := make([]byte, maxLevel)
+	for i := 0; i < maxLevel; i++ {
+		bit := new(big.Int).Mod(index, big.NewInt(2))
+		if bit.Uint64() == 1 {
+			combination[maxLevel-1-i] = byte(bit.Int64())
+		}
+		index.Rsh(index, 1)
+	}
+	return combination
+}
+
+func SelectZkBoolPath(index *big.Int) []bool {
+	maxLevel := 256
+	combination := make([]bool, maxLevel)
+	for i := 0; i < maxLevel; i++ {
+		bit := new(big.Int).Mod(index, big.NewInt(2))
+		if bit.Uint64() == 1 {
+			combination[maxLevel-1-i] = bit.Int64() == 1
+		}
+		index.Rsh(index, 1)
+	}
+	return combination
 }
 
 // OnByteCodes is a callback method to invoke when a batch of contract

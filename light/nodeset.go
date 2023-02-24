@@ -17,7 +17,10 @@
 package light
 
 import (
+	"bytes"
 	"errors"
+	"github.com/ethereum/go-ethereum/trie"
+	zktrie "github.com/light-scale/zktrie/trie"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -124,8 +127,35 @@ func (db *NodeSet) Store(target ethdb.KeyValueWriter) {
 	}
 }
 
+// Store writes the contents of the set to the given database
+func (db *NodeSet) HasZk() bool {
+	_, ok := db.nodes[string(trie.MagicHash)]
+	return ok
+}
+
 // NodeList stores an ordered list of trie nodes. It implements ethdb.KeyValueWriter.
 type NodeList []rlp.RawValue
+
+func (n NodeList) HasZk() bool {
+	for i := len(n) - 1; i != 0; i-- {
+		if bytes.Equal(n[i], zktrie.ProofMagicBytes()) {
+			return true
+		}
+	}
+	return false
+}
+
+func (n NodeList) StoreZk(db ethdb.KeyValueWriter) {
+	for _, node := range n {
+		if bytes.Equal(node, zktrie.ProofMagicBytes()) {
+			db.Put(trie.MagicHash, zktrie.ProofMagicBytes())
+			continue
+		}
+		zkNode, _ := zktrie.DecodeSMTProof(node)
+		key, _ := zkNode.Key()
+		db.Put(key[:], node)
+	}
+}
 
 // Store writes the contents of the list to the given database
 func (n NodeList) Store(db ethdb.KeyValueWriter) {
@@ -137,6 +167,10 @@ func (n NodeList) Store(db ethdb.KeyValueWriter) {
 // NodeSet converts the node list to a NodeSet
 func (n NodeList) NodeSet() *NodeSet {
 	db := NewNodeSet()
+	if n.HasZk() {
+		n.StoreZk(db)
+		return db
+	}
 	n.Store(db)
 	return db
 }

@@ -20,6 +20,8 @@ import (
 	"bytes"
 	crand "crypto/rand"
 	"encoding/binary"
+	zktrie "github.com/light-scale/zktrie/trie"
+	zkt "github.com/light-scale/zktrie/types"
 	mrand "math/rand"
 	"sort"
 	"testing"
@@ -37,7 +39,7 @@ func init() {
 
 // makeProvers creates Merkle trie provers based on different implementations to
 // test all variations.
-func makeProvers(trie *Trie) []func(key []byte) *memorydb.Database {
+func makeProvers(trie LowLevelTrie, util ProofTestUtil) []func(key []byte) *memorydb.Database {
 	var provers []func(key []byte) *memorydb.Database
 
 	// Create a direct trie based Merkle prover
@@ -46,8 +48,22 @@ func makeProvers(trie *Trie) []func(key []byte) *memorydb.Database {
 		trie.Prove(key, 0, proof)
 		return proof
 	})
+	if util.IsZk() {
+		return append(provers, func(key []byte) *memorydb.Database {
+			proof := memorydb.New()
+			hash, _ := NewZktHashFromBytes(key)
+			if it := NewIterator(trie.NodeIterator(key)); it.Next() && bytes.Equal(hash[:], it.Key) {
+				for _, p := range it.Prove() {
+					v, _ := trie.(*ZkTrie).db.db.rawDirties.Get(p)
+					proof.Put(p, v)
+				}
+				proof.Put(MagicHash, zktrie.ProofMagicBytes())
+			}
+			return proof
+		})
+	}
 	// Create a leaf iterator based Merkle prover
-	provers = append(provers, func(key []byte) *memorydb.Database {
+	return append(provers, func(key []byte) *memorydb.Database {
 		proof := memorydb.New()
 		if it := NewIterator(trie.NodeIterator(key)); it.Next() && bytes.Equal(key, it.Key) {
 			for _, p := range it.Prove() {
@@ -56,54 +72,58 @@ func makeProvers(trie *Trie) []func(key []byte) *memorydb.Database {
 		}
 		return proof
 	})
-	return provers
 }
 
-func TestProof(t *testing.T) {
-	trie, vals := randomTrie(500)
+func TestZkProof(t *testing.T) { testProof(t, &ZkProofTestUtil{}) }
+func TestProof(t *testing.T)   { testProof(t, &MptProofTestUtil{}) }
+func testProof(t *testing.T, util ProofTestUtil) {
+	trie, vals := randomTrie(500, util)
 	root := trie.Hash()
-	for i, prover := range makeProvers(trie) {
+	for i, prover := range makeProvers(trie, util) {
 		for _, kv := range vals {
 			proof := prover(kv.k)
 			if proof == nil {
 				t.Fatalf("prover %d: missing key %x while constructing proof", i, kv.k)
 			}
-			val, err := VerifyProof(root, kv.k, proof)
+			val, err := VerifyProof(root, util.Convert(kv.k), proof)
 			if err != nil {
 				t.Fatalf("prover %d: failed to verify proof for key %x: %v\nraw proof: %x", i, kv.k, err, proof)
 			}
-			if !bytes.Equal(val, kv.v) {
+			if !bytes.Equal(val, util.Convert(kv.v)) {
 				t.Fatalf("prover %d: verified value mismatch for key %x: have %x, want %x", i, kv.k, val, kv.v)
 			}
 		}
 	}
 }
-
-func TestOneElementProof(t *testing.T) {
-	trie := NewEmpty(NewDatabase(rawdb.NewMemoryDatabase()))
-	updateString(trie, "k", "v")
-	for i, prover := range makeProvers(trie) {
+func TestOneElementZkProof(t *testing.T) { testOneElementProof(t, &ZkProofTestUtil{}) }
+func TestOneElementProof(t *testing.T)   { testOneElementProof(t, &MptProofTestUtil{}) }
+func testOneElementProof(t *testing.T, util ProofTestUtil) {
+	trie := util.OpenTrie()
+	util.UpdateString(trie, "k", "v")
+	for i, prover := range makeProvers(trie, util) {
 		proof := prover([]byte("k"))
 		if proof == nil {
 			t.Fatalf("prover %d: nil proof", i)
 		}
-		if proof.Len() != 1 {
-			t.Errorf("prover %d: proof should have one element", i)
+		if (util.IsZk() && proof.Len() != 2) ||
+			(!util.IsZk() && proof.Len() != 1) {
+			t.Fatalf("prover %d: proof should have one element", i)
 		}
-		val, err := VerifyProof(trie.Hash(), []byte("k"), proof)
+		val, err := VerifyProof(trie.Hash(), util.Convert([]byte("k")), proof)
 		if err != nil {
 			t.Fatalf("prover %d: failed to verify proof: %v\nraw proof: %x", i, err, proof)
 		}
-		if !bytes.Equal(val, []byte("v")) {
+		if !bytes.Equal(val, util.Convert([]byte("v"))) {
 			t.Fatalf("prover %d: verified value mismatch: have %x, want 'k'", i, val)
 		}
 	}
 }
-
-func TestBadProof(t *testing.T) {
-	trie, vals := randomTrie(800)
+func TestBadZkProof(t *testing.T) { testBadProof(t, &ZkProofTestUtil{}) }
+func TestBadProof(t *testing.T)   { testBadProof(t, &MptProofTestUtil{}) }
+func testBadProof(t *testing.T, util ProofTestUtil) {
+	trie, vals := randomTrie(800, util)
 	root := trie.Hash()
-	for i, prover := range makeProvers(trie) {
+	for i, prover := range makeProvers(trie, util) {
 		for _, kv := range vals {
 			proof := prover(kv.k)
 			if proof == nil {
@@ -119,7 +139,9 @@ func TestBadProof(t *testing.T) {
 			it.Release()
 
 			mutateByte(val)
-			proof.Put(crypto.Keccak256(val), val)
+			if !util.IsZk() {
+				proof.Put(crypto.Keccak256(val), val)
+			}
 
 			if _, err := VerifyProof(root, kv.k, proof); err == nil {
 				t.Fatalf("prover %d: expected proof to fail for key %x", i, kv.k)
@@ -128,20 +150,23 @@ func TestBadProof(t *testing.T) {
 	}
 }
 
+func TestMissingKeyZkProof(t *testing.T) { testMissingKeyProof(t, &ZkProofTestUtil{}) }
+func TestMissingKeyProof(t *testing.T)   { testMissingKeyProof(t, &MptProofTestUtil{}) }
+
 // Tests that missing keys can also be proven. The test explicitly uses a single
 // entry trie and checks for missing keys both before and after the single entry.
-func TestMissingKeyProof(t *testing.T) {
-	trie := NewEmpty(NewDatabase(rawdb.NewMemoryDatabase()))
-	updateString(trie, "k", "v")
-
+func testMissingKeyProof(t *testing.T, util ProofTestUtil) {
+	trie := util.OpenTrie()
+	util.UpdateString(trie, "k", "v")
 	for i, key := range []string{"a", "j", "l", "z"} {
 		proof := memorydb.New()
 		trie.Prove([]byte(key), 0, proof)
 
-		if proof.Len() != 1 {
+		if (util.IsZk() && proof.Len() != 2) ||
+			(!util.IsZk() && proof.Len() != 1) {
 			t.Errorf("test %d: proof should have one element", i)
 		}
-		val, err := VerifyProof(trie.Hash(), []byte(key), proof)
+		val, err := VerifyProof(trie.Hash(), util.Convert([]byte(key)), proof)
 		if err != nil {
 			t.Fatalf("test %d: failed to verify proof: %v\nraw proof: %x", i, err, proof)
 		}
@@ -159,13 +184,15 @@ func (p entrySlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 // TestRangeProof tests normal range proof with both edge proofs
 // as the existent proof. The test cases are generated randomly.
-func TestRangeProof(t *testing.T) {
-	trie, vals := randomTrie(4096)
+func TestRangeZkProof(t *testing.T) { testRangeProof(t, &ZkProofTestUtil{}) }
+func TestRangeProof(t *testing.T)   { testRangeProof(t, &MptProofTestUtil{}) }
+func testRangeProof(t *testing.T, util ProofTestUtil) {
+	trie, vals := randomTrie(1000, util)
 	var entries entrySlice
 	for _, kv := range vals {
 		entries = append(entries, kv)
 	}
-	sort.Sort(entries)
+	util.Sort(entries)
 	for i := 0; i < 500; i++ {
 		start := mrand.Intn(len(entries))
 		end := mrand.Intn(len(entries)-start) + start + 1
@@ -193,7 +220,7 @@ func TestRangeProof(t *testing.T) {
 // TestRangeProof tests normal range proof with two non-existent proofs.
 // The test cases are generated randomly.
 func TestRangeProofWithNonExistentProof(t *testing.T) {
-	trie, vals := randomTrie(4096)
+	trie, vals := randomTrie(4096, &MptProofTestUtil{})
 	var entries entrySlice
 	for _, kv := range vals {
 		entries = append(entries, kv)
@@ -265,7 +292,7 @@ func TestRangeProofWithNonExistentProof(t *testing.T) {
 // - There exists a gap between the first element and the left edge proof
 // - There exists a gap between the last element and the right edge proof
 func TestRangeProofWithInvalidNonExistentProof(t *testing.T) {
-	trie, vals := randomTrie(4096)
+	trie, vals := randomTrie(4096, &MptProofTestUtil{})
 	var entries entrySlice
 	for _, kv := range vals {
 		entries = append(entries, kv)
@@ -321,13 +348,15 @@ func TestRangeProofWithInvalidNonExistentProof(t *testing.T) {
 // TestOneElementRangeProof tests the proof with only one
 // element. The first edge proof can be existent one or
 // non-existent one.
-func TestOneElementRangeProof(t *testing.T) {
-	trie, vals := randomTrie(4096)
+func TestOneElementRangeZkProof(t *testing.T) { testOneElementRangeProof(t, &ZkProofTestUtil{}) }
+func TestOneElementRangeProof(t *testing.T)   { testOneElementRangeProof(t, &MptProofTestUtil{}) }
+func testOneElementRangeProof(t *testing.T, util ProofTestUtil) {
+	trie, vals := randomTrie(4096, util)
 	var entries entrySlice
 	for _, kv := range vals {
 		entries = append(entries, kv)
 	}
-	sort.Sort(entries)
+	util.Sort(entries)
 
 	// One element with existent edge proof, both edge proofs
 	// point to the SAME key.
@@ -409,7 +438,7 @@ func TestOneElementRangeProof(t *testing.T) {
 // TestAllElementsProof tests the range proof with all elements.
 // The edge proofs can be nil.
 func TestAllElementsProof(t *testing.T) {
-	trie, vals := randomTrie(4096)
+	trie, vals := randomTrie(4096, &MptProofTestUtil{})
 	var entries entrySlice
 	for _, kv := range vals {
 		entries = append(entries, kv)
@@ -530,7 +559,7 @@ func TestReverseSingleSideRangeProof(t *testing.T) {
 // TestBadRangeProof tests a few cases which the proof is wrong.
 // The prover is expected to detect the error.
 func TestBadRangeProof(t *testing.T) {
-	trie, vals := randomTrie(4096)
+	trie, vals := randomTrie(4096, &MptProofTestUtil{})
 	var entries entrySlice
 	for _, kv := range vals {
 		entries = append(entries, kv)
@@ -633,7 +662,7 @@ func TestGappedRangeProof(t *testing.T) {
 
 // TestSameSideProofs tests the element is not in the range covered by proofs
 func TestSameSideProofs(t *testing.T) {
-	trie, vals := randomTrie(4096)
+	trie, vals := randomTrie(4096, &MptProofTestUtil{})
 	var entries entrySlice
 	for _, kv := range vals {
 		entries = append(entries, kv)
@@ -746,10 +775,42 @@ func TestHasRightElement(t *testing.T) {
 	}
 }
 
+//func TestEmptyRangeZkProof(t *testing.T) {
+//	util := &ZkProofTestUtil{}
+//	trie, vals := randomTrie(100, util)
+//	var entries entrySlice
+//	for _, kv := range vals {
+//		entries = append(entries, kv)
+//	}
+//	util.Sort(entries)
+//
+//	var cases = []struct {
+//		pos      int
+//		hasRight bool
+//	}{
+//		{len(entries) - 1, false},
+//		{50, true},
+//	}
+//	for _, c := range cases {
+//		proof := memorydb.New()
+//		nodeKey := util.NodeKey(entries[c.pos].k)
+//		first := zkt.ReverseByteOrder(increaseKey(common.CopyBytes(nodeKey)))
+//		//if err := trie.(*ZkTrieProofTest).trie.Prove(first, 0, proof); err != nil {
+//		//	t.Fatalf("Failed to prove the first node %v", err)
+//		//}
+//		//n, _, _ := zkProofToPath(trie.Hash(), nil, first, proof, true)
+//		//NewZkTrieVisitor(first)
+//		//hasRight := zkHasRightElement(n, zkt.Hash(*zkt.NewByte32FromBytes(zkt.ReverseByteOrder(first))), zkNodeReader{proof})
+//		//if c.hasRight != hasRight {
+//		//	t.Fatalf("has right node. got %v, want %v", hasRight, c.hasRight)
+//		//}
+//	}
+//}
+
 // TestEmptyRangeProof tests the range proof with "no" element.
 // The first edge proof must be a non-existent proof.
 func TestEmptyRangeProof(t *testing.T) {
-	trie, vals := randomTrie(4096)
+	trie, vals := randomTrie(4096, &MptProofTestUtil{})
 	var entries entrySlice
 	for _, kv := range vals {
 		entries = append(entries, kv)
@@ -784,7 +845,7 @@ func TestEmptyRangeProof(t *testing.T) {
 // lets leave this test as a bit weird, but present.
 func TestBloatedProof(t *testing.T) {
 	// Use a small trie
-	trie, kvs := nonRandomTrie(100)
+	trie, kvs := nonRandomTrie(100, &MptProofTestUtil{})
 	var entries entrySlice
 	for _, kv := range kvs {
 		entries = append(entries, kv)
@@ -818,7 +879,7 @@ func TestBloatedProof(t *testing.T) {
 // as the existent proof, but with an extra empty value included, which is a
 // noop technically, but practically should be rejected.
 func TestEmptyValueRangeProof(t *testing.T) {
-	trie, values := randomTrie(512)
+	trie, values := randomTrie(512, &MptProofTestUtil{})
 	var entries entrySlice
 	for _, kv := range values {
 		entries = append(entries, kv)
@@ -862,7 +923,7 @@ func TestEmptyValueRangeProof(t *testing.T) {
 // but with an extra empty value included, which is a noop technically, but
 // practically should be rejected.
 func TestAllElementsEmptyValueRangeProof(t *testing.T) {
-	trie, values := randomTrie(512)
+	trie, values := randomTrie(512, &MptProofTestUtil{})
 	var entries entrySlice
 	for _, kv := range values {
 		entries = append(entries, kv)
@@ -925,7 +986,7 @@ func decreaseKey(key []byte) []byte {
 }
 
 func BenchmarkProve(b *testing.B) {
-	trie, vals := randomTrie(100)
+	trie, vals := randomTrie(100, &MptProofTestUtil{})
 	var keys []string
 	for k := range vals {
 		keys = append(keys, k)
@@ -942,7 +1003,7 @@ func BenchmarkProve(b *testing.B) {
 }
 
 func BenchmarkVerifyProof(b *testing.B) {
-	trie, vals := randomTrie(100)
+	trie, vals := randomTrie(100, &MptProofTestUtil{})
 	root := trie.Hash()
 	var keys []string
 	var proofs []*memorydb.Database
@@ -968,7 +1029,7 @@ func BenchmarkVerifyRangeProof1000(b *testing.B) { benchmarkVerifyRangeProof(b, 
 func BenchmarkVerifyRangeProof5000(b *testing.B) { benchmarkVerifyRangeProof(b, 5000) }
 
 func benchmarkVerifyRangeProof(b *testing.B, size int) {
-	trie, vals := randomTrie(8192)
+	trie, vals := randomTrie(8192, &MptProofTestUtil{})
 	var entries entrySlice
 	for _, kv := range vals {
 		entries = append(entries, kv)
@@ -1005,7 +1066,7 @@ func BenchmarkVerifyRangeNoProof500(b *testing.B)  { benchmarkVerifyRangeNoProof
 func BenchmarkVerifyRangeNoProof1000(b *testing.B) { benchmarkVerifyRangeNoProof(b, 1000) }
 
 func benchmarkVerifyRangeNoProof(b *testing.B, size int) {
-	trie, vals := randomTrie(size)
+	trie, vals := randomTrie(size, &MptProofTestUtil{})
 	var entries entrySlice
 	for _, kv := range vals {
 		entries = append(entries, kv)
@@ -1027,8 +1088,8 @@ func benchmarkVerifyRangeNoProof(b *testing.B, size int) {
 	}
 }
 
-func randomTrie(n int) (*Trie, map[string]*kv) {
-	trie := NewEmpty(NewDatabase(rawdb.NewMemoryDatabase()))
+func randomTrie(n int, util ProofTestUtil) (LowLevelTrie, map[string]*kv) {
+	trie := util.OpenTrie()
 	vals := make(map[string]*kv)
 	for i := byte(0); i < 100; i++ {
 		value := &kv{common.LeftPadBytes([]byte{i}, 32), []byte{i}, false}
@@ -1052,8 +1113,8 @@ func randBytes(n int) []byte {
 	return r
 }
 
-func nonRandomTrie(n int) (*Trie, map[string]*kv) {
-	trie := NewEmpty(NewDatabase(rawdb.NewMemoryDatabase()))
+func nonRandomTrie(n int, util ProofTestUtil) (LowLevelTrie, map[string]*kv) {
+	trie := util.OpenTrie()
 	vals := make(map[string]*kv)
 	max := uint64(0xffffffffffffffff)
 	for i := uint64(0); i < uint64(n); i++ {
@@ -1100,4 +1161,56 @@ func TestRangeProofKeysWithSharedPrefix(t *testing.T) {
 	if more != false {
 		t.Error("expected more to be false")
 	}
+}
+
+type (
+	ProofTestUtil interface {
+		IsZk() bool
+		Sort(entries entrySlice)
+		Convert(data []byte) []byte
+		OpenTrie() LowLevelTrie
+		UpdateString(trie LowLevelTrie, k, v string)
+	}
+	MptProofTestUtil struct{}
+	ZkProofTestUtil  struct{}
+)
+
+func (MptProofTestUtil) IsZk() bool                 { return false }
+func (MptProofTestUtil) Sort(entries entrySlice)    { sort.Sort(entries) }
+func (MptProofTestUtil) Convert(data []byte) []byte { return data }
+func (MptProofTestUtil) OpenTrie() LowLevelTrie {
+	return NewEmpty(NewDatabase(rawdb.NewMemoryDatabase()))
+}
+func (MptProofTestUtil) UpdateString(trie LowLevelTrie, k, v string) {
+	trie.Update([]byte(k), []byte(v))
+}
+
+func (z *ZkProofTestUtil) IsZk() bool { return true }
+func (z *ZkProofTestUtil) Sort(entries entrySlice) {
+	sort.Slice(entries, func(i, j int) bool {
+		k1 := z.NodeKey(entries[i].k)
+		k2 := z.NodeKey(entries[j].k)
+		return bytes.Compare(GetBytePath(k1), GetBytePath(k2)) < 0
+	})
+
+	//for i, entry := range entries {
+	//	fmt.Printf("[%d] %v\n", i, getBytePath(z.NodeKey(entry.k)))
+	//}
+}
+
+func (z *ZkProofTestUtil) NodeKey(data []byte) []byte {
+	k, _ := zkt.ToSecureKey(z.Convert(data))
+	return zkt.NewHashFromBigInt(k)[:]
+}
+
+func (z *ZkProofTestUtil) Convert(data []byte) []byte { return common.LeftPadBytes(data, 32) }
+
+func (z *ZkProofTestUtil) OpenTrie() LowLevelTrie {
+	db := NewZktrieDatabase(memorydb.New())
+	trie, _ := NewZkTrie(common.Hash{}, db)
+	return trie
+}
+
+func (z *ZkProofTestUtil) UpdateString(trie LowLevelTrie, k, v string) {
+	trie.Update(z.Convert([]byte(k)), []byte(v))
 }

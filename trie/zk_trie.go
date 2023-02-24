@@ -32,7 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-var magicHash []byte = []byte("THIS IS THE MAGIC INDEX FOR ZKTRIE")
+var MagicHash = []byte("THIS IS THE MAGIC INDEX FOR ZKTRIE")
 
 // wrap zktrie for trie interface
 type ZkTrie struct {
@@ -52,7 +52,7 @@ func sanityCheckByte32Key(b []byte) {
 
 // NOTE(chokobole): This part is different from scroll
 func IsMagicHash(k []byte) bool {
-	return bytes.Equal(k, magicHash)
+	return bytes.Equal(k, MagicHash)
 }
 
 // NewZkTrie creates a trie
@@ -82,7 +82,10 @@ func (t *ZkTrie) Get(key []byte) []byte {
 func (t *ZkTrie) TryUpdateAccount(key []byte, acc *types.StateAccount) error {
 	sanityCheckByte32Key(key)
 	value, flag := acc.MarshalFields()
-	return t.ZkTrie.TryUpdate(key, flag, value)
+	prevRoot := t.Tree().Root().Bytes()
+	r := t.ZkTrie.TryUpdate(key, flag, value)
+	fmt.Printf("TryUpdateAccount %v prev root %v : next root %v\n", t, prevRoot, t.Tree().Root().Bytes())
+	return r
 }
 
 // Update associates key with value in the trie. Subsequent calls to
@@ -101,7 +104,10 @@ func (t *ZkTrie) Update(key, value []byte) {
 // we override the underlying zktrie's TryUpdate method
 func (t *ZkTrie) TryUpdate(key, value []byte) error {
 	sanityCheckByte32Key(key)
-	return t.ZkTrie.TryUpdate(key, 1, []zkt.Byte32{*zkt.NewByte32FromBytes(value)})
+	prevRoot := t.Tree().Root().Bytes()
+	r := t.ZkTrie.TryUpdate(key, 1, []zkt.Byte32{*zkt.NewByte32FromBytes(value)})
+	fmt.Printf("TryUpdate %v prev root %v : next root %v\n", t, prevRoot, t.Tree().Root().Bytes())
+	return r
 }
 
 // Delete removes any existing value for key from the trie.
@@ -204,20 +210,39 @@ func (t *ZkTrie) Prove(key []byte, fromLevel uint, proofDb ethdb.KeyValueWriter)
 
 	// we put this special kv pair in db so we can distinguish the type and
 	// make suitable Proof
-	return proofDb.Put(magicHash, zktrie.ProofMagicBytes())
+	return proofDb.Put(MagicHash, zktrie.ProofMagicBytes())
 }
 
 // VerifyProof checks merkle proofs. The given proof must contain the value for
 // key in a trie with the given root hash. VerifyProof returns an error if the
 // proof contains invalid trie nodes or the wrong value.
 func VerifyProofSMT(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueReader) (value []byte, err error) {
-	h := zkt.NewHashFromBytes(rootHash.Bytes())
-	k, err := zkt.ToSecureKey(key)
+	n, err := VerifyProofSMTNode(rootHash, key, proofDb)
 	if err != nil {
 		return nil, err
 	}
-	kHash := zkt.NewHashFromBigInt(k)
-	proof, n, err := zktrie.BuildZkTrieProof(h, kHash, zktrie.GetPath(len(key)*8, kHash[:]), func(key *zkt.Hash) (*zktrie.Node, error) {
+	if n == nil {
+		return nil, nil
+	}
+	return n.Data(), nil
+}
+
+func VerifyProofSMTNode(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueReader) (n *zktrie.Node, err error) {
+	kHash, err := NewZktHashFromBytes(key)
+	if err != nil {
+		return nil, err
+	}
+	return VerifyProofSMTNodeFromZkHash(rootHash, kHash, zktrie.GetPath(len(key)*8, kHash[:]), proofDb)
+}
+
+func VerifyProofSMTNodeFromZkHash(
+	rootHash common.Hash,
+	key *zkt.Hash,
+	path []bool,
+	proofDb ethdb.KeyValueReader,
+) (n *zktrie.Node, err error) {
+	h := zkt.NewHashFromBytes(rootHash.Bytes())
+	proof, n, err := zktrie.BuildZkTrieProof(h, key, path, func(key *zkt.Hash) (*zktrie.Node, error) {
 		buf, _ := proofDb.Get(key[:])
 		if buf == nil {
 			return nil, zktrie.ErrKeyNotFound
@@ -234,10 +259,26 @@ func VerifyProofSMT(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueRead
 	}
 
 	if zktrie.VerifyProofZkTrie(h, proof, n) {
-		return n.Data(), nil
+		return n, nil
 	} else {
 		return nil, fmt.Errorf("bad proof node %v", proof)
 	}
+}
+
+func NewZktHashFromBytes(b []byte) (*zkt.Hash, error) {
+	k, err := zkt.ToSecureKey(b)
+	if err != nil {
+		return nil, err
+	}
+	return zkt.NewHashFromBigInt(k), nil
+}
+
+func NewZktHashFromBytesOrPanic(b []byte) *zkt.Hash {
+	hash, err := NewZktHashFromBytes(b)
+	if err != nil {
+		panic(err)
+	}
+	return hash
 }
 
 // [Scroll: START]
@@ -257,19 +298,3 @@ func (t *ZkTrie) TryGetAccount(key []byte) (*types.StateAccount, error) {
 }
 
 // [Scroll: END]
-
-func NewZktHashFromBytes(b []byte) (*zkt.Hash, error) {
-	k, err := zkt.ToSecureKey(b)
-	if err != nil {
-		return nil, err
-	}
-	return zkt.NewHashFromBigInt(k), nil
-}
-
-func NewZktHashFromBytesOrPanic(b []byte) *zkt.Hash {
-	hash, err := NewZktHashFromBytes(b)
-	if err != nil {
-		panic(err)
-	}
-	return hash
-}

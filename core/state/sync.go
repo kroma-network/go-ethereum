@@ -18,7 +18,6 @@ package state
 
 import (
 	"bytes"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -27,7 +26,7 @@ import (
 )
 
 // NewStateSync create a new state trie download scheduler.
-func NewStateSync(root common.Hash, database ethdb.KeyValueReader, onLeaf func(keys [][]byte, leaf []byte) error) *trie.Sync {
+func NewStateSync(root common.Hash, database ethdb.KeyValueReader, zk bool, onLeaf func(keys [][]byte, leaf []byte) error) *trie.Sync {
 	// Register the storage slot callback if the external callback is specified.
 	var onSlot func(keys [][]byte, path []byte, leaf []byte, parent common.Hash, parentPath []byte) error
 	if onLeaf != nil {
@@ -45,13 +44,21 @@ func NewStateSync(root common.Hash, database ethdb.KeyValueReader, onLeaf func(k
 			}
 		}
 		var obj types.StateAccount
-		if err := rlp.Decode(bytes.NewReader(leaf), &obj); err != nil {
-			return err
+		if zk {
+			acc, err := types.UnmarshalStateAccount(leaf)
+			if err != nil {
+				return err
+			}
+			obj = *acc
+		} else {
+			if err := rlp.Decode(bytes.NewReader(leaf), &obj); err != nil {
+				return err
+			}
 		}
 		syncer.AddSubTrie(obj.Root, path, parent, parentPath, onSlot)
 		syncer.AddCodeEntry(common.BytesToHash(obj.CodeHash), path, parent, parentPath)
 		return nil
 	}
-	syncer = trie.NewSync(root, database, onAccount)
+	syncer = trie.NewSync(root, database, zk, onAccount)
 	return syncer
 }
