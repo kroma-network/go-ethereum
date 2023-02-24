@@ -20,7 +20,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	zkt "github.com/light-scale/zktrie/types"
 	"math/rand"
+	"sort"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -614,5 +616,39 @@ func TestIteratorNodeBlob(t *testing.T) {
 	}
 	if count != len(found) {
 		t.Fatal("Find extra trie node via iterator")
+	}
+}
+
+type zkInput struct {
+	nodeKey *zkt.Hash
+	k, v    string
+}
+
+func TestZkIterator(t *testing.T) {
+	trie, _ := NewZkTrie(common.Hash{}, NewZktrieDatabaseFromTriedb(NewDatabase(rawdb.NewMemoryDatabase())))
+	var inputs []*zkInput
+	for _, val := range testdata1 {
+		trie.Update(common.LeftPadBytes([]byte(val.k), 32), []byte(val.v))
+		k, _ := zkt.ToSecureKey(common.LeftPadBytes([]byte(val.k), 32))
+		inputs = append(inputs, &zkInput{
+			nodeKey: zkt.NewHashFromBigInt(k),
+			k:       val.k,
+			v:       val.v,
+		})
+	}
+	sort.Slice(inputs, func(i, j int) bool {
+		return inputs[i].nodeKey.String() > inputs[j].nodeKey.String()
+	})
+	trie.db.db.Commit(common.Hash{}, true, func(hash common.Hash) {})
+
+	idx := 4
+	it := NewIterator(newZkTrieIterator(trie.ZkTrie, []byte(inputs[idx].k)))
+	for it.Next() {
+		k, _ := zkt.ToSecureKey(common.LeftPadBytes([]byte(inputs[idx].k), 32))
+		want := zkt.NewHashFromBigInt(k)[:]
+		if !bytes.Equal(it.Key, zkt.NewHashFromBigInt(k)[:]) {
+			t.Fatalf("wrong key: got %x, want %x", it.Key, want)
+		}
+		idx++
 	}
 }

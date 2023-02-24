@@ -20,9 +20,10 @@ import (
 	"bytes"
 	"container/heap"
 	"errors"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
+	zktrie "github.com/light-scale/zktrie/trie"
+	zkt "github.com/light-scale/zktrie/types"
 )
 
 // Iterator is a key-value trie iterator that traverses a Trie.
@@ -755,4 +756,183 @@ func (it *unionIterator) Error() error {
 		}
 	}
 	return nil
+}
+
+type zkTrieIterator struct {
+	trie     *zktrie.ZkTrie
+	stack    []*zkTrieIteratorState
+	path     []byte
+	err      error
+	resolver ethdb.KeyValueReader
+}
+
+type zkTrieIteratorState struct {
+	node       *zktrie.Node
+	visitCount int
+}
+
+func newZkTrieIterator(trie *zktrie.ZkTrie, start []byte) *zkTrieIterator {
+	it := &zkTrieIterator{trie: trie}
+	it.init()
+	if len(start) != 0 {
+		it.seek(start)
+	}
+	return it
+}
+
+func (it *zkTrieIterator) init() {
+	if len(it.stack) != 0 {
+		return
+	}
+	root, err := it.readNode(it.trie.Tree().Root())
+	if err != nil {
+		it.err = err
+	}
+	it.stack = append(it.stack, &zkTrieIteratorState{root, 0})
+}
+
+func (it *zkTrieIterator) seek(key []byte) {
+	hash, err := NewZktHashFromBytes(common.LeftPadBytes(key, 32))
+	if err != nil {
+		it.err = err
+		return
+	}
+	for it.Next(true) {
+		n := it.lastStack()
+		switch n.node.Type {
+		case zktrie.NodeTypeLeaf:
+			if bytes.Equal(n.node.NodeKey[:], hash[:]) {
+				n.visitCount = 0
+				return
+			}
+		}
+	}
+}
+
+func (it *zkTrieIterator) Next(descend bool) bool {
+	if it.err != nil {
+		return false
+	}
+	state := it.lastStack()
+	if state == nil {
+		return false
+	}
+	switch state.node.Type {
+	case zktrie.NodeTypeEmpty, zktrie.NodeTypeLeaf:
+		if state.visitCount == 1 {
+			it.pop()
+		} else if state.visitCount == 2 {
+			panic("terminal node visited twice")
+		}
+	case zktrie.NodeTypeMiddle:
+		var nextHash *zkt.Hash = nil
+		if state.visitCount == 0 {
+			break
+		} else if state.visitCount == 1 {
+			nextHash = state.node.ChildL
+			it.path = append(it.path, 0)
+		} else if state.visitCount == 2 {
+			nextHash = state.node.ChildR
+			it.path[len(it.path)-1] = 1
+		} else if state.visitCount == 3 {
+			it.pop()
+			it.path[len(it.path)-1] = 1
+			return len(it.stack) != 0
+		}
+		childNode, err := it.readNode(nextHash)
+		if err == nil {
+			it.stack = append(it.stack, &zkTrieIteratorState{childNode, 1})
+		} else {
+			it.err = err
+		}
+	}
+	state.visitCount++
+	return true
+}
+
+func (it *zkTrieIterator) Error() error {
+	return it.err
+}
+
+func (it *zkTrieIterator) Hash() common.Hash {
+	last := it.lastStack()
+	if last == nil {
+		return common.Hash{}
+	}
+	return common.BytesToHash(last.node.NodeKey[:])
+}
+
+func (it *zkTrieIterator) Parent() common.Hash {
+	stackLen := len(it.stack)
+	if stackLen == 0 {
+		return common.Hash{}
+	}
+	if stackLen == 1 {
+		return common.BytesToHash(it.stack[0].node.NodeKey[:])
+	}
+	return common.BytesToHash(it.stack[stackLen-2].node.NodeKey[:])
+}
+
+func (it *zkTrieIterator) Path() []byte {
+	return it.path
+}
+
+func (it *zkTrieIterator) NodeBlob() []byte {
+	return it.lastStack().node.Value()
+}
+
+func (it *zkTrieIterator) Leaf() bool {
+	last := it.lastStack()
+	if last == nil {
+		return false
+	}
+	return last.node.Type == zktrie.NodeTypeLeaf
+}
+
+func (it *zkTrieIterator) LeafKey() []byte {
+	return it.lastStack().node.NodeKey[:]
+}
+
+func (it *zkTrieIterator) LeafBlob() []byte {
+	return it.lastStack().node.Data()
+}
+
+func (it *zkTrieIterator) LeafProof() [][]byte {
+	if it.lastStack().node.Type != zktrie.NodeTypeLeaf {
+		panic("")
+	}
+	proofs := make([][]byte, 0, len(it.stack))
+	for _, state := range it.stack {
+		key, _ := state.node.Key()
+		proofs = append(proofs, key[:])
+	}
+	return proofs
+}
+
+func (it *zkTrieIterator) AddResolver(reader ethdb.KeyValueReader) {
+	it.resolver = reader
+}
+
+func (it *zkTrieIterator) lastStack() *zkTrieIteratorState {
+	stackLen := len(it.stack)
+	if stackLen == 0 {
+		return nil
+	}
+	return it.stack[stackLen-1]
+}
+
+func (it *zkTrieIterator) pop() {
+	it.stack[len(it.stack)-1] = nil
+	it.stack = it.stack[:len(it.stack)-1]
+}
+
+func (it *zkTrieIterator) readNode(hash *zkt.Hash) (*zktrie.Node, error) {
+	if it.resolver != nil {
+		data, err := it.resolver.Get(hash.Bytes())
+		if err != nil {
+			return nil, err
+		}
+		return zktrie.NewNodeFromBytes(data)
+	}
+	return it.trie.Tree().GetNode(hash)
 }

@@ -154,8 +154,7 @@ func (t *ZkTrie) Copy() *ZkTrie {
 // NodeIterator returns an iterator that returns nodes of the underlying trie. Iteration
 // starts at the key after the given start key.
 func (t *ZkTrie) NodeIterator(start []byte) NodeIterator {
-	/// FIXME
-	panic("not implemented")
+	return newZkTrieIterator(t.ZkTrie, start)
 }
 
 // hashKey returns the hash of key as an ephemeral buffer.
@@ -258,3 +257,19 @@ func (t *ZkTrie) TryGetAccount(key []byte) (*types.StateAccount, error) {
 }
 
 // [Scroll: END]
+
+func NewZktHashFromBytes(b []byte) (*zkt.Hash, error) {
+	k, err := zkt.ToSecureKey(b)
+	if err != nil {
+		return nil, err
+	}
+	return zkt.NewHashFromBigInt(k), nil
+}
+
+func NewZktHashFromBytesOrPanic(b []byte) *zkt.Hash {
+	hash, err := NewZktHashFromBytes(b)
+	if err != nil {
+		panic(err)
+	}
+	return hash
+}

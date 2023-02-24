@@ -373,3 +373,17 @@ func stackTrieGenerate(db ethdb.KeyValueWriter, owner common.Hash, in chan trieK
 	}
 	out <- root
 }
+
+func zkTrieGenerate(db ethdb.KeyValueWriter, owner common.Hash, in chan trieKV, out chan common.Hash) {
+	//t, _ := trie.NewZkTrie(owner, trie.NewZktrieDatabaseFromTriedb())
+	//for leaf := range in {
+	//	t.TryUpdate(leaf.key[:], leaf.value)
+	//}
+	//var root common.Hash
+	//if db == nil {
+	//	root = t.Hash()
+	//} else {
+	//	root, _, _ = t.Commit(false)
+	//}
+	//out <- root
+}

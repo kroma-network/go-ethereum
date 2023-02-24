@@ -164,3 +164,10 @@ func (dl *diskLayer) Storage(accountHash, storageHash common.Hash) ([]byte, erro
 func (dl *diskLayer) Update(blockHash common.Hash, destructs map[common.Hash]struct{}, accounts map[common.Hash][]byte, storage map[common.Hash]map[common.Hash][]byte) *diffLayer {
 	return newDiffLayer(dl, blockHash, destructs, accounts, storage)
 }
+
+func (dl *diskLayer) OpenLowLevelTrie(trieId *trie.ID) (trie.LowLevelTrie, error) {
+	if dl.triedb.Zktrie {
+		return trie.NewZkTrie(trieId.Root, trie.NewZktrieDatabaseFromTriedb(dl.triedb))
+	}
+	return trie.New(trieId, dl.triedb)
+}

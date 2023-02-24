@@ -20,7 +20,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"math/big"
+	"github.com/ethereum/go-ethereum/core/types"
+	zkt "github.com/light-scale/zktrie/types"
 	"time"
 
 	"github.com/VictoriaMetrics/fastcache"
@@ -126,12 +127,12 @@ func journalProgress(db ethdb.KeyValueWriter, marker []byte, stats *generatorSta
 // proofResult contains the output of range proving which can be used
 // for further processing regardless if it is successful or not.
 type proofResult struct {
-	keys     [][]byte   // The key set of all elements being iterated, even proving is failed
-	vals     [][]byte   // The val set of all elements being iterated, even proving is failed
-	diskMore bool       // Set when the database has extra snapshot states since last iteration
-	trieMore bool       // Set when the trie has extra snapshot states(only meaningful for successful proving)
-	proofErr error      // Indicator whether the given state range is valid or not
-	tr       *trie.Trie // The trie, in case the trie was resolved by the prover (may be nil)
+	keys     [][]byte          // The key set of all elements being iterated, even proving is failed
+	vals     [][]byte          // The val set of all elements being iterated, even proving is failed
+	diskMore bool              // Set when the database has extra snapshot states since last iteration
+	trieMore bool              // Set when the trie has extra snapshot states(only meaningful for successful proving)
+	proofErr error             // Indicator whether the given state range is valid or not
+	tr       trie.LowLevelTrie // The trie, in case the trie was resolved by the prover (may be nil)
 }
 
 // valid returns the indicator that range proof is successful or not.
@@ -237,21 +238,35 @@ func (dl *diskLayer) proveRange(ctx *generatorContext, trieId *trie.ID, prefix [
 	// The snap state is exhausted, pass the entire key/val set for verification
 	root := trieId.Root
 	if origin == nil && !diskMore {
-		stackTr := trie.NewStackTrie(nil)
-		for i, key := range keys {
-			stackTr.TryUpdate(key, vals[i])
-		}
-		if gotRoot := stackTr.Hash(); gotRoot != root {
-			return &proofResult{
-				keys:     keys,
-				vals:     vals,
-				proofErr: fmt.Errorf("wrong root: have %#x want %#x", gotRoot, root),
-			}, nil
+		if dl.triedb.Zktrie {
+			zktrie, _ := trie.NewZkTrie(common.Hash{}, trie.NewZktrieDatabase(memorydb.New()))
+			for i, key := range keys {
+				zktrie.TryUpdate(key, vals[i])
+			}
+			if gotRoot := zktrie.Hash(); gotRoot != root {
+				return &proofResult{
+					keys:     keys,
+					vals:     vals,
+					proofErr: fmt.Errorf("wrong root: have %#x want %#x", gotRoot, root),
+				}, nil
+			}
+		} else {
+			stackTr := trie.NewStackTrie(nil)
+			for i, key := range keys {
+				stackTr.TryUpdate(key, vals[i])
+			}
+			if gotRoot := stackTr.Hash(); gotRoot != root {
+				return &proofResult{
+					keys:     keys,
+					vals:     vals,
+					proofErr: fmt.Errorf("wrong root: have %#x want %#x", gotRoot, root),
+				}, nil
+			}
 		}
 		return &proofResult{keys: keys, vals: vals}, nil
 	}
 	// Snap state is chunked, generate edge proofs for verification.
-	tr, err := trie.New(trieId, dl.triedb)
+	tr, err := dl.OpenLowLevelTrie(trieId)
 	if err != nil {
 		ctx.stats.Log("Trie missing, state snapshotting paused", dl.root, dl.genMarker)
 		return nil, errMissingTrie
@@ -380,7 +395,7 @@ func (dl *diskLayer) generateRange(ctx *generatorContext, trieId *trie.ID, prefi
 	// if it's already opened with some nodes resolved.
 	tr := result.tr
 	if tr == nil {
-		tr, err = trie.New(trieId, dl.triedb)
+		tr, err = dl.OpenLowLevelTrie(trieId)
 		if err != nil {
 			ctx.stats.Log("Trie missing, state snapshotting paused", dl.root, dl.genMarker)
 			return false, nil, errMissingTrie
@@ -578,13 +593,16 @@ func generateAccounts(ctx *generatorContext, dl *diskLayer, accMarker []byte) er
 			return nil
 		}
 		// Retrieve the current account and flatten it into the internal format
-		var acc struct {
-			Nonce    uint64
-			Balance  *big.Int
-			Root     common.Hash
-			CodeHash []byte
+		var (
+			acc *types.StateAccount
+			err error
+		)
+		if dl.triedb.Zktrie {
+			acc, err = types.UnmarshalStateAccount(val)
+		} else {
+			err = rlp.DecodeBytes(val, &acc)
 		}
-		if err := rlp.DecodeBytes(val, &acc); err != nil {
+		if err != nil {
 			log.Crit("Invalid account encountered during snapshot creation", "err", err)
 		}
 		// If the account is not yet in-progress, write it out
@@ -621,7 +639,8 @@ func generateAccounts(ctx *generatorContext, dl *diskLayer, accMarker []byte) er
 
 		// If the iterated account is the contract, create a further loop to
 		// verify or regenerate the contract storage.
-		if acc.Root == emptyRoot {
+		if (dl.triedb.Zktrie && bytes.Equal(acc.Root[:], zkt.HashZero[:])) ||
+			acc.Root == emptyRoot {
 			ctx.removeStorageAt(account)
 		} else {
 			var storeMarker []byte
