@@ -599,7 +599,13 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 	var data *types.StateAccount
 	if s.snap != nil {
 		start := time.Now()
-		acc, err := s.snap.Account(crypto.HashData(s.hasher, addr.Bytes()))
+		var hash common.Hash
+		if s.IsZktrie() {
+			hash = common.BytesToHash(trie.NewZktHashFromBytesOrPanic(addr.Bytes()).Bytes())
+		} else {
+			hash = crypto.HashData(s.hasher, addr.Bytes())
+		}
+		acc, err := s.snap.Account(hash)
 		if metrics.EnabledExpensive {
 			s.SnapshotAccountReads += time.Since(start)
 		}

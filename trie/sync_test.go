@@ -19,6 +19,8 @@ package trie
 import (
 	"bytes"
 	"fmt"
+	zktrie "github.com/light-scale/zktrie/types"
+	"math/big"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -63,6 +65,40 @@ func makeTestTrie() (*Database, *StateTrie, map[string][]byte) {
 	return triedb, trie, content
 }
 
+// makeTestTrie create a sample test trie to test node-wise reconstruction.
+func makeSyncTestZkTrie() (*ZktrieDatabase, *ZkTrie, map[string][]byte) {
+	// Create an empty trie
+	triedb := NewZktrieDatabase(memorydb.New())
+	trie, _ := NewZkTrie(common.Hash{}, triedb)
+
+	// Fill it with some arbitrary data
+	content := make(map[string][]byte)
+	for i := byte(0); i < 255; i++ {
+		// Map the same data under multiple keys
+		key, val := common.LeftPadBytes([]byte{1, i}, 32), []byte{i}
+		content[string(key)] = val
+		trie.Update(key, val)
+
+		key, val = common.LeftPadBytes([]byte{2, i}, 32), []byte{i}
+		content[string(key)] = val
+		trie.Update(key, val)
+
+		// Add some other data to inflate the trie
+		for j := byte(3); j < 13; j++ {
+			key, val = common.LeftPadBytes([]byte{j, i}, 32), []byte{j, i}
+			content[string(key)] = val
+			trie.Update(key, val)
+		}
+	}
+	root, _, err := trie.Commit(false)
+	if err != nil {
+		panic(fmt.Errorf("failed to commit trie %v", err))
+	}
+	// Re-create the trie based on the new state
+	trie, _ = NewZkTrie(root, triedb)
+	return triedb, trie, content
+}
+
 // checkTrieContents cross references a reconstructed trie with an expected data
 // content map.
 func checkTrieContents(t *testing.T, db *Database, root []byte, content map[string][]byte) {
@@ -94,6 +130,40 @@ func checkTrieConsistency(db *Database, root common.Hash) error {
 	return it.Error()
 }
 
+// checkTrieContents cross references a reconstructed trie with an expected data
+// content map.
+func checkZkTrieContents(t *testing.T, db *Database, root []byte, content map[string][]byte) {
+	// Check root availability and trie contents
+	trie, err := NewZkTrie(common.BytesToHash(root), NewZktrieDatabaseFromTriedb(db))
+	if err != nil {
+		t.Fatalf("failed to create trie at %x: %v", root, err)
+	}
+	if err := checkZkTrieConsistency(db, common.BytesToHash(root)); err != nil {
+		t.Fatalf("inconsistent trie at %x: %v", root, err)
+	}
+	for key, val := range content {
+		have, want := new(big.Int), new(big.Int)
+		have.SetBytes(bytes.TrimLeftFunc(trie.Get([]byte(key)), func(r rune) bool { return r == 0 }))
+		want.SetBytes(val)
+		if have.Cmp(want) != 0 {
+			t.Errorf("entry %x: content mismatch: have %x, want %x", key, have, val)
+		}
+	}
+}
+
+// checkTrieConsistency checks that all nodes in a trie are indeed present.
+func checkZkTrieConsistency(db *Database, root common.Hash) error {
+	// Create and iterate a trie rooted in a subnode
+	trie, err := NewZkTrie(root, NewZktrieDatabaseFromTriedb(db))
+	if err != nil {
+		return nil // Consider a non existent state consistent
+	}
+	it := trie.NodeIterator(nil)
+	for it.Next(true) {
+	}
+	return it.Error()
+}
+
 // trieElement represents the element in the state trie(bytecode or trie node).
 type trieElement struct {
 	path     string
@@ -109,7 +179,21 @@ func TestEmptySync(t *testing.T) {
 	emptyB, _ := New(TrieID(emptyRoot), dbB)
 
 	for i, trie := range []*Trie{emptyA, emptyB} {
-		sync := NewSync(trie.Hash(), memorydb.New(), nil)
+		sync := NewSync(trie.Hash(), memorydb.New(), false, nil)
+		if paths, nodes, codes := sync.Missing(1); len(paths) != 0 || len(nodes) != 0 || len(codes) != 0 {
+			t.Errorf("test %d: content requested for empty trie: %v, %v, %v", i, paths, nodes, codes)
+		}
+	}
+}
+
+func TestEmptyZkSync(t *testing.T) {
+	dbA := NewDatabaseWithConfig(memorydb.New(), &Config{Zktrie: true})
+	dbB := NewDatabaseWithConfig(memorydb.New(), &Config{Zktrie: true})
+	emptyA, _ := NewZkTrie(common.Hash{}, NewZktrieDatabaseFromTriedb(dbA))
+	emptyB, _ := NewZkTrie(common.Hash{}, NewZktrieDatabaseFromTriedb(dbB))
+
+	for i, trie := range []*ZkTrie{emptyA, emptyB} {
+		sync := NewSync(trie.Hash(), memorydb.New(), true, nil)
 		if paths, nodes, codes := sync.Missing(1); len(paths) != 0 || len(nodes) != 0 || len(codes) != 0 {
 			t.Errorf("test %d: content requested for empty trie: %v, %v, %v", i, paths, nodes, codes)
 		}
@@ -130,7 +214,7 @@ func testIterativeSync(t *testing.T, count int, bypath bool) {
 	// Create a destination trie and sync with the scheduler
 	diskdb := memorydb.New()
 	triedb := NewDatabase(diskdb)
-	sched := NewSync(srcTrie.Hash(), diskdb, nil)
+	sched := NewSync(srcTrie.Hash(), diskdb, false, nil)
 
 	// The code requests are ignored here since there is no code
 	// at the testing trie.
@@ -187,6 +271,75 @@ func testIterativeSync(t *testing.T, count int, bypath bool) {
 	checkTrieContents(t, triedb, srcTrie.Hash().Bytes(), srcData)
 }
 
+func TestIterativeZkSyncIndividual(t *testing.T)       { testIterativeZkSync(t, 1, false) }
+func TestIterativeZkSyncBatched(t *testing.T)          { testIterativeZkSync(t, 100, false) }
+func TestIterativeZkSyncIndividualByPath(t *testing.T) { testIterativeZkSync(t, 1, true) }
+func TestIterativeZkSyncBatchedByPath(t *testing.T)    { testIterativeZkSync(t, 100, true) }
+
+func testIterativeZkSync(t *testing.T, count int, bypath bool) {
+	// Create a random trie to copy
+	srcDb, srcTrie, srcData := makeSyncTestZkTrie()
+
+	// Create a destination trie and sync with the scheduler
+	diskdb := memorydb.New()
+	triedb := NewZktrieDatabase(diskdb)
+	sched := NewSync(srcTrie.Hash(), diskdb, true, nil)
+
+	// The code requests are ignored here since there is no code
+	// at the testing trie.
+	paths, nodes, _ := sched.Missing(count)
+	var elements []trieElement
+	for i := 0; i < len(paths); i++ {
+		elements = append(elements, trieElement{
+			path:     paths[i],
+			hash:     nodes[i],
+			syncPath: SyncPath{[]byte(paths[i])},
+		})
+	}
+	for len(elements) > 0 {
+		results := make([]NodeSyncResult, len(elements))
+		if !bypath {
+			for i, element := range elements {
+				data, err := srcDb.Get(zktrie.ReverseByteOrder(element.hash.Bytes()))
+				if err != nil {
+					t.Fatalf("failed to retrieve node data for hash %x: %v", element.hash, err)
+				}
+				results[i] = NodeSyncResult{element.path, data}
+			}
+		} else {
+			for i, element := range elements {
+				data, _, err := srcTrie.TryGetNode(element.syncPath[len(element.syncPath)-1])
+				if err != nil {
+					t.Fatalf("failed to retrieve node data for path %x: %v", element.path, err)
+				}
+				results[i] = NodeSyncResult{element.path, data}
+			}
+		}
+		for _, result := range results {
+			if err := sched.ProcessZkNode(result); err != nil {
+				t.Fatalf("failed to process result %v", err)
+			}
+		}
+		batch := diskdb.NewBatch()
+		if err := sched.Commit(batch); err != nil {
+			t.Fatalf("failed to commit data: %v", err)
+		}
+		batch.Write()
+
+		paths, nodes, _ = sched.Missing(count)
+		elements = elements[:0]
+		for i := 0; i < len(paths); i++ {
+			elements = append(elements, trieElement{
+				path:     paths[i],
+				hash:     nodes[i],
+				syncPath: NewSyncPath([]byte(paths[i])),
+			})
+		}
+	}
+	// Cross check that the two tries are in sync
+	checkZkTrieContents(t, triedb.db, srcTrie.Hash().Bytes(), srcData)
+}
+
 // Tests that the trie scheduler can correctly reconstruct the state even if only
 // partial results are returned, and the others sent only later.
 func TestIterativeDelayedSync(t *testing.T) {
@@ -196,7 +349,7 @@ func TestIterativeDelayedSync(t *testing.T) {
 	// Create a destination trie and sync with the scheduler
 	diskdb := memorydb.New()
 	triedb := NewDatabase(diskdb)
-	sched := NewSync(srcTrie.Hash(), diskdb, nil)
+	sched := NewSync(srcTrie.Hash(), diskdb, false, nil)
 
 	// The code requests are ignored here since there is no code
 	// at the testing trie.
@@ -257,7 +410,7 @@ func testIterativeRandomSync(t *testing.T, count int) {
 	// Create a destination trie and sync with the scheduler
 	diskdb := memorydb.New()
 	triedb := NewDatabase(diskdb)
-	sched := NewSync(srcTrie.Hash(), diskdb, nil)
+	sched := NewSync(srcTrie.Hash(), diskdb, false, nil)
 
 	// The code requests are ignored here since there is no code
 	// at the testing trie.
@@ -315,7 +468,7 @@ func TestIterativeRandomDelayedSync(t *testing.T) {
 	// Create a destination trie and sync with the scheduler
 	diskdb := memorydb.New()
 	triedb := NewDatabase(diskdb)
-	sched := NewSync(srcTrie.Hash(), diskdb, nil)
+	sched := NewSync(srcTrie.Hash(), diskdb, false, nil)
 
 	// The code requests are ignored here since there is no code
 	// at the testing trie.
@@ -378,7 +531,7 @@ func TestDuplicateAvoidanceSync(t *testing.T) {
 	// Create a destination trie and sync with the scheduler
 	diskdb := memorydb.New()
 	triedb := NewDatabase(diskdb)
-	sched := NewSync(srcTrie.Hash(), diskdb, nil)
+	sched := NewSync(srcTrie.Hash(), diskdb, false, nil)
 
 	// The code requests are ignored here since there is no code
 	// at the testing trie.
@@ -441,7 +594,7 @@ func TestIncompleteSync(t *testing.T) {
 	// Create a destination trie and sync with the scheduler
 	diskdb := memorydb.New()
 	triedb := NewDatabase(diskdb)
-	sched := NewSync(srcTrie.Hash(), diskdb, nil)
+	sched := NewSync(srcTrie.Hash(), diskdb, false, nil)
 
 	// The code requests are ignored here since there is no code
 	// at the testing trie.
@@ -521,7 +674,7 @@ func TestSyncOrdering(t *testing.T) {
 	// Create a destination trie and sync with the scheduler, tracking the requests
 	diskdb := memorydb.New()
 	triedb := NewDatabase(diskdb)
-	sched := NewSync(srcTrie.Hash(), diskdb, nil)
+	sched := NewSync(srcTrie.Hash(), diskdb, false, nil)
 
 	// The code requests are ignored here since there is no code
 	// at the testing trie.

@@ -512,7 +512,43 @@ func ServiceGetTrieNodesQuery(chain *core.BlockChain, req *GetTrieNodesPacket, s
 	}
 	// Make sure we have the state associated with the request
 	triedb := chain.StateCache().TrieDB()
-
+	if chain.Config().Zktrie {
+		accTrie, err := trie.NewZkTrie(req.Root, trie.NewZktrieDatabaseFromTriedb(triedb))
+		if err != nil {
+			return nil, err
+		}
+		var (
+			nodes [][]byte
+			bytes uint64
+			//snap  = chain.Snapshots().Snapshot(req.Root)
+		)
+		for _, pathset := range req.Paths {
+			switch len(pathset) {
+			case 0:
+				// Ensure we penalize invalid requests
+				return nil, fmt.Errorf("%w: zero-item pathset requested", errBadRequest)
+			case 1:
+				n, _ := accTrie.Tree().GetNode(accTrie.Tree().Root())
+				if len(pathset[0]) > 0 {
+					path := pathset[0]
+					for _, right := range path {
+						if right == 1 {
+							n, _ = accTrie.Tree().GetNode(n.ChildR)
+						} else {
+							n, _ = accTrie.Tree().GetNode(n.ChildL)
+						}
+					}
+				}
+				blob := n.CanonicalValue()
+				if err != nil {
+					break
+				}
+				nodes = append(nodes, blob)
+				bytes += uint64(len(blob))
+			}
+		}
+		return nodes, nil
+	}
 	accTrie, err := trie.NewStateTrie(trie.StateTrieID(req.Root), triedb)
 	if err != nil {
 		// We don't have the requested state available, bail out

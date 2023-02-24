@@ -250,14 +250,6 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		return nil, genesisErr
 	}
 
-	// [Scroll: START]
-	// override snapshot setting
-	if chainConfig.Zktrie && cacheConfig.SnapshotLimit > 0 {
-		log.Warn("snapshot has been disabled by zktrie")
-		cacheConfig.SnapshotLimit = 0
-	}
-	// [Scroll: END]
-
 	log.Info("")
 	log.Info(strings.Repeat("-", 153))
 	for _, line := range strings.Split(chainConfig.Description(), "\n") {

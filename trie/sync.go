@@ -17,8 +17,11 @@
 package trie
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"github.com/light-scale/zktrie/trie"
+	zkt "github.com/light-scale/zktrie/types"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -146,10 +149,11 @@ type Sync struct {
 	codeReqs map[common.Hash]*codeRequest // Pending requests pertaining to a code hash
 	queue    *prque.Prque                 // Priority queue with the pending requests
 	fetches  map[int]int                  // Number of active fetches per trie node depth
+	zk       bool
 }
 
 // NewSync creates a new trie data download scheduler.
-func NewSync(root common.Hash, database ethdb.KeyValueReader, callback LeafCallback) *Sync {
+func NewSync(root common.Hash, database ethdb.KeyValueReader, zk bool, callback LeafCallback) *Sync {
 	ts := &Sync{
 		database: database,
 		membatch: newSyncMemBatch(),
@@ -157,6 +161,7 @@ func NewSync(root common.Hash, database ethdb.KeyValueReader, callback LeafCallb
 		codeReqs: make(map[common.Hash]*codeRequest),
 		queue:    prque.New(nil),
 		fetches:  make(map[int]int),
+		zk:       zk,
 	}
 	ts.AddSubTrie(root, nil, common.Hash{}, nil, callback)
 	return ts
@@ -167,7 +172,10 @@ func NewSync(root common.Hash, database ethdb.KeyValueReader, callback LeafCallb
 // hex format and contain all the parent path if it's layered trie node.
 func (s *Sync) AddSubTrie(root common.Hash, path []byte, parent common.Hash, parentPath []byte, callback LeafCallback) {
 	// Short circuit if the trie is empty or already known
-	if root == emptyRoot {
+	if !s.zk && root == emptyRoot {
+		return
+	}
+	if s.zk && root == (common.Hash{}) {
 		return
 	}
 	if s.membatch.hasNode(path) {
@@ -332,6 +340,11 @@ func (s *Sync) ProcessNode(result NodeSyncResult) error {
 func (s *Sync) Commit(dbw ethdb.Batch) error {
 	// Dump the membatch into a database dbw
 	for path, value := range s.membatch.nodes {
+		if s.zk {
+			fmt.Printf("commit %v \n", common.BytesToHash(zkt.ReverseByteOrder(s.membatch.hashes[path].Bytes())).Bytes())
+			rawdb.WriteTrieNode(dbw, common.BytesToHash(zkt.ReverseByteOrder(s.membatch.hashes[path].Bytes())), value)
+			continue
+		}
 		rawdb.WriteTrieNode(dbw, s.membatch.hashes[path], value)
 	}
 	for hash, value := range s.membatch.codes {
@@ -479,6 +492,71 @@ func (s *Sync) children(req *nodeRequest, object node) ([]*nodeRequest, error) {
 		}
 	}
 	return requests, nil
+}
+
+func (s *Sync) ProcessZkNode(result NodeSyncResult) error {
+	// If the trie node was not requested or it's already processed, bail out
+	req := s.nodeReqs[result.Path]
+	if req == nil {
+		return ErrNotRequested
+	}
+	if req.data != nil {
+		return ErrAlreadyProcessed
+	}
+	// Decode the node data content and update the request
+	node, err := trie.NewNodeFromBytes(result.Data)
+	if err != nil {
+		return err
+	}
+	req.data = result.Data
+
+	// Create and schedule a request for all the children nodes
+	var requests []*nodeRequest
+	switch node.Type {
+	case trie.NodeTypeMiddle:
+		k, _ := node.Key()
+		fmt.Printf("middle node : %v\n\tl : %v\n\tr : %v\n", k.Bytes(), node.ChildL.Bytes(), node.ChildR.Bytes())
+		// path 0 left, 1 right
+		appendRequest := func(hash *zkt.Hash, nextPath byte) {
+			if bytes.Equal(hash[:], zkt.HashZero[:]) {
+				return
+			}
+			path := []byte(result.Path)
+			if len(path) == 256 {
+				path = []byte{}
+			}
+			requests = append(requests, &nodeRequest{
+				path:     append(path, nextPath),
+				hash:     common.BytesToHash(hash.Bytes()),
+				parent:   req,
+				callback: req.callback,
+			})
+		}
+		appendRequest(node.ChildL, 0)
+		appendRequest(node.ChildR, 1)
+	case trie.NodeTypeLeaf:
+		k, _ := node.Key()
+		fmt.Printf("leaf node : %v\n", k.Bytes())
+		if req.callback != nil {
+			// Notify any external watcher of a new key/value node
+			err := req.callback([][]byte{}, GetBytePath(node.NodeKey[:]), node.Data(), req.hash, req.path)
+			if err != nil {
+				return err
+			}
+		}
+	case trie.NodeTypeEmpty:
+		return errors.New("invalid node (empty node)")
+	}
+
+	if len(requests) == 0 && req.deps == 0 {
+		s.commitNodeRequest(req)
+	} else {
+		req.deps += len(requests)
+		for _, child := range requests {
+			s.scheduleNodeRequest(child)
+		}
+	}
+	return nil
 }
 
 // commit finalizes a retrieval request and stores it into the membatch. If any

@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
+	trie2 "github.com/light-scale/zktrie/trie"
 	zkt "github.com/light-scale/zktrie/types"
 	gomath "math"
 	"math/big"
@@ -1403,7 +1404,11 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 			}
 		}
 		// Group requests by account hash
-		paths, hashes, _, pathsets = sortByAccountPath(paths, hashes)
+		if s.zk {
+			paths, hashes, _, pathsets = sortByAccountZkPath(paths, hashes)
+		} else {
+			paths, hashes, _, pathsets = sortByAccountPath(paths, hashes)
+		}
 		req := &trienodeHealRequest{
 			peer:    idle,
 			id:      reqid,
@@ -2174,8 +2179,12 @@ func (s *Syncer) processTrienodeHealResponse(res *trienodeHealResponse) {
 		// Push the trie node into the state syncer
 		s.trienodeHealSynced++
 		s.trienodeHealBytes += common.StorageSize(len(node))
-
-		err := s.healer.scheduler.ProcessNode(trie.NodeSyncResult{Path: res.paths[i], Data: node})
+		var err error
+		if s.zk {
+			err = s.healer.scheduler.ProcessZkNode(trie.NodeSyncResult{Path: res.paths[i], Data: node})
+		} else {
+			err = s.healer.scheduler.ProcessNode(trie.NodeSyncResult{Path: res.paths[i], Data: node})
+		}
 		switch err {
 		case nil:
 		case trie.ErrAlreadyProcessed:
@@ -2328,11 +2337,11 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 
 	// Task filling persisted, push it the chunk marker forward to the first
 	// account still missing data.
-	for i, hash := range res.hashes {
+	for i, _ := range res.hashes {
 		if task.needCode[i] || task.needState[i] {
 			return
 		}
-		task.Next = incHash(hash)
+		//task.Next = incHash(hash)
 	}
 	// All accounts marked as complete, track if the entire task is done
 	task.done = !res.cont
@@ -2843,6 +2852,51 @@ func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error
 	}
 	s.lock.Unlock()
 
+	if s.zk {
+		var (
+			nodes = make([][]byte, len(req.hashes))
+			fills uint64
+		)
+
+		for i, j := 0, 0; i < len(trienodes); i++ {
+			// Find the next hash that we've been served, leaving misses with nils
+			node, _ := trie2.NewNodeFromBytes(trienodes[i])
+			hash, _ := node.Key()
+			for j < len(req.hashes) && !bytes.Equal(hash.Bytes(), req.hashes[j][:]) {
+				j++
+			}
+			if j < len(req.hashes) {
+				nodes[j] = trienodes[i]
+				fills++
+				j++
+				continue
+			}
+			// We've either ran out of hashes, or got unrequested data
+			logger.Warn("Unexpected healing trienodes", "count", len(trienodes)-i)
+
+			// Signal this request as failed, and ready for rescheduling
+			s.scheduleRevertTrienodeHealRequest(req)
+			return errors.New("unexpected healing trienode")
+		}
+
+		atomic.AddUint64(&s.trienodeHealPend, fills)
+		defer func() {
+			atomic.AddUint64(&s.trienodeHealPend, ^(fills - 1))
+		}()
+		response := &trienodeHealResponse{
+			paths:  req.paths,
+			task:   req.task,
+			hashes: req.hashes,
+			nodes:  nodes,
+		}
+		select {
+		case req.deliver <- response:
+		case <-req.cancel:
+		case <-req.stale:
+		}
+		return nil
+	}
+
 	// Cross reference the requested trienodes with the response to find gaps
 	// that the serving node is missing
 	var (
@@ -3199,6 +3253,17 @@ func sortByAccountPath(paths []string, hashes []common.Hash) ([]string, []common
 	var syncPaths []trie.SyncPath
 	for _, path := range paths {
 		syncPaths = append(syncPaths, trie.NewSyncPath([]byte(path)))
+	}
+	n := &healRequestSort{paths, hashes, syncPaths}
+	sort.Sort(n)
+	pathsets := n.Merge()
+	return n.paths, n.hashes, n.syncPaths, pathsets
+}
+
+func sortByAccountZkPath(paths []string, hashes []common.Hash) ([]string, []common.Hash, []trie.SyncPath, []TrieNodePathSet) {
+	var syncPaths []trie.SyncPath
+	for _, path := range paths {
+		syncPaths = append(syncPaths, trie.SyncPath{[]byte(path)})
 	}
 	n := &healRequestSort{paths, hashes, syncPaths}
 	sort.Sort(n)

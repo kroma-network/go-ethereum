@@ -116,10 +116,16 @@ func newObject(db *StateDB, address common.Address, data types.StateAccount) *st
 		data.Root = db.GetEmptyRoot()
 		// [Scroll: END]
 	}
+	var addrHash common.Hash
+	if db.IsZktrie() {
+		addrHash = common.BytesToHash(trie.NewZktHashFromBytesOrPanic(address[:]).Bytes())
+	} else {
+		addrHash = crypto.Keccak256Hash(address[:])
+	}
 	return &stateObject{
 		db:             db,
 		address:        address,
-		addrHash:       crypto.Keccak256Hash(address[:]),
+		addrHash:       addrHash,
 		data:           data,
 		originStorage:  make(Storage),
 		pendingStorage: make(Storage),
