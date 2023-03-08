@@ -79,6 +79,13 @@ func (t *muxTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, scop
 	}
 }
 
+// [Scroll: START]
+// CaptureStateAfter for special needs, tracks SSTORE ops and records the storage change.
+func (*muxTracer) CaptureStateAfter(pc uint64, op vm.OpCode, gas, cost uint64, scope *vm.ScopeContext, rData []byte, depth int, err error) {
+}
+
+// [Scroll: END]
+
 // CaptureFault implements the EVMLogger interface to trace an execution fault.
 func (t *muxTracer) CaptureFault(pc uint64, op vm.OpCode, gas, cost uint64, scope *vm.ScopeContext, depth int, err error) {
 	for _, t := range t.tracers {

@@ -35,7 +35,10 @@ var noopReleaser = tracers.StateReleaseFunc(func() {})
 
 // stateAtBlock retrieves the state database associated with a certain block.
 func (leth *LightEthereum) stateAtBlock(ctx context.Context, block *types.Block, reexec uint64) (*state.StateDB, tracers.StateReleaseFunc, error) {
-	return light.NewState(ctx, block.Header(), leth.odr), noopReleaser, nil
+	// [Scroll: START]
+	// NOTE(chokobole): This part is different from scroll
+	return light.NewState(ctx, block.Header(), leth.odr, leth.chainConfig.Zktrie), noopReleaser, nil
+	// [Scroll: END]
 }
 
 // stateAtTransaction returns the execution environment of a certain transaction.
@@ -67,6 +70,7 @@ func (leth *LightEthereum) stateAtTransaction(ctx context.Context, block *types.
 		if idx == txIndex {
 			return msg, context, statedb, release, nil
 		}
+		context.L1CostFunc = types.NewL1CostFunc(leth.blockchain.Config(), statedb)
 		// Not yet the searched for transaction, execute on top of the current state
 		vmenv := vm.NewEVM(context, txContext, statedb, leth.blockchain.Config(), vm.Config{})
 		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {

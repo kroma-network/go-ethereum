@@ -83,7 +83,7 @@ func New(id *ID, db NodeReader) (*Trie, error) {
 		reader: reader,
 		//tracer: newTracer(),
 	}
-	if id.Root != (common.Hash{}) && id.Root != types.EmptyRootHash {
+	if id.Root != (common.Hash{}) && id.Root != types.EmptyMPTRootHash {
 		rootnode, err := trie.resolveAndTrack(id.Root[:], nil)
 		if err != nil {
 			return nil, err
@@ -568,7 +568,7 @@ func (t *Trie) Commit(collectLeaf bool) (common.Hash, *NodeSet) {
 		// Wrap tracked deletions as the return
 		set := NewNodeSet(t.owner)
 		t.tracer.markDeletions(set)
-		return types.EmptyRootHash, set
+		return types.EmptyMPTRootHash, set
 	}
 	// Derive the hash for all dirty nodes first. We hold the assumption
 	// in the following procedure that all nodes are hashed.
@@ -591,7 +591,7 @@ func (t *Trie) Commit(collectLeaf bool) (common.Hash, *NodeSet) {
 // hashRoot calculates the root hash of the given trie
 func (t *Trie) hashRoot() (node, node, error) {
 	if t.root == nil {
-		return hashNode(types.EmptyRootHash.Bytes()), nil, nil
+		return hashNode(types.EmptyMPTRootHash.Bytes()), nil, nil
 	}
 	// If the number of changes is below 100, we let one thread handle it
 	h := newHasher(t.unhashed >= 100)

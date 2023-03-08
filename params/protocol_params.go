@@ -16,7 +16,18 @@
 
 package params
 
-import "math/big"
+import (
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/common"
+)
+
+var (
+	// The base fee portion of the transaction fee accumulates at this predeploy
+	KanvasBaseFeeRecipient = common.HexToAddress("0x4200000000000000000000000000000000000006")
+	// The L1 portion of the transaction fee accumulates at this predeploy
+	KanvasL1FeeRecipient = common.HexToAddress("0x4200000000000000000000000000000000000007")
+)
 
 const (
 	GasLimitBoundDivisor uint64 = 1024               // The bound divisor of the gas limit, used in update calculations.

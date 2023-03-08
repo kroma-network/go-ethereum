@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -40,7 +41,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/params"
@@ -127,6 +127,13 @@ func (b *testBackend) ChainConfig() *params.ChainConfig {
 	return b.chainConfig
 }
 
+// [Scroll: START]
+func (b *testBackend) CacheConfig() *core.CacheConfig {
+	return b.chain.CacheConfig()
+}
+
+// [Scroll: END]
+
 func (b *testBackend) Engine() consensus.Engine {
 	return b.engine
 }
@@ -177,6 +184,7 @@ func (b *testBackend) StateAtTransaction(ctx context.Context, block *types.Block
 		if idx == txIndex {
 			return msg, context, statedb, release, nil
 		}
+		context.L1CostFunc = types.NewL1CostFunc(b.chainConfig, statedb)
 		vmenv := vm.NewEVM(context, txContext, statedb, b.chainConfig, vm.Config{})
 		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
 			return nil, vm.BlockContext{}, nil, nil, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
@@ -250,8 +258,19 @@ func TestTraceCall(t *testing.T) {
 				Value: (*hexutil.Big)(big.NewInt(1000)),
 			},
 			config:    nil,
-			expectErr: fmt.Errorf("block #%d not found", genBlocks+1),
+			expectErr: fmt.Errorf("block #%d %w", genBlocks+1, ethereum.NotFound),
 			//expect:    nil,
+		},
+		// Kanvas: Trace block that doesn't exist anywhere
+		{
+			blockNumber: rpc.BlockNumber(39347856),
+			call: ethapi.TransactionArgs{
+				From:  &accounts[0].addr,
+				To:    &accounts[1].addr,
+				Value: (*hexutil.Big)(big.NewInt(1000)),
+			},
+			config:    nil,
+			expectErr: fmt.Errorf("block #39347856 %w", ethereum.NotFound),
 		},
 		// Standard JSON trace upon the latest block
 		{
@@ -286,9 +305,9 @@ func TestTraceCall(t *testing.T) {
 				BlockOverrides: &ethapi.BlockOverrides{Number: (*hexutil.Big)(big.NewInt(0x1337))},
 			},
 			expectErr: nil,
-			expect: ` {"gas":53018,"failed":false,"returnValue":"","structLogs":[
-		{"pc":0,"op":"NUMBER","gas":24946984,"gasCost":2,"depth":1,"stack":[]},
-		{"pc":1,"op":"STOP","gas":24946982,"gasCost":0,"depth":1,"stack":["0x1337"]}]}`,
+			// [Scroll: START]
+			expect: ` {"gas":53018,"failed":false,"returnValue":"","accountAfter":null,"structLogs":[{"pc":0,"op":"NUMBER","gas":24946984,"gasCost":2,"depth":1},{"pc":1,"op":"STOP","gas":24946982,"gasCost":0,"depth":1,"stack":["0x1337"]}]}`,
+			// [Scroll: END]
 		},
 	}
 	for i, testspec := range testSuite {
@@ -298,19 +317,21 @@ func TestTraceCall(t *testing.T) {
 				t.Errorf("test %d: expect error %v, got nothing", i, testspec.expectErr)
 				continue
 			}
-			if !reflect.DeepEqual(err, testspec.expectErr) {
-				t.Errorf("test %d: error mismatch, want %v, git %v", i, testspec.expectErr, err)
+			// Have to introduce this diff to reflect the fact that errors
+			// from the upstream will not preserve pointer equality.
+			if err.Error() != testspec.expectErr.Error() {
+				t.Errorf("test %d: error mismatch, want %v, got %v", i, testspec.expectErr, err)
 			}
 		} else {
 			if err != nil {
 				t.Errorf("test %d: expect no error, got %v", i, err)
 				continue
 			}
-			var have *logger.ExecutionResult
+			var have *types.ExecutionResult
 			if err := json.Unmarshal(result.(json.RawMessage), &have); err != nil {
 				t.Errorf("test %d: failed to unmarshal result %v", i, err)
 			}
-			var want *logger.ExecutionResult
+			var want *types.ExecutionResult
 			if err := json.Unmarshal([]byte(testspec.expect), &want); err != nil {
 				t.Errorf("test %d: failed to unmarshal result %v", i, err)
 			}
@@ -349,15 +370,15 @@ func TestTraceTransaction(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to trace transaction %v", err)
 	}
-	var have *logger.ExecutionResult
+	var have *types.ExecutionResult
 	if err := json.Unmarshal(result.(json.RawMessage), &have); err != nil {
 		t.Errorf("failed to unmarshal result %v", err)
 	}
-	if !reflect.DeepEqual(have, &logger.ExecutionResult{
+	if !reflect.DeepEqual(have, &types.ExecutionResult{
 		Gas:         params.TxGas,
 		Failed:      false,
 		ReturnValue: "",
-		StructLogs:  []logger.StructLogRes{},
+		StructLogs:  []*types.StructLogRes{},
 	}) {
 		t.Error("Transaction tracing result is different")
 	}
@@ -408,22 +429,28 @@ func TestTraceBlock(t *testing.T) {
 		// Trace head block
 		{
 			blockNumber: rpc.BlockNumber(genBlocks),
-			want:        `[{"result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}]`,
+			// [Scroll: START]
+			want: `[{"result":{"gas":21000,"failed":false,"returnValue":"","accountAfter":null,"structLogs":[]}}]`,
+			// [Scroll: END]
 		},
 		// Trace non-existent block
 		{
 			blockNumber: rpc.BlockNumber(genBlocks + 1),
-			expectErr:   fmt.Errorf("block #%d not found", genBlocks+1),
+			expectErr:   fmt.Errorf("block #%d %w", genBlocks+1, ethereum.NotFound),
 		},
 		// Trace latest block
 		{
 			blockNumber: rpc.LatestBlockNumber,
-			want:        `[{"result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}]`,
+			// [Scroll: START]
+			want: `[{"result":{"gas":21000,"failed":false,"returnValue":"","accountAfter":null,"structLogs":[]}}]`,
+			// [Scroll: EMD]
 		},
 		// Trace pending block
 		{
 			blockNumber: rpc.PendingBlockNumber,
-			want:        `[{"result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}]`,
+			// [Scroll: START]
+			want: `[{"result":{"gas":21000,"failed":false,"returnValue":"","accountAfter":null,"structLogs":[]}}]`,
+			// [Scroll: END]
 		},
 	}
 	for i, tc := range testSuite {
@@ -433,7 +460,7 @@ func TestTraceBlock(t *testing.T) {
 				t.Errorf("test %d, want error %v", i, tc.expectErr)
 				continue
 			}
-			if !reflect.DeepEqual(err, tc.expectErr) {
+			if err.Error() != tc.expectErr.Error() {
 				t.Errorf("test %d: error mismatch, want %v, get %v", i, tc.expectErr, err)
 			}
 			continue
@@ -853,7 +880,9 @@ func TestTraceChain(t *testing.T) {
 	backend.relHook = func() { atomic.AddUint32(&rel, 1) }
 	api := NewAPI(backend)
 
-	single := `{"result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}`
+	// [Scroll: START]
+	single := `{"result":{"gas":21000,"failed":false,"returnValue":"","accountAfter":null,"structLogs":[]}}`
+	// [Scroll: END]
 	var cases = []struct {
 		start  uint64
 		end    uint64

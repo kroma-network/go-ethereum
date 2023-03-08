@@ -289,6 +289,9 @@ func TestEthClient(t *testing.T) {
 		"TransactionSender": {
 			func(t *testing.T) { testTransactionSender(t, client) },
 		},
+		"EstimateGas": {
+			func(t *testing.T) { testEstimateGas(t, client) },
+		},
 	}
 
 	t.Parallel()
@@ -684,6 +687,25 @@ func testTransactionSender(t *testing.T, client *rpc.Client) {
 	}
 	if sender2 != testAddr {
 		t.Fatal("wrong sender:", sender2)
+	}
+}
+
+func testEstimateGas(t *testing.T, client *rpc.Client) {
+	ec := NewClient(client)
+
+	// EstimateGas
+	msg := ethereum.CallMsg{
+		From:  testAddr,
+		To:    &common.Address{},
+		Gas:   21000,
+		Value: big.NewInt(1),
+	}
+	gas, err := ec.EstimateGas(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gas != 21000 {
+		t.Fatalf("unexpected gas price: %v", gas)
 	}
 }
 

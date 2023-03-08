@@ -207,6 +207,13 @@ type Config struct {
 
 	// OverrideShanghai (TODO: remove after the fork)
 	OverrideShanghai *uint64 `toml:",omitempty"`
+
+	OverrideKanvas *bool
+
+	// [Scroll: START]
+	// Trace option
+	MPTWitness int
+	// [Scroll: END]
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain configuration.

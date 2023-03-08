@@ -25,16 +25,36 @@ const (
 	VersionMinor = 11       // Minor version component of the current release
 	VersionPatch = 2        // Patch version component of the current release
 	VersionMeta  = "stable" // Version metadata to append to the version string
+
+	// KanvasVersion is the version of kanvas-geth
+	KanvasVersionMajor = 0          // Major version component of the current release
+	KanvasVersionMinor = 1          // Minor version component of the current release
+	KanvasVersionPatch = 0          // Patch version component of the current release
+	KanvasVersionMeta  = "unstable" // Version metadata to append to the version string
 )
 
 // Version holds the textual version string.
 var Version = func() string {
-	return fmt.Sprintf("%d.%d.%d", VersionMajor, VersionMinor, VersionPatch)
+	return fmt.Sprintf("%d.%d.%d", KanvasVersionMajor, KanvasVersionMinor, KanvasVersionPatch)
 }()
 
 // VersionWithMeta holds the textual version string including the metadata.
 var VersionWithMeta = func() string {
 	v := Version
+	if KanvasVersionMeta != "" {
+		v += "-" + KanvasVersionMeta
+	}
+	return v
+}()
+
+// GethVersion holds the textual geth version string.
+var GethVersion = func() string {
+	return fmt.Sprintf("%d.%d.%d", VersionMajor, VersionMinor, VersionPatch)
+}()
+
+// GethVersionWithMeta holds the textual geth version string including the metadata.
+var GethVersionWithMeta = func() string {
+	v := GethVersion
 	if VersionMeta != "" {
 		v += "-" + VersionMeta
 	}
@@ -46,8 +66,8 @@ var VersionWithMeta = func() string {
 // releases.
 func ArchiveVersion(gitCommit string) string {
 	vsn := Version
-	if VersionMeta != "stable" {
-		vsn += "-" + VersionMeta
+	if KanvasVersionMeta != "stable" {
+		vsn += "-" + KanvasVersionMeta
 	}
 	if len(gitCommit) >= 8 {
 		vsn += "-" + gitCommit[:8]
@@ -60,7 +80,7 @@ func VersionWithCommit(gitCommit, gitDate string) string {
 	if len(gitCommit) >= 8 {
 		vsn += "-" + gitCommit[:8]
 	}
-	if (VersionMeta != "stable") && (gitDate != "") {
+	if (KanvasVersionMeta != "stable") && (gitDate != "") {
 		vsn += "-" + gitDate
 	}
 	return vsn

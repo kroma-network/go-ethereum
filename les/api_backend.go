@@ -52,6 +52,13 @@ func (b *LesApiBackend) ChainConfig() *params.ChainConfig {
 	return b.eth.chainConfig
 }
 
+// [Scroll: START]
+func (b *LesApiBackend) CacheConfig() *core.CacheConfig {
+	return nil
+}
+
+// [Scroll: END]
+
 func (b *LesApiBackend) CurrentBlock() *types.Block {
 	return types.NewBlockWithHeader(b.eth.BlockChain().CurrentHeader())
 }
@@ -146,7 +153,10 @@ func (b *LesApiBackend) StateAndHeaderByNumber(ctx context.Context, number rpc.B
 	if header == nil {
 		return nil, nil, errors.New("header not found")
 	}
-	return light.NewState(ctx, header, b.eth.odr), header, nil
+	// [Scroll: START]
+	// NOTE(chokobole): This part is different from scroll
+	return light.NewState(ctx, header, b.eth.odr, b.ChainConfig().Zktrie), header, nil
+	// [Scroll: END]
 }
 
 func (b *LesApiBackend) StateAndHeaderByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*state.StateDB, *types.Header, error) {
@@ -161,7 +171,10 @@ func (b *LesApiBackend) StateAndHeaderByNumberOrHash(ctx context.Context, blockN
 		if blockNrOrHash.RequireCanonical && b.eth.blockchain.GetCanonicalHash(header.Number.Uint64()) != hash {
 			return nil, nil, errors.New("hash is not currently canonical")
 		}
-		return light.NewState(ctx, header, b.eth.odr), header, nil
+		// [Scroll: START]
+		// NOTE(chokobole): This part is different from scroll
+		return light.NewState(ctx, header, b.eth.odr, b.ChainConfig().Zktrie), header, nil
+		// [Scroll: END]
 	}
 	return nil, nil, errors.New("invalid arguments; neither block nor hash specified")
 }
@@ -190,6 +203,7 @@ func (b *LesApiBackend) GetEVM(ctx context.Context, msg core.Message, state *sta
 	}
 	txContext := core.NewEVMTxContext(msg)
 	context := core.NewEVMBlockContext(header, b.eth.blockchain, nil)
+	context.L1CostFunc = types.NewL1CostFunc(b.eth.chainConfig, state)
 	return vm.NewEVM(context, txContext, state, b.eth.chainConfig, *vmConfig), state.Error, nil
 }
 
@@ -332,4 +346,8 @@ func (b *LesApiBackend) StateAtBlock(ctx context.Context, block *types.Block, re
 
 func (b *LesApiBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, tracers.StateReleaseFunc, error) {
 	return b.eth.stateAtTransaction(ctx, block, txIndex, reexec)
+}
+
+func (b *LesApiBackend) Genesis() *types.Block {
+	return b.eth.blockchain.Genesis()
 }

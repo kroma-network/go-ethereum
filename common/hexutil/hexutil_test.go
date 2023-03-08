@@ -68,8 +68,6 @@ var (
 		// invalid
 		{input: ``, wantErr: ErrEmptyString},
 		{input: `0`, wantErr: ErrMissingPrefix},
-		{input: `0x0`, wantErr: ErrOddLength},
-		{input: `0x023`, wantErr: ErrOddLength},
 		{input: `0xxx`, wantErr: ErrSyntax},
 		{input: `0x01zz01`, wantErr: ErrSyntax},
 		// valid
@@ -82,6 +80,11 @@ var (
 			input: `0xffffffffffffffffffffffffffffffffffff`,
 			want:  []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 		},
+		// [Scroll: START]
+		// Originally it was invalid but now became valid after 6cda8c9.
+		{input: `0x0`, want: []byte{0x00}},
+		{input: `0x023`, want: []byte{0x00, 0x23}},
+		// [Scroll: END]
 	}
 
 	decodeBigTests = []unmarshalTest{

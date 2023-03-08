@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
@@ -695,6 +696,9 @@ func TestCreate2Addreses(t *testing.T) {
 		origin := common.BytesToAddress(common.FromHex(tt.origin))
 		salt := common.BytesToHash(common.FromHex(tt.salt))
 		code := common.FromHex(tt.code)
+		// [Scroll: START]
+		// when calculating CREATE2 address, we use Keccak256 not Poseidon
+		// [Scroll: END]
 		codeHash := crypto.Keccak256(code)
 		address := crypto.CreateAddress2(origin, salt, codeHash)
 		/*
@@ -722,7 +726,7 @@ func TestRandom(t *testing.T) {
 	for _, tt := range []testcase{
 		{name: "empty hash", random: common.Hash{}},
 		{name: "1", random: common.Hash{0}},
-		{name: "emptyCodeHash", random: emptyCodeHash},
+		{name: "emptyCodeHash", random: types.EmptyCodeHash},
 		{name: "hash(0x010203)", random: crypto.Keccak256Hash([]byte{0x01, 0x02, 0x03})},
 	} {
 		var (

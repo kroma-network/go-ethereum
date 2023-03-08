@@ -1376,7 +1376,7 @@ func makeAccountTrieNoStorage(n int) (string, *trie.Trie, entrySlice) {
 		value, _ := rlp.EncodeToBytes(&types.StateAccount{
 			Nonce:    i,
 			Balance:  big.NewInt(int64(i)),
-			Root:     types.EmptyRootHash,
+			Root:     db.EmptyRoot(),
 			CodeHash: getCodeHash(i),
 		})
 		key := key32(i)
@@ -1427,7 +1427,7 @@ func makeBoundaryAccountTrie(n int) (string, *trie.Trie, entrySlice) {
 		value, _ := rlp.EncodeToBytes(&types.StateAccount{
 			Nonce:    uint64(0),
 			Balance:  big.NewInt(int64(i)),
-			Root:     types.EmptyRootHash,
+			Root:     db.EmptyRoot(),
 			CodeHash: getCodeHash(uint64(i)),
 		})
 		elem := &kv{boundaries[i].Bytes(), value}
@@ -1439,7 +1439,7 @@ func makeBoundaryAccountTrie(n int) (string, *trie.Trie, entrySlice) {
 		value, _ := rlp.EncodeToBytes(&types.StateAccount{
 			Nonce:    i,
 			Balance:  big.NewInt(int64(i)),
-			Root:     types.EmptyRootHash,
+			Root:     db.EmptyRoot(),
 			CodeHash: getCodeHash(i),
 		})
 		elem := &kv{key32(i), value}
@@ -1678,7 +1678,7 @@ func verifyTrie(db ethdb.KeyValueStore, root common.Hash, t *testing.T) {
 			log.Crit("Invalid account encountered during snapshot creation", "err", err)
 		}
 		accounts++
-		if acc.Root != types.EmptyRootHash {
+		if acc.Root != triedb.EmptyRoot() {
 			id := trie.StorageTrieID(root, common.BytesToHash(accIt.Key), acc.Root)
 			storeTrie, err := trie.NewStateTrie(id, triedb)
 			if err != nil {

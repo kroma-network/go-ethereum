@@ -320,7 +320,12 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		return nil, nil
 	}
 	for i := 0; i < n; i++ {
-		statedb, err := state.New(parent.Root(), state.NewDatabase(db), nil)
+		// [Scroll: START]
+		// NOTE(chokobole): This part is different from scroll
+		statedb, err := state.New(parent.Root(), state.NewDatabaseWithConfig(db, &trie.Config{
+			Zktrie: config.Zktrie,
+		}), nil)
+		// [Scroll: END]
 		if err != nil {
 			panic(err)
 		}

@@ -18,6 +18,7 @@ package les
 
 import (
 	"crypto/ecdsa"
+	"errors"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/mclock"
@@ -82,6 +83,13 @@ func NewLesServer(node *node.Node, e ethBackend, config *ethconfig.Config) (*Les
 	if err != nil {
 		return nil, err
 	}
+	// [Scroll: START]
+	// Now disable for zktrie
+	if e.BlockChain().Config().Zktrie {
+		return nil, errors.New("light server not work with zktrie storage")
+	}
+	// [Scroll: END]
+
 	// Calculate the number of threads used to service the light client
 	// requests based on the user-specified value.
 	threads := config.LightServ * 4 / 100

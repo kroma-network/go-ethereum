@@ -318,6 +318,26 @@ func (ec *Client) SubscribeNewHead(ctx context.Context, ch chan<- *types.Header)
 	return ec.c.EthSubscribe(ctx, ch, "newHeads")
 }
 
+// [Scroll: START]
+// GetBlockResultByHash returns the BlockResult given the block hash.
+func (ec *Client) GetBlockResultByHash(ctx context.Context, blockHash common.Hash) (*types.BlockResult, error) {
+	blockResult := &types.BlockResult{}
+	return blockResult, ec.c.CallContext(ctx, &blockResult, "kanvas_getBlockResultByNumberOrHash", blockHash)
+}
+
+// GetBlockResultByNumber returns the BlockResult given the block number.
+func (ec *Client) GetBlockResultByNumber(ctx context.Context, number *big.Int) (*types.BlockResult, error) {
+	blockResult := &types.BlockResult{}
+	return blockResult, ec.c.CallContext(ctx, &blockResult, "kanvas_getBlockResultByNumberOrHash", toBlockNumArg(number))
+}
+
+// SubscribeNewBlockResult subscribes to block execution trace when a new block is created.
+func (ec *Client) SubscribeNewBlockResult(ctx context.Context, ch chan<- *types.BlockResult) (ethereum.Subscription, error) {
+	return ec.c.EthSubscribe(ctx, ch, "newBlockResult")
+}
+
+// [Scroll: END]
+
 // State Access
 
 // NetworkID returns the network ID for this client.

@@ -408,7 +408,7 @@ func (st *StackTrie) hashRec(hasher *hasher, path []byte) {
 		return
 
 	case emptyNode:
-		st.val = types.EmptyRootHash.Bytes()
+		st.val = types.EmptyMPTRootHash.Bytes()
 		st.key = st.key[:0]
 		st.nodeType = hashedNode
 		return

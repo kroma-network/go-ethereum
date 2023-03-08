@@ -101,7 +101,10 @@ func odrAccounts(ctx context.Context, db ethdb.Database, config *params.ChainCon
 			st, err = state.New(header.Root, state.NewDatabase(db), nil)
 		} else {
 			header := lc.GetHeaderByHash(bhash)
-			st = light.NewState(ctx, header, lc.Odr())
+			// [Scroll: START]
+			// NOTE(chokobole): This part is different from scroll
+			st = light.NewState(ctx, header, lc.Odr(), false)
+			// [Scroll: END]
 		}
 		if err == nil {
 			bal := st.GetBalance(addr)
@@ -149,7 +152,10 @@ func odrContractCall(ctx context.Context, db ethdb.Database, config *params.Chai
 			}
 		} else {
 			header := lc.GetHeaderByHash(bhash)
-			state := light.NewState(ctx, header, lc.Odr())
+			// [Scroll: START]
+			// NOTE(chokobole): This part is different from scroll
+			state := light.NewState(ctx, header, lc.Odr(), false)
+			// [Scroll: END]
 			state.SetBalance(bankAddr, math.MaxBig256)
 			msg := callmsg{types.NewMessage(bankAddr, &testContractAddr, 0, new(big.Int), 100000, big.NewInt(params.InitialBaseFee), big.NewInt(params.InitialBaseFee), new(big.Int), data, nil, true)}
 			context := core.NewEVMBlockContext(header, lc, nil)

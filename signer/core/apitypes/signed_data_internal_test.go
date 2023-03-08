@@ -144,8 +144,11 @@ func TestParseBytes(t *testing.T) {
 		{"0x1234", []byte{0x12, 0x34}},
 		{[]byte{12, 34}, []byte{12, 34}},
 		{hexutil.Bytes([]byte{12, 34}), []byte{12, 34}},
-		{"1234", nil},    // not a proper hex-string
-		{"0x01233", nil}, // nibbles should be rejected
+		{"1234", nil}, // not a proper hex-string
+		// [Scroll: START]
+		// Originally it was invalid but now became valid after 6cda8c9.
+		{"0x01233", []byte{0x00, 0x12, 0x33}}, // nibbles should be rejected
+		// [Scroll: END]
 		{"not a hex string", nil},
 		{15, nil},
 		{nil, nil},

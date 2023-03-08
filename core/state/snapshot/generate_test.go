@@ -51,7 +51,7 @@ func TestGeneration(t *testing.T) {
 	stRoot := helper.makeStorageTrie(common.Hash{}, common.Hash{}, []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, false)
 
 	helper.addTrieAccount("acc-1", &Account{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
-	helper.addTrieAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
+	helper.addTrieAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
 	helper.addTrieAccount("acc-3", &Account{Balance: big.NewInt(3), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
 
 	helper.makeStorageTrie(common.Hash{}, hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
@@ -88,8 +88,8 @@ func TestGenerateExistentState(t *testing.T) {
 	helper.addSnapAccount("acc-1", &Account{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
 	helper.addSnapStorage("acc-1", []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"})
 
-	helper.addTrieAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
-	helper.addSnapAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
+	helper.addTrieAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
+	helper.addSnapAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
 
 	stRoot = helper.makeStorageTrie(common.Hash{}, hashData([]byte("acc-3")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.addTrieAccount("acc-3", &Account{Balance: big.NewInt(3), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
@@ -236,7 +236,7 @@ func TestGenerateExistentStateWithWrongStorage(t *testing.T) {
 	helper := newHelper()
 
 	// Account one, empty root but non-empty database
-	helper.addAccount("acc-1", &Account{Balance: big.NewInt(1), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
+	helper.addAccount("acc-1", &Account{Balance: big.NewInt(1), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
 	helper.addSnapStorage("acc-1", []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"})
 
 	// Account two, non empty root but empty database
@@ -349,14 +349,14 @@ func TestGenerateExistentStateWithWrongAccounts(t *testing.T) {
 		helper.addSnapAccount("acc-2", &Account{Balance: big.NewInt(1), Root: stRoot, CodeHash: common.Hex2Bytes("0x1234")})
 
 		helper.addTrieAccount("acc-3", &Account{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
-		helper.addSnapAccount("acc-3", &Account{Balance: big.NewInt(1), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
+		helper.addSnapAccount("acc-3", &Account{Balance: big.NewInt(1), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
 	}
 
 	// Extra accounts, only in the snap
 	{
-		helper.addSnapAccount("acc-0", &Account{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})                      // before the beginning
-		helper.addSnapAccount("acc-5", &Account{Balance: big.NewInt(1), Root: types.EmptyRootHash.Bytes(), CodeHash: common.Hex2Bytes("0x1234")})  // Middle
-		helper.addSnapAccount("acc-7", &Account{Balance: big.NewInt(1), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}) // after the end
+		helper.addSnapAccount("acc-0", &Account{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})                         // before the beginning
+		helper.addSnapAccount("acc-5", &Account{Balance: big.NewInt(1), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: common.Hex2Bytes("0x1234")})  // Middle
+		helper.addSnapAccount("acc-7", &Account{Balance: big.NewInt(1), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}) // after the end
 	}
 
 	root, snap := helper.CommitAndGenerate()
@@ -385,9 +385,9 @@ func TestGenerateCorruptAccountTrie(t *testing.T) {
 	// without any storage slots to keep the test smaller.
 	helper := newHelper()
 
-	helper.addTrieAccount("acc-1", &Account{Balance: big.NewInt(1), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}) // 0xc7a30f39aff471c95d8a837497ad0e49b65be475cc0953540f80cfcdbdcd9074
-	helper.addTrieAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}) // 0x65145f923027566669a1ae5ccac66f945b55ff6eaeb17d2ea8e048b7d381f2d7
-	helper.addTrieAccount("acc-3", &Account{Balance: big.NewInt(3), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}) // 0x19ead688e907b0fab07176120dceec244a72aff2f0aa51e8b827584e378772f4
+	helper.addTrieAccount("acc-1", &Account{Balance: big.NewInt(1), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}) // 0xc7a30f39aff471c95d8a837497ad0e49b65be475cc0953540f80cfcdbdcd9074
+	helper.addTrieAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}) // 0x65145f923027566669a1ae5ccac66f945b55ff6eaeb17d2ea8e048b7d381f2d7
+	helper.addTrieAccount("acc-3", &Account{Balance: big.NewInt(3), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}) // 0x19ead688e907b0fab07176120dceec244a72aff2f0aa51e8b827584e378772f4
 
 	root := helper.Commit() // Root: 0xa04693ea110a31037fb5ee814308a6f1d76bdab0b11676bdf4541d2de55ba978
 
@@ -421,7 +421,7 @@ func TestGenerateMissingStorageTrie(t *testing.T) {
 
 	stRoot := helper.makeStorageTrie(common.Hash{}, hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true) // 0xddefcd9376dd029653ef384bd2f0a126bb755fe84fdcc9e7cf421ba454f2bc67
 	helper.addTrieAccount("acc-1", &Account{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})                                      // 0x9250573b9c18c664139f3b6a7a8081b7d8f8916a8fcc5d94feec6c29f5fd4e9e
-	helper.addTrieAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})                 // 0x65145f923027566669a1ae5ccac66f945b55ff6eaeb17d2ea8e048b7d381f2d7
+	helper.addTrieAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})              // 0x65145f923027566669a1ae5ccac66f945b55ff6eaeb17d2ea8e048b7d381f2d7
 	stRoot = helper.makeStorageTrie(common.Hash{}, hashData([]byte("acc-3")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.addTrieAccount("acc-3", &Account{Balance: big.NewInt(3), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()}) // 0x50815097425d000edfc8b3a4a13e175fc2bdcfee8bdfbf2d1ff61041d3c235b2
 
@@ -455,7 +455,7 @@ func TestGenerateCorruptStorageTrie(t *testing.T) {
 
 	stRoot := helper.makeStorageTrie(common.Hash{}, hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true) // 0xddefcd9376dd029653ef384bd2f0a126bb755fe84fdcc9e7cf421ba454f2bc67
 	helper.addTrieAccount("acc-1", &Account{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})                                      // 0x9250573b9c18c664139f3b6a7a8081b7d8f8916a8fcc5d94feec6c29f5fd4e9e
-	helper.addTrieAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})                 // 0x65145f923027566669a1ae5ccac66f945b55ff6eaeb17d2ea8e048b7d381f2d7
+	helper.addTrieAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})              // 0x65145f923027566669a1ae5ccac66f945b55ff6eaeb17d2ea8e048b7d381f2d7
 	stRoot = helper.makeStorageTrie(common.Hash{}, hashData([]byte("acc-3")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.addTrieAccount("acc-3", &Account{Balance: big.NewInt(3), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()}) // 0x50815097425d000edfc8b3a4a13e175fc2bdcfee8bdfbf2d1ff61041d3c235b2
 
@@ -574,7 +574,7 @@ func TestGenerateWithManyExtraAccounts(t *testing.T) {
 	{
 		// 100 accounts exist only in snapshot
 		for i := 0; i < 1000; i++ {
-			acc := &Account{Balance: big.NewInt(int64(i)), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}
+			acc := &Account{Balance: big.NewInt(int64(i)), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}
 			val, _ := rlp.EncodeToBytes(acc)
 			key := hashData([]byte(fmt.Sprintf("acc-%d", i)))
 			rawdb.WriteAccountSnapshot(helper.diskdb, key, val)
@@ -611,7 +611,7 @@ func TestGenerateWithExtraBeforeAndAfter(t *testing.T) {
 	}
 	helper := newHelper()
 	{
-		acc := &Account{Balance: big.NewInt(1), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}
+		acc := &Account{Balance: big.NewInt(1), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}
 		val, _ := rlp.EncodeToBytes(acc)
 		helper.accTrie.Update(common.HexToHash("0x03").Bytes(), val)
 		helper.accTrie.Update(common.HexToHash("0x07").Bytes(), val)
@@ -648,7 +648,7 @@ func TestGenerateWithMalformedSnapdata(t *testing.T) {
 	}
 	helper := newHelper()
 	{
-		acc := &Account{Balance: big.NewInt(1), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}
+		acc := &Account{Balance: big.NewInt(1), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()}
 		val, _ := rlp.EncodeToBytes(acc)
 		helper.accTrie.Update(common.HexToHash("0x03").Bytes(), val)
 
@@ -817,7 +817,7 @@ func TestGenerateCompleteSnapshotWithDanglingStorage(t *testing.T) {
 
 	stRoot := helper.makeStorageTrie(common.Hash{}, hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.addAccount("acc-1", &Account{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
-	helper.addAccount("acc-2", &Account{Balance: big.NewInt(1), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
+	helper.addAccount("acc-2", &Account{Balance: big.NewInt(1), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
 
 	helper.makeStorageTrie(common.Hash{}, hashData([]byte("acc-3")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.addAccount("acc-3", &Account{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
@@ -852,7 +852,7 @@ func TestGenerateBrokenSnapshotWithDanglingStorage(t *testing.T) {
 
 	stRoot := helper.makeStorageTrie(common.Hash{}, hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.addTrieAccount("acc-1", &Account{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
-	helper.addTrieAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
+	helper.addTrieAccount("acc-2", &Account{Balance: big.NewInt(2), Root: types.EmptyMPTRootHash.Bytes(), CodeHash: types.EmptyCodeHash.Bytes()})
 
 	helper.makeStorageTrie(common.Hash{}, hashData([]byte("acc-3")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.addTrieAccount("acc-3", &Account{Balance: big.NewInt(3), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})

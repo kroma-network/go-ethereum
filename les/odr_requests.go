@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/codehash"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/light"
 	"github.com/ethereum/go-ethereum/log"
@@ -283,7 +284,16 @@ func (r *CodeRequest) Validate(db ethdb.Database, msg *Msg) error {
 	data := reply[0]
 
 	// Verify the data and store if checks out
-	if hash := crypto.Keccak256Hash(data); r.Hash != hash {
+	// [Scroll: START]
+	// NOTE(chokobole): This part is different from scroll
+	var hash common.Hash
+	if r.UsePoseidonForCodeHash {
+		hash = codehash.CodeHash(data)
+	} else {
+		hash = crypto.Keccak256Hash(data)
+	}
+	// [Scroll: END]
+	if r.Hash != hash {
 		return errDataHashMismatch
 	}
 	r.Data = data
@@ -522,10 +532,15 @@ type readTraceDB struct {
 
 // Get returns a stored node
 func (db *readTraceDB) Get(k []byte) ([]byte, error) {
-	if db.reads == nil {
-		db.reads = make(map[string]struct{})
+	// [Scroll: START]
+	// NOTE(chokobole): This part is different from scroll
+	if !trie.IsMagicHash(k) {
+		if db.reads == nil {
+			db.reads = make(map[string]struct{})
+		}
+		db.reads[string(k)] = struct{}{}
 	}
-	db.reads[string(k)] = struct{}{}
+	// [Scroll: END]
 	return db.db.Get(k)
 }
 
