@@ -117,7 +117,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.5 // indirect
 	github.com/tklauser/numcpus v0.2.2 // indirect
-	github.com/wemixkanvas/zktrie v0.3.2-0.20230308045532-8c830b101d4b // indirect
+	github.com/wemixkanvas/zktrie v0.5.1-0.20230309094844-45cdc2bed55a // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	golang.org/x/mod v0.6.0 // indirect
 	golang.org/x/net v0.4.0 // indirect
