@@ -464,6 +464,9 @@ type ChainConfig struct {
 	// [Scroll: START]
 	// Use zktrie
 	Zktrie bool `json:"zktrie,omitempty"`
+
+	// Maximum number of transactions per block [optional]
+	MaxTxPerBlock *int `json:"maxTxPerBlock,omitempty"`
 	// [Scroll: END]
 }
 
@@ -687,6 +690,14 @@ func (c *ChainConfig) IsPrague(time uint64) bool {
 func (c *ChainConfig) IsKanvas() bool {
 	return c.Kanvas != nil
 }
+
+// [Scroll: START]
+// IsValidTxCount returns whether the given block's transaction count is below the limit.
+func (c *ChainConfig) IsValidTxCount(count int) bool {
+	return c.MaxTxPerBlock == nil || count <= *c.MaxTxPerBlock
+}
+
+// [Scroll: END]
 
 // CheckCompatible checks whether scheduled fork transitions have been imported
 // with a mismatching chain configuration.

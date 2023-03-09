@@ -888,6 +888,13 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 				return signalToErr(signal)
 			}
 		}
+		// [Scroll: START]
+		// If we have collected enough transactions then we're done
+		if !w.chainConfig.IsValidTxCount(env.tcount + 1) {
+			log.Trace("Transaction count limit reached", "have", env.tcount, "want", w.chainConfig.MaxTxPerBlock)
+			break
+		}
+		// [Scroll: END]
 		// If we don't have enough gas for any further transactions then we're done.
 		if env.gasPool.Gas() < params.TxGas {
 			log.Trace("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
