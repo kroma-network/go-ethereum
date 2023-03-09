@@ -715,12 +715,12 @@ var usedOrdererScheme = defaultOrdererScheme
 
 func SetOrderScheme(t MPTWitnessType) { usedOrdererScheme = t }
 
-// HandleBlockResult only for backward compatibility
-func HandleBlockResult(block *types.BlockResult) ([]*StorageTrace, error) {
-	return HandleBlockResultEx(block, usedOrdererScheme)
+// HandleBlockTrace only for backward compatibility
+func HandleBlockTrace(block *types.BlockTrace) ([]*StorageTrace, error) {
+	return HandleBlockTraceEx(block, usedOrdererScheme)
 }
 
-func HandleBlockResultEx(block *types.BlockResult, ordererScheme MPTWitnessType) ([]*StorageTrace, error) {
+func HandleBlockTraceEx(block *types.BlockTrace, ordererScheme MPTWitnessType) ([]*StorageTrace, error) {
 	writer, err := NewZkTrieProofWriter(block.StorageTrace)
 	if err != nil {
 		return nil, err
@@ -744,8 +744,8 @@ func HandleBlockResultEx(block *types.BlockResult, ordererScheme MPTWitnessType)
 
 	// notice some coinbase addr (like all zero) is in fact not exist and should not be update
 	// TODO: not a good solution, just for patch ...
-	if coinbaseData := writer.tracingAccounts[block.BlockTrace.Coinbase.Address]; coinbaseData != nil {
-		od.absorb(block.BlockTrace.Coinbase)
+	if coinbaseData := writer.tracingAccounts[block.Coinbase.Address]; coinbaseData != nil {
+		od.absorb(block.Coinbase)
 	}
 
 	opDisp := od.end_absorb()
@@ -767,12 +767,12 @@ func HandleBlockResultEx(block *types.BlockResult, ordererScheme MPTWitnessType)
 	return outTrace, nil
 }
 
-func FillBlockResultForMPTWitness(order MPTWitnessType, block *types.BlockResult) error {
+func FillBlockTraceForMPTWitness(order MPTWitnessType, block *types.BlockTrace) error {
 	if order == MPTWitnessNothing {
 		return nil
 	}
 
-	trace, err := HandleBlockResultEx(block, order)
+	trace, err := HandleBlockTraceEx(block, order)
 	if err != nil {
 		return err
 	}
