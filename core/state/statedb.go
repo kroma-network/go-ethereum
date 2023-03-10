@@ -31,7 +31,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/codehash"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
@@ -128,8 +127,6 @@ type StateDB struct {
 	StorageUpdated int
 	AccountDeleted int
 	StorageDeleted int
-
-	codeHashFn func([]byte) common.Hash
 }
 
 // New creates a new state from a given trie.
@@ -158,13 +155,6 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		if sdb.snap = sdb.snaps.Snapshot(root); sdb.snap != nil {
 			sdb.snapAccounts = make(map[common.Hash][]byte)
 			sdb.snapStorage = make(map[common.Hash]map[common.Hash][]byte)
-		}
-	}
-	if db.IsZktrie() {
-		sdb.codeHashFn = codehash.CodeHash
-	} else {
-		sdb.codeHashFn = func(data []byte) common.Hash {
-			return crypto.Keccak256Hash(data)
 		}
 	}
 	return sdb, nil
@@ -506,9 +496,7 @@ func (s *StateDB) SetNonce(addr common.Address, nonce uint64) {
 func (s *StateDB) SetCode(addr common.Address, code []byte) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
-		// [Scroll: START]
-		stateObject.SetCode(s.codeHashFn(code), code)
-		// [Scroll: END]
+		stateObject.SetCode(crypto.Keccak256Hash(code), code)
 	}
 }
 
@@ -797,7 +785,6 @@ func (s *StateDB) Copy() *StateDB {
 		preimages:            make(map[common.Hash][]byte, len(s.preimages)),
 		journal:              newJournal(),
 		hasher:               crypto.NewKeccakState(),
-		codeHashFn:           s.codeHashFn,
 	}
 	// Copy the dirty states, logs, and preimages
 	for addr := range s.journal.dirties {

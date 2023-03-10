@@ -16,11 +16,18 @@
 
 package ethtest
 
-// [Scroll: START]
-/*
-TODO(chokobole): Reenable this test.
-NOTE: Disable this test because codeHash is changed to use poseidon and
-this invalidates block headers especially root, parentHash, mixDigest and so on.
+import (
+	"os"
+	"testing"
+	"time"
+
+	"github.com/ethereum/go-ethereum/eth"
+	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/internal/utesting"
+	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/p2p"
+)
+
 var (
 	genesisFile   = "./testdata/genesis.json"
 	halfchainFile = "./testdata/halfchain.rlp"
@@ -119,5 +126,3 @@ func setupGeth(stack *node.Node) error {
 	_, err = backend.BlockChain().InsertChain(chain.blocks[1:])
 	return err
 }
-*/
-// [Scroll: END]
