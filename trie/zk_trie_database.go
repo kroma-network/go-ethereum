@@ -69,12 +69,10 @@ func (l *ZktrieDatabase) Get(key []byte) ([]byte, error) {
 func (l *ZktrieDatabase) UpdatePreimage(preimage []byte, hashField *big.Int) {
 	db := l.db
 	if db.preimages != nil { // Ugly direct check but avoids the below write lock
-		db.lock.Lock()
 		// we must copy the input key
 		preimages := make(map[common.Hash][]byte)
 		preimages[common.BytesToHash(hashField.Bytes())] = common.CopyBytes(preimage)
 		db.preimages.insertPreimage(preimages)
-		db.lock.Unlock()
 	}
 }
 
