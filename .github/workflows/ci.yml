@@ -48,6 +48,7 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: lightscale/geth:${{ steps.prepare.outputs.version }},lightscale/geth:latest
+          platforms: linux/arm64,linux/amd64
           build-args: |
             COMMIT=${{ steps.prepare.outputs.commit }}
             VERSION=${{ steps.prepare.outputs.version }}
