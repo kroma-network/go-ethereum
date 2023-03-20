@@ -4453,6 +4453,7 @@ func TestPoseidonCodeHash(t *testing.T) {
 	// check empty code hash
 	state, _ := blockchain.State()
 	codeHash := state.GetCodeHash(addr1)
+
 	assert.Equal(t, codeHash, common.HexToHash("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"), "code hash mismatch")
 
 	// deploy contract through transaction
@@ -4472,8 +4473,7 @@ func TestPoseidonCodeHash(t *testing.T) {
 	state, _ = blockchain.State()
 	codeHash = state.GetCodeHash(contractAddress)
 
-	// keccak: 0x089bfd332dfa6117cbc20756f31801ce4f5a175eb258e46bf8123317da54cd96
-	assert.Equal(t, codeHash, common.HexToHash("0x28ec09723b285e17caabc4a8d52dbd097feddf408aee115cbb57c3c9c814d2b2"), "code hash mismatch")
+	assert.Equal(t, codeHash, common.HexToHash("0x089bfd332dfa6117cbc20756f31801ce4f5a175eb258e46bf8123317da54cd96"), "code hash mismatch")
 
 	// deploy contract through another contract (CREATE and CREATE2)
 	chain, receipts = GenerateChain(&config, blockchain.CurrentBlock(), engine, db, 1, func(i int, gen *BlockGen) {
@@ -4498,9 +4498,69 @@ func TestPoseidonCodeHash(t *testing.T) {
 	codeHash1 := state.GetCodeHash(address1)
 	codeHash2 := state.GetCodeHash(address2)
 
-	// keccak: 0xfb5cd93a70ce47f91d33fac3afdb7b54680a6b0683506646a108ef4dfc047583
-	assert.Equal(t, common.HexToHash("0x2fa5836118b70a257defd2e54064ab63cc9bb2e91823eaacbdef32370050b5b2"), codeHash1, "code hash mismatch")
-	assert.Equal(t, common.HexToHash("0x2fa5836118b70a257defd2e54064ab63cc9bb2e91823eaacbdef32370050b5b2"), codeHash2, "code hash mismatch")
+	assert.Equal(t, common.HexToHash("0xfb5cd93a70ce47f91d33fac3afdb7b54680a6b0683506646a108ef4dfc047583"), codeHash1, "code hash mismatch")
+	assert.Equal(t, common.HexToHash("0xfb5cd93a70ce47f91d33fac3afdb7b54680a6b0683506646a108ef4dfc047583"), codeHash2, "code hash mismatch")
+}
+
+// TestTransactionCountLimit tests that the chain reject blocks with too many transactions.
+func TestTransactionCountLimit(t *testing.T) {
+	// Create config that allows at most 1 transaction per block
+	config := params.TestChainConfig
+	config.MaxTxPerBlock = new(int)
+	*config.MaxTxPerBlock = 1
+
+	var (
+		engine  = ethash.NewFaker()
+		db      = rawdb.NewMemoryDatabase()
+		key, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		address = crypto.PubkeyToAddress(key.PublicKey)
+		funds   = big.NewInt(1000000000000000)
+		gspec   = &Genesis{Config: config, Alloc: GenesisAlloc{address: {Balance: funds}}}
+		genesis = gspec.MustCommit(db)
+	)
+
+	addTx := func(b *BlockGen) {
+		tx := types.NewTransaction(b.TxNonce(address), address, big.NewInt(0), 50000, b.header.BaseFee, nil)
+		signed, _ := types.SignTx(tx, types.HomesteadSigner{}, key)
+		b.AddTx(signed)
+	}
+
+	// Initialize blockchain
+	blockchain, err := NewBlockChain(db, nil, gspec, nil, engine, vm.Config{}, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create new chain manager: %v", err)
+	}
+	defer blockchain.Stop()
+
+	// Insert empty block
+	block1, _ := GenerateChain(config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
+		// empty
+	})
+
+	if _, err := blockchain.InsertChain(block1); err != nil {
+		t.Fatalf("failed to insert chain: %v", err)
+	}
+
+	// Insert block with 1 transaction
+	block2, _ := GenerateChain(config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
+		addTx(b)
+	})
+
+	if _, err := blockchain.InsertChain(block2); err != nil {
+		t.Fatalf("failed to insert chain: %v", err)
+	}
+
+	// Insert block with 2 transactions
+	block3, _ := GenerateChain(config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
+		addTx(b)
+		addTx(b)
+	})
+
+	_, err = blockchain.InsertChain(block3)
+
+	if !errors.Is(err, consensus.ErrInvalidTxCount) {
+		t.Fatalf("error mismatch: have: %v, want: %v", err, consensus.ErrInvalidTxCount)
+	}
 }
 
 // [Scroll: END]

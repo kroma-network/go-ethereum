@@ -50,12 +50,12 @@ func resumeProofs(proof []hexutil.Bytes, db ethdb.Database) *zktrie.Node {
 		if err != nil {
 			log.Warn("decode proof string fail", "error", err)
 		} else if n != nil {
-			k, err := n.Key()
+			hash, err := n.NodeHash()
 			if err != nil {
-				log.Warn("node has no valid key", "error", err)
+				log.Warn("node has no valid node hash", "error", err)
 			} else {
 				//notice: must consistent with trie/merkletree.go
-				bt := k[:]
+				bt := hash[:]
 				db.Put(bt, buf)
 				if n.Type == zktrie.NodeTypeLeaf || n.Type == zktrie.NodeTypeEmpty {
 					return n
@@ -81,23 +81,23 @@ func decodeProofForMPTPath(proof proofList, path *SMTPath) {
 		if err != nil {
 			log.Warn("decode proof string fail", "error", err)
 		} else if n != nil {
-			k, err := n.Key()
+			hash, err := n.NodeHash()
 			if err != nil {
 				log.Warn("node has no valid key", "error", err)
 				return
 			}
 			if lastNode == nil {
-				//notice: use little-endian represent inside Hash ([:] or Bytes2())
-				path.Root = k[:]
+				// notice: use little-endian represent inside Hash ([:] or Bytes2())
+				path.Root = hash[:]
 			} else {
-				if bytes.Equal(k[:], lastNode.ChildL[:]) {
+				if bytes.Equal(hash[:], lastNode.ChildL[:]) {
 					path.Path = append(path.Path, SMTPathNode{
-						Value:   k[:],
+						Value:   hash[:],
 						Sibling: lastNode.ChildR[:],
 					})
-				} else if bytes.Equal(k[:], lastNode.ChildR[:]) {
+				} else if bytes.Equal(hash[:], lastNode.ChildR[:]) {
 					path.Path = append(path.Path, SMTPathNode{
-						Value:   k[:],
+						Value:   hash[:],
 						Sibling: lastNode.ChildL[:],
 					})
 					keyPath.Add(keyPath, keyCounter)
@@ -107,10 +107,10 @@ func decodeProofForMPTPath(proof proofList, path *SMTPath) {
 				keyCounter.Mul(keyCounter, big.NewInt(2))
 			}
 			switch n.Type {
-			case zktrie.NodeTypeMiddle:
+			case zktrie.NodeTypeParent:
 				lastNode = n
 			case zktrie.NodeTypeLeaf:
-				vhash, _ := n.ValueKey()
+				vhash, _ := n.ValueHash()
 				path.Leaf = &SMTPathNode{
 					//here we just return the inner represent of hash (little endian, reversed byte order to common hash)
 					Value:   vhash[:],
@@ -394,12 +394,12 @@ func (w *zktrieProofWriter) traceAccountUpdate(addr common.Address, updateAccDat
 			return nil, fmt.Errorf("update zktrie account state fail: %s", err)
 		}
 		w.tracingAccounts[addr] = accData
-	} else {
+	} else if accDataBefore != nil {
 		if err := w.tracingZktrie.TryDelete(addr.Bytes32()); err != nil {
 			return nil, fmt.Errorf("delete zktrie account state fail: %s", err)
 		}
 		w.tracingAccounts[addr] = nil
-	}
+	} // notice if both before/after is nil, we do not touch zktrie
 	proof = proofList{}
 	if err := w.tracingZktrie.Prove(s_key.Bytes(), 0, &proof); err != nil {
 		return nil, fmt.Errorf("prove AFTER state fail: %s", err)
@@ -444,6 +444,7 @@ func (w *zktrieProofWriter) traceStorageUpdate(addr common.Address, key, value [
 	storeKey := zkt.NewByte32FromBytesPaddingZero(common.BytesToHash(key).Bytes())
 	storeValueBefore := trie.Get(storeKey[:])
 	storeValue := zkt.NewByte32FromBytes(value)
+	valZero := zkt.Byte32{}
 
 	if storeValueBefore != nil && !bytes.Equal(storeValueBefore[:], common.Hash{}.Bytes()) {
 		stateUpdate[0] = &StateStorage{
@@ -488,7 +489,11 @@ func (w *zktrieProofWriter) traceStorageUpdate(addr common.Address, key, value [
 	out, err := w.traceAccountUpdate(addr,
 		func(acc *types.StateAccount) *types.StateAccount {
 			if acc == nil {
-				panic("unexpected")
+				// in case we read an unexist account
+				if !bytes.Equal(valZero.Bytes(), value) {
+					panic(fmt.Errorf("write to an unexist account [%s] which is not allowed", addr))
+				}
+				return nil
 			}
 
 			//sanity check
@@ -518,6 +523,11 @@ func (w *zktrieProofWriter) traceStorageUpdate(addr common.Address, key, value [
 		} else {
 			out.StateKey = zkt.NewHashFromBigInt(h)[:]
 		}
+		stateUpdate[1] = &StateStorage{
+			Key:   storeKey.Bytes(),
+			Value: valZero.Bytes(),
+		}
+		stateUpdate[0] = stateUpdate[1]
 	}
 
 	out.StatePath = statePath
@@ -715,12 +725,12 @@ var usedOrdererScheme = defaultOrdererScheme
 
 func SetOrderScheme(t MPTWitnessType) { usedOrdererScheme = t }
 
-// HandleBlockResult only for backward compatibility
-func HandleBlockResult(block *types.BlockResult) ([]*StorageTrace, error) {
-	return HandleBlockResultEx(block, usedOrdererScheme)
+// HandleBlockTrace only for backward compatibility
+func HandleBlockTrace(block *types.BlockTrace) ([]*StorageTrace, error) {
+	return HandleBlockTraceEx(block, usedOrdererScheme)
 }
 
-func HandleBlockResultEx(block *types.BlockResult, ordererScheme MPTWitnessType) ([]*StorageTrace, error) {
+func HandleBlockTraceEx(block *types.BlockTrace, ordererScheme MPTWitnessType) ([]*StorageTrace, error) {
 	writer, err := NewZkTrieProofWriter(block.StorageTrace)
 	if err != nil {
 		return nil, err
@@ -744,8 +754,8 @@ func HandleBlockResultEx(block *types.BlockResult, ordererScheme MPTWitnessType)
 
 	// notice some coinbase addr (like all zero) is in fact not exist and should not be update
 	// TODO: not a good solution, just for patch ...
-	if coinbaseData := writer.tracingAccounts[block.BlockTrace.Coinbase.Address]; coinbaseData != nil {
-		od.absorb(block.BlockTrace.Coinbase)
+	if coinbaseData := writer.tracingAccounts[block.Coinbase.Address]; coinbaseData != nil {
+		od.absorb(block.Coinbase)
 	}
 
 	opDisp := od.end_absorb()
@@ -767,12 +777,12 @@ func HandleBlockResultEx(block *types.BlockResult, ordererScheme MPTWitnessType)
 	return outTrace, nil
 }
 
-func FillBlockResultForMPTWitness(order MPTWitnessType, block *types.BlockResult) error {
+func FillBlockTraceForMPTWitness(order MPTWitnessType, block *types.BlockTrace) error {
 	if order == MPTWitnessNothing {
 		return nil
 	}
 
-	trace, err := HandleBlockResultEx(block, order)
+	trace, err := HandleBlockTraceEx(block, order)
 	if err != nil {
 		return err
 	}

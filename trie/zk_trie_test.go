@@ -20,6 +20,8 @@ package trie
 
 import (
 	"bytes"
+	"encoding/binary"
+	"os"
 	"runtime"
 	"sync"
 	"testing"
@@ -125,7 +127,7 @@ func TestZkTrieConcurrency(t *testing.T) {
 		cpy := *trie
 		tries[i] = &cpy
 	}
-	// Start a batch of goroutines interactng with the trie
+	// Start a batch of goroutines interacting with the trie
 	pend := new(sync.WaitGroup)
 	pend.Add(threads)
 	for i := 0; i < threads; i++ {
@@ -152,4 +154,109 @@ func TestZkTrieConcurrency(t *testing.T) {
 	}
 	// Wait for all threads to finish
 	pend.Wait()
+}
+
+func tempDBZK(b *testing.B) (string, *Database, func()) {
+	dir, err := os.MkdirTemp("", "zktrie-bench")
+	assert.NoError(b, err)
+
+	diskdb, err := rawdb.NewLevelDBDatabase(dir, 256, 0, "", false)
+	assert.NoError(b, err)
+	config := &Config{Cache: 256, Preimages: true, Zktrie: true}
+	return dir, NewDatabaseWithConfig(diskdb, config), func() {
+		os.RemoveAll(dir)
+	}
+}
+
+const benchElemCountZk = 10000
+
+func BenchmarkZkTrieGet(b *testing.B) {
+	_, tmpdb, removeTempDB := tempDBZK(b)
+	zkTrie, _ := NewZkTrie(common.Hash{}, NewZktrieDatabaseFromTriedb(tmpdb))
+	defer func() {
+		zkTrie.db.Close()
+		removeTempDB()
+	}()
+
+	k := make([]byte, 32)
+	for i := 0; i < benchElemCountZk; i++ {
+		binary.LittleEndian.PutUint64(k, uint64(i))
+
+		err := zkTrie.TryUpdate(k, k)
+		assert.NoError(b, err)
+	}
+
+	zkTrie.db.db.Commit(common.Hash{}, true)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		binary.LittleEndian.PutUint64(k, uint64(i))
+		_, err := zkTrie.TryGet(k)
+		assert.NoError(b, err)
+	}
+	b.StopTimer()
+}
+
+func BenchmarkZkTrieUpdate(b *testing.B) {
+	_, tmpdb, removeTempDB := tempDBZK(b)
+	zkTrie, _ := NewZkTrie(common.Hash{}, NewZktrieDatabaseFromTriedb(tmpdb))
+	defer func() {
+		zkTrie.db.Close()
+		removeTempDB()
+	}()
+
+	k := make([]byte, 32)
+	v := make([]byte, 32)
+	b.ReportAllocs()
+
+	for i := 0; i < benchElemCountZk; i++ {
+		binary.LittleEndian.PutUint64(k, uint64(i))
+		err := zkTrie.TryUpdate(k, k)
+		assert.NoError(b, err)
+	}
+	binary.LittleEndian.PutUint64(k, benchElemCountZk/2)
+
+	// zkTrie.Commit(nil)
+	zkTrie.db.db.Commit(common.Hash{}, true)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		binary.LittleEndian.PutUint64(k, uint64(i))
+		binary.LittleEndian.PutUint64(v, 0xffffffff+uint64(i))
+		err := zkTrie.TryUpdate(k, v)
+		assert.NoError(b, err)
+	}
+	b.StopTimer()
+}
+
+func TestZkTrieDelete(t *testing.T) {
+	key := make([]byte, 32)
+	value := make([]byte, 32)
+	trie1 := newEmptyZkTrie()
+
+	var count int = 6
+	var hashes []common.Hash
+	hashes = append(hashes, trie1.Hash())
+	for i := 0; i < count; i++ {
+		binary.LittleEndian.PutUint64(key, uint64(i))
+		binary.LittleEndian.PutUint64(value, uint64(i))
+		err := trie1.TryUpdate(key, value)
+		assert.NoError(t, err)
+		hashes = append(hashes, trie1.Hash())
+	}
+
+	// binary.LittleEndian.PutUint64(key, uint64(0xffffff))
+	// err := trie1.TryDelete(key)
+	// assert.Equal(t, err, zktrie.ErrKeyNotFound)
+
+	trie1.Commit(false)
+
+	for i := count - 1; i >= 0; i-- {
+		binary.LittleEndian.PutUint64(key, uint64(i))
+		v, err := trie1.TryGet(key)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, v)
+		err = trie1.TryDelete(key)
+		assert.NoError(t, err)
+		hash := trie1.Hash()
+		assert.Equal(t, hashes[i].Hex(), hash.Hex())
+	}
 }

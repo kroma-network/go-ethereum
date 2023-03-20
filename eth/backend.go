@@ -499,7 +499,7 @@ func (s *Ethereum) SyncMode() downloader.SyncMode {
 // network protocols to start.
 func (s *Ethereum) Protocols() []p2p.Protocol {
 	protos := eth.MakeProtocols((*ethHandler)(s.handler), s.networkID, s.ethDialCandidates)
-	if s.config.SnapshotCache > 0 {
+	if !s.blockchain.Config().Zktrie && s.config.SnapshotCache > 0 {
 		protos = append(protos, snap.MakeProtocols((*snapHandler)(s.handler), s.snapDialCandidates)...)
 	}
 	return protos
