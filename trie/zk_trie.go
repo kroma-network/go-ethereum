@@ -82,14 +82,9 @@ func (t *ZkTrie) Get(key []byte) []byte {
 // TryUpdateAccount will abstract the write of an account to the
 // ZkTrie.
 func (t *ZkTrie) TryUpdateAccount(address common.Address, acc *types.StateAccount) error {
-	key, err := zkt.ToSecureKeyBytes(address.Bytes())
-	if err != nil {
-		return err
-	}
-	keyBytes := key.Bytes()
-	sanityCheckByte32Key(keyBytes)
+	sanityCheckByte32Key(address.Bytes())
 	value, flag := acc.MarshalFields()
-	return t.ZkTrie.TryUpdate(keyBytes, flag, value)
+	return t.ZkTrie.TryUpdate(address.Bytes(), flag, value)
 }
 
 // [Scroll: END]
@@ -253,19 +248,11 @@ func VerifyProofSMT(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueRead
 // [Scroll: START]
 // NOTE(chokobole): This part is different from scroll
 func (t *ZkTrie) TryDeleteAccount(address common.Address) error {
-	key, err := zkt.ToSecureKeyBytes(address.Bytes())
-	if err != nil {
-		return err
-	}
-	return t.TryDelete(key.Bytes())
+	return t.TryDelete(address.Bytes())
 }
 
 func (t *ZkTrie) TryGetAccount(address common.Address) (*types.StateAccount, error) {
-	key, err := zkt.ToSecureKeyBytes(address.Bytes())
-	if err != nil {
-		return nil, err
-	}
-	res, err := t.TryGet(key.Bytes())
+	res, err := t.TryGet(address.Bytes())
 	if res == nil || err != nil {
 		return nil, err
 	}
