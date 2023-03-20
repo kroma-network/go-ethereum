@@ -342,7 +342,9 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 // then generate chain on top.
 func GenerateChainWithGenesis(genesis *Genesis, engine consensus.Engine, n int, gen func(int, *BlockGen)) (ethdb.Database, []*types.Block, []types.Receipts) {
 	db := rawdb.NewMemoryDatabase()
-	_, err := genesis.Commit(db, trie.NewDatabase(db))
+	_, err := genesis.Commit(db, trie.NewDatabaseWithConfig(db, &trie.Config{
+		Zktrie: genesis.Config != nil && genesis.Config.Zktrie,
+	}))
 	if err != nil {
 		panic(err)
 	}

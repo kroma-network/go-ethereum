@@ -532,7 +532,9 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *trie.Database) (*types.Block
 // Note the state changes will be committed in hash-based scheme, use Commit
 // if path-scheme is preferred.
 func (g *Genesis) MustCommit(db ethdb.Database) *types.Block {
-	block, err := g.Commit(db, trie.NewDatabase(db))
+	block, err := g.Commit(db, trie.NewDatabaseWithConfig(db, &trie.Config{
+		Zktrie: g.Config != nil && g.Config.Zktrie,
+	}))
 	if err != nil {
 		panic(err)
 	}
