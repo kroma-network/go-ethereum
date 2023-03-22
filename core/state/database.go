@@ -147,9 +147,6 @@ func NewDatabaseWithConfig(db ethdb.Database, config *trie.Config) Database {
 		codeSizeCache: lru.NewCache[common.Hash, int](codeSizeCacheSize),
 		codeCache:     lru.NewSizeConstrainedCache[common.Hash, []byte](codeCacheSize),
 		triedb:        trie.NewDatabaseWithConfig(db, config),
-		// [Scroll: START]
-		zktrie: config != nil && config.Zktrie,
-		// [Scroll: END]
 	}
 }
 
@@ -160,9 +157,6 @@ func NewDatabaseWithNodeDB(db ethdb.Database, triedb *trie.Database) Database {
 		codeSizeCache: lru.NewCache[common.Hash, int](codeSizeCacheSize),
 		codeCache:     lru.NewSizeConstrainedCache[common.Hash, []byte](codeCacheSize),
 		triedb:        triedb,
-		// [Scroll: START]
-		zktrie: triedb.Zktrie,
-		// [Scroll: END]
 	}
 }
 
@@ -171,15 +165,12 @@ type cachingDB struct {
 	codeSizeCache *lru.Cache[common.Hash, int]
 	codeCache     *lru.SizeConstrainedCache[common.Hash, []byte]
 	triedb        *trie.Database
-	// [Scroll: START]
-	zktrie bool
-	// [Scroll: END]
 }
 
 // OpenTrie opens the main account trie at a specific root hash.
 func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
 	// [Scroll: START]
-	if db.zktrie {
+	if db.triedb.Zktrie {
 		tr, err := trie.NewZkTrie(root, trie.NewZktrieDatabaseFromTriedb(db.triedb))
 		if err != nil {
 			return nil, err
@@ -197,7 +188,7 @@ func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
 // OpenStorageTrie opens the storage trie of an account.
 func (db *cachingDB) OpenStorageTrie(stateRoot common.Hash, addrHash, root common.Hash) (Trie, error) {
 	// [Scroll: START]
-	if db.zktrie {
+	if db.triedb.Zktrie {
 		tr, err := trie.NewZkTrie(root, trie.NewZktrieDatabaseFromTriedb(db.triedb))
 		if err != nil {
 			return nil, err
@@ -281,7 +272,7 @@ func (db *cachingDB) TrieDB() *trie.Database {
 // NOTE(chokobole): This part is different from scroll
 // Returns whether it uses Zktrie.
 func (db *cachingDB) IsZktrie() bool {
-	return db.zktrie
+	return db.triedb.Zktrie
 }
 
 // [Scroll: END]
