@@ -328,6 +328,17 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		applyOverrides(genesis.Config)
 		return genesis.Config, block.Hash(), nil
 	}
+
+	// NOTE(chokobole): Need to fetch Zktrie from chainConfig before triedb.EmptyRoot().
+	foundStoredCfg := false
+	storedcfg := rawdb.ReadChainConfig(db, stored)
+	if storedcfg != nil {
+		foundStoredCfg = true
+	}
+	if foundStoredCfg {
+		triedb.Zktrie = storedcfg.Zktrie
+	}
+
 	// We have the genesis block in database(perhaps in ancient database)
 	// but the corresponding state is missing.
 	header := rawdb.ReadHeader(db, stored, 0)
@@ -360,8 +371,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 	if err := newcfg.CheckConfigForkOrder(); err != nil {
 		return newcfg, common.Hash{}, err
 	}
-	storedcfg := rawdb.ReadChainConfig(db, stored)
-	if storedcfg == nil {
+	if !foundStoredCfg {
 		log.Warn("Found genesis block without chain config")
 		rawdb.WriteChainConfig(db, stored, newcfg)
 		return newcfg, stored, nil

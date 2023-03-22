@@ -242,6 +242,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	}
 
 	// Open trie database with provided config
+	// NOTE(chokobole): Zktrie will be set inside SetupGenesisBlockWithOverride().
 	triedb := trie.NewDatabaseWithConfig(db, &trie.Config{
 		Cache:     cacheConfig.TrieCleanLimit,
 		Journal:   cacheConfig.TrieCleanJournal,
@@ -257,7 +258,6 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 
 	// [Scroll: START]
 	// override snapshot setting
-	triedb.Zktrie = chainConfig.Zktrie
 	if chainConfig.Zktrie && cacheConfig.SnapshotLimit > 0 {
 		log.Warn("snapshot has been disabled by zktrie")
 		cacheConfig.SnapshotLimit = 0
