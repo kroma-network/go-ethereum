@@ -326,6 +326,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 			return genesis.Config, common.Hash{}, err
 		}
 		applyOverrides(genesis.Config)
+		triedb.Zktrie = genesis.Config.Zktrie
 		return genesis.Config, block.Hash(), nil
 	}
 
