@@ -22,14 +22,11 @@ jobs:
       - name: Prepare
         id: prepare
         run: |
-          echo ::set-output name=commit::${GITHUB_SHA}
-          echo ::set-output name=build_num::${GITHUB_RUN_NUMBER}
-
           if [[ $GITHUB_REF_TYPE == 'branch' ]];
           then
-            echo ::set-output name=version::dev
+            echo "version=dev-$(echo $GITHUB_SHA | cut -c1-12)" >> $GITHUB_OUTPUT
           else
-            echo ::set-output name=version::${GITHUB_REF#refs/tags/}
+            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
 
       - name: Login to Docker Hub
@@ -50,6 +47,6 @@ jobs:
           tags: lightscale/geth:${{ steps.prepare.outputs.version }},lightscale/geth:latest
           platforms: linux/arm64,linux/amd64
           build-args: |
-            COMMIT=${{ steps.prepare.outputs.commit }}
+            COMMIT=${{ github.sha }}
             VERSION=${{ steps.prepare.outputs.version }}
-            BUILDNUM=${{ steps.prepare.outputs.build_num }}
+            BUILDNUM=${{ github.run_number }}
