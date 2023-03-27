@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/big"
 	"math/rand"
 	"os"
@@ -704,6 +705,7 @@ func TestReadLogs(t *testing.T) {
 	body := &types.Body{Transactions: types.Transactions{tx1, tx2}}
 
 	// Create the two receipts to manage afterwards
+	depositNonce := uint64(math.MaxUint64)
 	receipt1 := &types.Receipt{
 		Status:            types.ReceiptStatusFailed,
 		CumulativeGasUsed: 1,
@@ -714,6 +716,7 @@ func TestReadLogs(t *testing.T) {
 		TxHash:          tx1.Hash(),
 		ContractAddress: common.BytesToAddress([]byte{0x01, 0x11, 0x11}),
 		GasUsed:         111111,
+		DepositNonce:    &depositNonce,
 	}
 	receipt1.Bloom = types.CreateBloom(types.Receipts{receipt1})
 

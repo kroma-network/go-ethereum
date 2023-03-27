@@ -76,7 +76,6 @@ type Message interface {
 	Gas() uint64
 	Value() *big.Int
 
-	IsSystemTx() bool                   // IsSystemTx indicates the message, if also a deposit, does not emit gas usage.
 	IsDepositTx() bool                  // IsDepositTx indicates the message is force-included and can persist a mint.
 	Mint() *big.Int                     // Mint is the amount to mint before EVM processing, or nil if there is no minting.
 	RollupDataGas() types.RollupGasData // RollupDataGas indicates the rollup cost of the message, 0 if not a rollup or no cost.
@@ -253,11 +252,7 @@ func (st *StateTransition) preCheck() error {
 		// No fee fields to check, no nonce to check, and no need to check if EOA (L1 already verified it for us)
 		// Gas is free, but no refunds!
 		st.initialGas = st.msg.Gas()
-		st.gas += st.msg.Gas() // Add gas here in order to be able to execute calls.
-		// Don't touch the gas pool for system transactions
-		if st.msg.IsSystemTx() {
-			return nil
-		}
+		st.gas += st.msg.Gas()            // Add gas here in order to be able to execute calls.
 		return st.gp.SubGas(st.msg.Gas()) // gas used by deposits may not be used by other txs
 	}
 	// Only check transactions that are not fake
@@ -331,13 +326,8 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		// Even though we revert the state changes, always increment the nonce for the next deposit transaction
 		st.state.SetNonce(st.msg.From(), st.state.GetNonce(st.msg.From())+1)
 		// Record deposits as using all their gas (matches the gas pool)
-		// System Transactions are special & are not recorded as using any gas (anywhere)
-		gasUsed := st.msg.Gas()
-		if st.msg.IsSystemTx() {
-			gasUsed = 0
-		}
 		result = &ExecutionResult{
-			UsedGas:    gasUsed,
+			UsedGas:    st.msg.Gas(),
 			Err:        fmt.Errorf("failed deposit: %w", err),
 			ReturnData: nil,
 		}
@@ -416,13 +406,8 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	// if deposit: skip refunds, skip tipping coinbase
 	if st.msg.IsDepositTx() {
 		// Record deposits as using all their gas (matches the gas pool)
-		// System Transactions are special & are not recorded as using any gas (anywhere)
-		gasUsed := st.msg.Gas()
-		if st.msg.IsSystemTx() {
-			gasUsed = 0
-		}
 		return &ExecutionResult{
-			UsedGas:    gasUsed,
+			UsedGas:    st.msg.Gas(),
 			Err:        vmerr,
 			ReturnData: ret,
 		}, nil
@@ -433,6 +418,14 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	} else {
 		// After EIP-3529: refunds are capped to gasUsed / 5
 		st.refundGas(params.RefundQuotientEIP3529)
+	}
+	if st.msg.IsDepositTx() {
+		// Skip coinbase payments for deposit tx in Regolith
+		return &ExecutionResult{
+			UsedGas:    st.gasUsed(),
+			Err:        vmerr,
+			ReturnData: ret,
+		}, nil
 	}
 	effectiveTip := st.gasPrice
 	if rules.IsLondon {

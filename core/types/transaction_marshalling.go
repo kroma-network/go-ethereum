@@ -19,10 +19,12 @@ package types
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // txJSON is the JSON representation of transactions.
@@ -46,7 +48,6 @@ type txJSON struct {
 	SourceHash *common.Hash    `json:"sourceHash,omitempty"`
 	From       *common.Address `json:"from,omitempty"`
 	Mint       *hexutil.Big    `json:"mint,omitempty"`
-	IsSystemTx *bool           `json:"isSystemTx,omitempty"`
 
 	// Access list transaction fields:
 	ChainID    *hexutil.Big `json:"chainId,omitempty"`
@@ -110,7 +111,6 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		if itx.Mint != nil {
 			enc.Mint = (*hexutil.Big)(itx.Mint)
 		}
-		enc.IsSystemTx = &itx.IsSystemTransaction
 		// other fields will show up as null.
 	}
 	return json.Marshal(&enc)
@@ -320,9 +320,8 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 			return errors.New("missing required field 'sourceHash' in transaction")
 		}
 		itx.SourceHash = *dec.SourceHash
-		// IsSystemTx may be omitted. Defaults to false.
-		if dec.IsSystemTx != nil {
-			itx.IsSystemTransaction = *dec.IsSystemTx
+		if dec.Nonce != nil {
+			inner = &depositTxWithNonce{DepositTx: itx, EffectiveNonce: uint64(*dec.Nonce)}
 		}
 	default:
 		return ErrTxTypeNotSupported
@@ -334,3 +333,15 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 	// TODO: check hash here?
 	return nil
 }
+
+type depositTxWithNonce struct {
+	DepositTx
+	EffectiveNonce uint64
+}
+
+// EncodeRLP ensures that RLP encoding this transaction excludes the nonce. Otherwise, the tx Hash would change
+func (tx *depositTxWithNonce) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, tx.DepositTx)
+}
+
+func (tx *depositTxWithNonce) effectiveNonce() *uint64 { return &tx.EffectiveNonce }
