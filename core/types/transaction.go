@@ -86,7 +86,6 @@ type TxData interface {
 	value() *big.Int
 	nonce() uint64
 	to() *common.Address
-	isSystemTx() bool
 
 	rawSignatureValues() (v, r, s *big.Int)
 	setSignatureValues(chainID, v, r, s *big.Int)
@@ -288,6 +287,20 @@ func (tx *Transaction) Value() *big.Int { return new(big.Int).Set(tx.inner.value
 // Nonce returns the sender account nonce of the transaction.
 func (tx *Transaction) Nonce() uint64 { return tx.inner.nonce() }
 
+// EffectiveNonce returns the nonce that was actually used as part of transaction execution
+// Returns nil if the effective nonce is not known
+func (tx *Transaction) EffectiveNonce() *uint64 {
+	type txWithEffectiveNonce interface {
+		effectiveNonce() *uint64
+	}
+
+	if itx, ok := tx.inner.(txWithEffectiveNonce); ok {
+		return itx.effectiveNonce()
+	}
+	nonce := tx.inner.nonce()
+	return &nonce
+}
+
 // To returns the recipient address of the transaction.
 // For contract-creation transactions, To returns nil.
 func (tx *Transaction) To() *common.Address {
@@ -316,12 +329,6 @@ func (tx *Transaction) Mint() *big.Int {
 // IsDepositTx returns true if the transaction is a deposit tx type.
 func (tx *Transaction) IsDepositTx() bool {
 	return tx.Type() == DepositTxType
-}
-
-// IsSystemTx returns true for deposits that are system transactions. These transactions
-// are executed in an unmetered environment & do not contribute to the block gas limit.
-func (tx *Transaction) IsSystemTx() bool {
-	return tx.inner.isSystemTx()
 }
 
 // Cost returns gas * gasPrice + value.
@@ -663,7 +670,6 @@ type Message struct {
 	accessList AccessList
 	isFake     bool
 	// Kanvas rollup fields
-	isSystemTx  bool
 	isDepositTx bool
 	mint        *big.Int
 	l1CostGas   RollupGasData
@@ -683,7 +689,6 @@ func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *b
 		accessList: accessList,
 		isFake:     isFake,
 		// Kanvas rollup fields
-		isSystemTx:  false,
 		isDepositTx: false,
 		mint:        nil,
 		l1CostGas:   RollupGasData{},
@@ -704,7 +709,6 @@ func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 		accessList: tx.AccessList(),
 		isFake:     false,
 		// Kanvas rollup fields
-		isSystemTx:  tx.inner.isSystemTx(),
 		isDepositTx: tx.IsDepositTx(),
 		mint:        tx.Mint(),
 		l1CostGas:   tx.RollupDataGas(),
@@ -730,7 +734,6 @@ func (m Message) Data() []byte           { return m.data }
 func (m Message) AccessList() AccessList { return m.accessList }
 func (m Message) IsFake() bool           { return m.isFake }
 
-func (m Message) IsSystemTx() bool             { return m.isSystemTx }
 func (m Message) IsDepositTx() bool            { return m.isDepositTx }
 func (m Message) Mint() *big.Int               { return m.mint }
 func (m Message) RollupDataGas() RollupGasData { return m.l1CostGas }
