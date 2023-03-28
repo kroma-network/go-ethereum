@@ -41,13 +41,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Publish lightscale geth
+      - name: Publish wemixkanvas geth
         uses: docker/build-push-action@v4
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: lightscale/geth:${{ steps.prepare.outputs.version }},lightscale/geth:latest
+          tags: wemixkanvas/geth:${{ steps.prepare.outputs.version }},wemixkanvas/geth:latest
           platforms: linux/arm64,linux/amd64
           build-args: |
             COMMIT=${{ steps.prepare.outputs.commit }}
