@@ -22,8 +22,8 @@ import (
 	"bytes"
 	"fmt"
 
-	zktrie "github.com/wemixkanvas/zktrie/trie"
-	zkt "github.com/wemixkanvas/zktrie/types"
+	zktrie "github.com/kroma-network/zktrie/trie"
+	zkt "github.com/kroma-network/zktrie/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"

@@ -62,7 +62,7 @@ func NewL1CostFunc(config *params.ChainConfig, statedb StateGetter) L1CostFunc {
 	var l1BaseFee, overhead, scalar *big.Int
 	return func(blockNum uint64, msg RollupMessage) *big.Int {
 		rollupDataGas := msg.RollupDataGas().DataGas() // Only fake txs for RPC view-calls are 0.
-		if config.Kanvas == nil || msg.IsDepositTx() || rollupDataGas == 0 {
+		if config.Kroma == nil || msg.IsDepositTx() || rollupDataGas == 0 {
 			return nil
 		}
 		if blockNum != cacheBlockNum {

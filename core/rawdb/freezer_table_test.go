@@ -17,7 +17,7 @@
 package rawdb
 
 /*
-TODO(chokobole): Reenable this test. See https://github.com/wemixkanvas/go-ethereum/issues/21.
+TODO(chokobole): Reenable this test. See https://github.com/kroma-network/go-ethereum/issues/21.
 
 import (
 	"bytes"
@@ -867,7 +867,7 @@ func getChunk(size int, b int) []byte {
 }
 
 /*
-TODO(chokobole): Reenable this test. See https://github.com/wemixkanvas/go-ethereum/issues/21.
+TODO(chokobole): Reenable this test. See https://github.com/kroma-network/go-ethereum/issues/21.
 // TODO (?)
 // - test that if we remove several head-files, aswell as data last data-file,
 //   the index is truncated accordingly

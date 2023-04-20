@@ -26,7 +26,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	zkt "github.com/wemixkanvas/zktrie/types"
+	zkt "github.com/kroma-network/zktrie/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"

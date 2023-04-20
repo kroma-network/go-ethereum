@@ -322,13 +322,13 @@ func (ec *Client) SubscribeNewHead(ctx context.Context, ch chan<- *types.Header)
 // GetBlockTraceByHash returns the BlockResult given the block hash.
 func (ec *Client) GetBlockTraceByHash(ctx context.Context, blockHash common.Hash) (*types.BlockTrace, error) {
 	blockResult := &types.BlockTrace{}
-	return blockResult, ec.c.CallContext(ctx, &blockResult, "kanvas_getBlockTraceByNumberOrHash", blockHash)
+	return blockResult, ec.c.CallContext(ctx, &blockResult, "kroma_getBlockTraceByNumberOrHash", blockHash)
 }
 
 // GetBlockTraceByNumber returns the BlockResult given the block number.
 func (ec *Client) GetBlockTraceByNumber(ctx context.Context, number *big.Int) (*types.BlockTrace, error) {
 	blockResult := &types.BlockTrace{}
-	return blockResult, ec.c.CallContext(ctx, &blockResult, "kanvas_getBlockTraceByNumberOrHash", toBlockNumArg(number))
+	return blockResult, ec.c.CallContext(ctx, &blockResult, "kroma_getBlockTraceByNumberOrHash", toBlockNumArg(number))
 }
 
 // SubscribeNewBlockTrace subscribes to block execution trace when a new block is created.

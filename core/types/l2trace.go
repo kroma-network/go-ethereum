@@ -25,7 +25,7 @@ var (
 	}
 )
 
-// BlockTrace contains block execution traces and results required for kanvas-prover.
+// BlockTrace contains block execution traces and results required for kroma-prover.
 type BlockTrace struct {
 	ChainID          uint64             `json:"chainID"`
 	Version          string             `json:"version"`

@@ -669,7 +669,7 @@ type Message struct {
 	data       []byte
 	accessList AccessList
 	isFake     bool
-	// Kanvas rollup fields
+	// Kroma rollup fields
 	isDepositTx bool
 	mint        *big.Int
 	l1CostGas   RollupGasData
@@ -688,7 +688,7 @@ func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *b
 		data:       data,
 		accessList: accessList,
 		isFake:     isFake,
-		// Kanvas rollup fields
+		// Kroma rollup fields
 		isDepositTx: false,
 		mint:        nil,
 		l1CostGas:   RollupGasData{},
@@ -708,7 +708,7 @@ func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 		data:       tx.Data(),
 		accessList: tx.AccessList(),
 		isFake:     false,
-		// Kanvas rollup fields
+		// Kroma rollup fields
 		isDepositTx: tx.IsDepositTx(),
 		mint:        tx.Mint(),
 		l1CostGas:   tx.RollupDataGas(),

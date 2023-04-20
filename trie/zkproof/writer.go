@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"math/big"
 
-	zktrie "github.com/wemixkanvas/zktrie/trie"
-	zkt "github.com/wemixkanvas/zktrie/types"
+	zktrie "github.com/kroma-network/zktrie/trie"
+	zkt "github.com/kroma-network/zktrie/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -232,7 +232,7 @@ const (
 	posCALL         = 2
 	posSTATICCALL   = 0
 
-// posSELFDESTRUCT = 2
+	// posSELFDESTRUCT = 2
 )
 
 func getAccountState(l *types.StructLogRes, pos int) *types.AccountWrapper {

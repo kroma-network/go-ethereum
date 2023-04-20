@@ -261,7 +261,7 @@ func TestTraceCall(t *testing.T) {
 			expectErr: fmt.Errorf("block #%d %w", genBlocks+1, ethereum.NotFound),
 			//expect:    nil,
 		},
-		// Kanvas: Trace block that doesn't exist anywhere
+		// Kroma: Trace block that doesn't exist anywhere
 		{
 			blockNumber: rpc.BlockNumber(39347856),
 			call: ethapi.TransactionArgs{

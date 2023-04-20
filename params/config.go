@@ -343,11 +343,11 @@ var (
 	}
 	TestRules = TestChainConfig.Rules(new(big.Int), false, 0)
 
-	// This is a Kanvas chain config based on the clique config
-	KanvasTestConfig = func() *ChainConfig {
+	// This is a Kroma chain config based on the clique config
+	KromaTestConfig = func() *ChainConfig {
 		conf := *AllCliqueProtocolChanges // copy the config
 		conf.Clique = nil
-		conf.Kanvas = &KanvasConfig{EIP1559Elasticity: 50, EIP1559Denominator: 10}
+		conf.Kroma = &KromaConfig{EIP1559Elasticity: 50, EIP1559Denominator: 10}
 		return &conf
 	}()
 )
@@ -458,8 +458,8 @@ type ChainConfig struct {
 	Ethash *EthashConfig `json:"ethash,omitempty"`
 	Clique *CliqueConfig `json:"clique,omitempty"`
 
-	// Kanvas config, nil if not active
-	Kanvas *KanvasConfig `json:"kanvas,omitempty"`
+	// Kroma config, nil if not active
+	Kroma *KromaConfig `json:"kroma,omitempty"`
 
 	// [Scroll: START]
 	// Use zktrie
@@ -489,15 +489,15 @@ func (c *CliqueConfig) String() string {
 	return "clique"
 }
 
-// KanvasConfig is the kanvas config.
-type KanvasConfig struct {
+// KromaConfig is the kroma config.
+type KromaConfig struct {
 	EIP1559Elasticity  uint64 `json:"eip1559Elasticity"`
 	EIP1559Denominator uint64 `json:"eip1559Denominator"`
 }
 
-// String implements the stringer interface, returning the kanvas fee config details.
-func (o *KanvasConfig) String() string {
-	return "kanvas"
+// String implements the stringer interface, returning the kroma fee config details.
+func (o *KromaConfig) String() string {
+	return "kroma"
 }
 
 // Description returns a human-readable description of ChainConfig.
@@ -511,8 +511,8 @@ func (c *ChainConfig) Description() string {
 	}
 	banner += fmt.Sprintf("Chain ID:  %v (%s)\n", c.ChainID, network)
 	switch {
-	case c.Kanvas != nil:
-		banner += "Consensus: Kanvas\n"
+	case c.Kroma != nil:
+		banner += "Consensus: Kroma\n"
 	case c.Ethash != nil:
 		if c.TerminalTotalDifficulty == nil {
 			banner += "Consensus: Ethash (proof-of-work)\n"
@@ -686,9 +686,9 @@ func (c *ChainConfig) IsPrague(time uint64) bool {
 	return isTimestampForked(c.PragueTime, time)
 }
 
-// IsKanvas returns whether the node is a kanvas node or not.
-func (c *ChainConfig) IsKanvas() bool {
-	return c.Kanvas != nil
+// IsKroma returns whether the node is a kroma node or not.
+func (c *ChainConfig) IsKroma() bool {
+	return c.Kroma != nil
 }
 
 // [Scroll: START]
@@ -861,16 +861,16 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, headNumber *big.Int, 
 
 // BaseFeeChangeDenominator bounds the amount the base fee can change between blocks.
 func (c *ChainConfig) BaseFeeChangeDenominator() uint64 {
-	if c.Kanvas != nil {
-		return c.Kanvas.EIP1559Denominator
+	if c.Kroma != nil {
+		return c.Kroma.EIP1559Denominator
 	}
 	return DefaultBaseFeeChangeDenominator
 }
 
 // ElasticityMultiplier bounds the maximum gas limit an EIP-1559 block may have.
 func (c *ChainConfig) ElasticityMultiplier() uint64 {
-	if c.Kanvas != nil {
-		return c.Kanvas.EIP1559Elasticity
+	if c.Kroma != nil {
+		return c.Kroma.EIP1559Elasticity
 	}
 	return DefaultElasticityMultiplier
 }
