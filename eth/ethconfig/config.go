@@ -208,7 +208,7 @@ type Config struct {
 	// OverrideShanghai (TODO: remove after the fork)
 	OverrideShanghai *uint64 `toml:",omitempty"`
 
-	OverrideKanvas *bool
+	OverrideKroma *bool
 
 	// [Scroll: START]
 	// Trace option

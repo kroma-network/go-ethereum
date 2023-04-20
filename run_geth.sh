@@ -56,12 +56,12 @@ exec build/bin/geth \
 	--http.vhosts="*" \
 	--http.addr=0.0.0.0 \
 	--http.port="$RPC_PORT" \
-	--http.api=web3,debug,eth,txpool,net,engine,kanvas \
+	--http.api=web3,debug,eth,txpool,net,engine,kroma \
 	--ws \
 	--ws.addr=0.0.0.0 \
 	--ws.port="$WS_PORT" \
 	--ws.origins="*" \
-	--ws.api=debug,eth,txpool,net,engine,kanvas \
+	--ws.api=debug,eth,txpool,net,engine,kroma \
 	--syncmode=full \
 	--nodiscover \
 	--maxpeers=1 \

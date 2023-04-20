@@ -501,8 +501,8 @@ func (l *StructLogger) Output() []byte { return l.output }
 
 func (l *StructLogger) MaybeAddFeeRecipientsToStatesAffected(tx *types.Transaction) {
 	if !tx.IsDepositTx() {
-		l.statesAffected[params.KanvasBaseFeeRecipient] = struct{}{}
-		l.statesAffected[params.KanvasL1FeeRecipient] = struct{}{}
+		l.statesAffected[params.KromaBaseFeeRecipient] = struct{}{}
+		l.statesAffected[params.KromaL1FeeRecipient] = struct{}{}
 	}
 }
 

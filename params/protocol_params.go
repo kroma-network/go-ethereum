@@ -24,9 +24,9 @@ import (
 
 var (
 	// The base fee portion of the transaction fee accumulates at this predeploy
-	KanvasBaseFeeRecipient = common.HexToAddress("0x4200000000000000000000000000000000000006")
+	KromaBaseFeeRecipient = common.HexToAddress("0x4200000000000000000000000000000000000006")
 	// The L1 portion of the transaction fee accumulates at this predeploy
-	KanvasL1FeeRecipient = common.HexToAddress("0x4200000000000000000000000000000000000007")
+	KromaL1FeeRecipient = common.HexToAddress("0x4200000000000000000000000000000000000007")
 )
 
 const (

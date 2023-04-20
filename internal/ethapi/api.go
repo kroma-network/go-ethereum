@@ -1692,7 +1692,7 @@ func (s *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash common.
 		"logsBloom":         receipt.Bloom,
 		"type":              hexutil.Uint(tx.Type()),
 	}
-	if s.b.ChainConfig().Kanvas != nil {
+	if s.b.ChainConfig().Kroma != nil {
 		if tx.IsDepositTx() {
 			fields["depositNonce"] = hexutil.Uint64(*receipt.DepositNonce)
 		} else {

@@ -166,9 +166,9 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 		v := ctx.Uint64(utils.OverrideShanghai.Name)
 		cfg.Eth.OverrideShanghai = &v
 	}
-	if ctx.IsSet(utils.OverrideKanvas.Name) {
-		override := ctx.Bool(utils.OverrideKanvas.Name)
-		cfg.Eth.OverrideKanvas = &override
+	if ctx.IsSet(utils.OverrideKroma.Name) {
+		override := ctx.Bool(utils.OverrideKroma.Name)
+		cfg.Eth.OverrideKroma = &override
 	}
 
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)

@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"testing"
 
-	zktrie "github.com/wemixkanvas/zktrie/types"
+	zktrie "github.com/kroma-network/zktrie/types"
 
 	"github.com/ethereum/go-ethereum/common"
 )

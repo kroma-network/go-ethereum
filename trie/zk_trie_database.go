@@ -7,7 +7,7 @@ import (
 
 	"github.com/syndtr/goleveldb/leveldb"
 
-	zktrie "github.com/wemixkanvas/zktrie/trie"
+	zktrie "github.com/kroma-network/zktrie/trie"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
