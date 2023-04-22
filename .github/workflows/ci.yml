@@ -44,7 +44,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: kroma-network/geth:${{ steps.prepare.outputs.version }},kroma-network/geth:latest
+          tags: kromanetwork/geth:${{ steps.prepare.outputs.version }},kromanetwork/geth:latest
           platforms: linux/arm64,linux/amd64
           build-args: |
             COMMIT=${{ github.sha }}
