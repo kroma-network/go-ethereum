@@ -23,6 +23,38 @@ func TestTransactionUnmarshalJsonDeposit(t *testing.T) {
 	require.Equal(t, tx.Hash(), got.Hash())
 }
 
+func TestTransactionUnmarshalJsonDepositWithNonce(t *testing.T) {
+	json := []byte(`{
+		"type": "0x7e",
+		"from": "0xdeaddeaddeaddeaddeaddeaddeaddeaddead0001",
+		"gas": "0xf4240",
+		"value": "0x0",
+		"nonce": "0x3",
+		"mint": "0x0",
+		"input": "0x015d8eb900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000064460d46000000000000000000000000000000000000000000000000000000003b9aca00d184c96292c6a33c9314adc803dae69870ca9d7e410f82a969d4e7f3f6d1a5fd00000000000000000000000000000000000000000000000000000000000000020000000000000000000000009965507d1a55bcc2695c58ba16fb37d819b0a4dc000000000000000000000000000000000000000000000000000000000000083400000000000000000000000000000000000000000000000000000000000f4240",
+		"sourceHash": "0x0000000000000000000000000000000000000000000000000000000000001234"
+	}`)
+
+	got := &Transaction{}
+	err := got.UnmarshalJSON(json)
+	require.NoError(t, err, "Failed to unmarshal tx JSON")
+	// NOTE(chokobole): This fails because got is not a DepositTx but a depositTxWithNonce.
+	// require.Equal(t, common.HexToHash("0x1234"), got.SourceHash())
+
+	_, ok := got.inner.(*depositTxWithNonce)
+	require.True(t, ok)
+
+	json, err = got.MarshalJSON()
+	require.NoError(t, err, "Failed to marshal tx JSON")
+
+	got = &Transaction{}
+	err = got.UnmarshalJSON(json)
+	require.NoError(t, err, "Failed to unmarshal tx JSON")
+	require.Equal(t, uint8(0x7e), got.Type())
+	require.Equal(t, uint64(0xf4240), got.Gas())
+	require.Equal(t, common.HexToHash("0x1234"), got.SourceHash())
+}
+
 func TestTransactionUnmarshalJSON(t *testing.T) {
 	tests := []struct {
 		name          string

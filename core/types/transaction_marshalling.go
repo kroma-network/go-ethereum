@@ -112,6 +112,20 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 			enc.Mint = (*hexutil.Big)(itx.Mint)
 		}
 		// other fields will show up as null.
+	// NOTE(chokobole): When unmarshalling the DepositTx from the RPC transaction format,
+	// it is transformed into depositTxWithNonce. This unexpected transformation can cause data loss,
+	// so this case statement was added as a temporary measure.
+	case *depositTxWithNonce:
+		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
+		enc.Value = (*hexutil.Big)(itx.Value)
+		enc.Data = (*hexutil.Bytes)(&itx.Data)
+		enc.To = tx.To()
+		enc.SourceHash = &itx.SourceHash
+		enc.From = &itx.From
+		if itx.Mint != nil {
+			enc.Mint = (*hexutil.Big)(itx.Mint)
+		}
+		// other fields will show up as null.
 	}
 	return json.Marshal(&enc)
 }
