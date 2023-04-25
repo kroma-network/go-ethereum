@@ -173,6 +173,7 @@ func (api *API) getBlockTrace(block *types.Block, env *traceEnv) (*types.BlockTr
 		msg, _ := tx.AsMessage(env.signer, block.BaseFee())
 		env.state.SetTxContext(tx.Hash(), i)
 		env.blockCtx.L1CostFunc = types.NewL1CostFunc(api.backend.ChainConfig(), env.state)
+		env.blockCtx.FeeDistributionFunc = types.NewFeeDistributionFunc(api.backend.ChainConfig(), env.state)
 		vmenv := vm.NewEVM(env.blockCtx, core.NewEVMTxContext(msg), env.state, api.backend.ChainConfig(), vm.Config{})
 		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas())); err != nil {
 			failed = err
@@ -227,6 +228,7 @@ func (api *API) getTxResult(env *traceEnv, state *state.StateDB, index int, bloc
 	}
 
 	env.blockCtx.L1CostFunc = types.NewL1CostFunc(api.backend.ChainConfig(), state)
+	env.blockCtx.FeeDistributionFunc = types.NewFeeDistributionFunc(api.backend.ChainConfig(), state)
 	tracer := vm.NewStructLogger(env.config.LogConfig)
 	// Run the transaction with tracing enabled.
 	vmenv := vm.NewEVM(env.blockCtx, core.NewEVMTxContext(msg), state, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true})

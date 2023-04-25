@@ -56,6 +56,8 @@ func (p *statePrefetcher) Prefetch(block *types.Block, statedb *state.StateDB, c
 		signer       = types.MakeSigner(p.config, header.Number)
 	)
 	blockContext.L1CostFunc = types.NewL1CostFunc(p.config, statedb)
+	blockContext.FeeDistributionFunc = types.NewFeeDistributionFunc(p.config, statedb)
+
 	// Iterate over and process the individual transactions
 	byzantium := p.config.IsByzantium(block.Number())
 	for i, tx := range block.Transactions() {

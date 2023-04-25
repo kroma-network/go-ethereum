@@ -432,19 +432,28 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		effectiveTip = cmath.BigMin(st.gasTipCap, new(big.Int).Sub(st.gasFeeCap, st.evm.Context.BaseFee))
 	}
 
+	kromaConfig := st.evm.ChainConfig().Kroma
+	blockNum := st.evm.Context.BlockNumber.Uint64()
+
 	if st.evm.Config.NoBaseFee && st.gasFeeCap.Sign() == 0 && st.gasTipCap.Sign() == 0 {
 		// Skip fee payment when NoBaseFee is set and the fee fields
 		// are 0. This avoids a negative effectiveTip being applied to
 		// the coinbase when simulating calls.
 	} else {
-		fee := new(big.Int).SetUint64(st.gasUsed())
-		fee.Mul(fee, effectiveTip)
-		st.state.AddBalance(st.evm.Context.Coinbase, fee)
+		gasUsed := new(big.Int).SetUint64(st.gasUsed())
+		if kromaConfig != nil {
+			feeDist := st.evm.Context.FeeDistributionFunc(blockNum, gasUsed, st.evm.Context.BaseFee, effectiveTip)
+			st.state.AddBalance(st.evm.Context.Coinbase, feeDist.Reward)
+			st.state.AddBalance(params.KromaBaseFeeRecipient, feeDist.Protocol)
+		} else {
+			fee := new(big.Int)
+			fee.Mul(gasUsed, effectiveTip)
+			st.state.AddBalance(st.evm.Context.Coinbase, fee)
+		}
 	}
 
-	if kromaConfig := st.evm.ChainConfig().Kroma; kromaConfig != nil {
-		st.state.AddBalance(params.KromaBaseFeeRecipient, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
-		if cost := st.evm.Context.L1CostFunc(st.evm.Context.BlockNumber.Uint64(), st.msg); cost != nil {
+	if kromaConfig != nil {
+		if cost := st.evm.Context.L1CostFunc(blockNum, st.msg); cost != nil {
 			st.state.AddBalance(params.KromaL1FeeRecipient, cost)
 		}
 	}
