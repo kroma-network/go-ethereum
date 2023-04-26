@@ -295,6 +295,7 @@ func (api *API) traceChain(start, end *types.Block, config *TraceConfig, closed 
 					blockCtx = core.NewEVMBlockContext(task.block.Header(), api.chainContext(ctx), nil)
 				)
 				blockCtx.L1CostFunc = types.NewL1CostFunc(api.backend.ChainConfig(), task.statedb)
+				blockCtx.FeeDistributionFunc = types.NewFeeDistributionFunc(api.backend.ChainConfig(), task.statedb)
 				// Trace all the transactions contained within
 				for i, tx := range task.block.Transactions() {
 					msg, _ := tx.AsMessage(signer, task.block.BaseFee())
@@ -553,6 +554,7 @@ func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config 
 		deleteEmptyObjects = chainConfig.IsEIP158(block.Number())
 	)
 	vmctx.L1CostFunc = types.NewL1CostFunc(chainConfig, statedb)
+	vmctx.FeeDistributionFunc = types.NewFeeDistributionFunc(chainConfig, statedb)
 	for i, tx := range block.Transactions() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -675,6 +677,7 @@ func (api *API) traceBlockParallel(ctx context.Context, block *types.Block, stat
 			for task := range jobs {
 				blockCtx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
 				blockCtx.L1CostFunc = types.NewL1CostFunc(api.backend.ChainConfig(), task.statedb)
+				blockCtx.FeeDistributionFunc = types.NewFeeDistributionFunc(api.backend.ChainConfig(), task.statedb)
 				msg, _ := txs[task.index].AsMessage(signer, block.BaseFee())
 				txctx := &Context{
 					BlockHash: blockHash,
@@ -695,6 +698,7 @@ func (api *API) traceBlockParallel(ctx context.Context, block *types.Block, stat
 	var failed error
 	blockCtx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
 	blockCtx.L1CostFunc = types.NewL1CostFunc(api.backend.ChainConfig(), statedb)
+	blockCtx.FeeDistributionFunc = types.NewFeeDistributionFunc(api.backend.ChainConfig(), statedb)
 txloop:
 	for i, tx := range txs {
 		// Send the trace task over for execution
@@ -785,6 +789,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 		chainConfig, canon = overrideConfig(chainConfig, config.Overrides)
 	}
 	vmctx.L1CostFunc = types.NewL1CostFunc(chainConfig, statedb)
+	vmctx.FeeDistributionFunc = types.NewFeeDistributionFunc(chainConfig, statedb)
 	for i, tx := range block.Transactions() {
 		// Prepare the transaction for un-traced execution
 		var (
@@ -938,6 +943,7 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 		config.BlockOverrides.Apply(&vmctx)
 	}
 	vmctx.L1CostFunc = types.NewL1CostFunc(api.backend.ChainConfig(), statedb)
+	vmctx.FeeDistributionFunc = types.NewFeeDistributionFunc(api.backend.ChainConfig(), statedb)
 	// Execute the trace
 	msg, err := args.ToMessage(api.backend.RPCGasCap(), block.BaseFee())
 	if err != nil {
