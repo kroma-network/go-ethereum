@@ -170,11 +170,11 @@ func (api *API) getBlockTrace(block *types.Block, env *traceEnv) (*types.BlockTr
 		jobs <- &txTraceTask{statedb: env.state.Copy(), index: i}
 
 		// Generate the next state snapshot fast without tracing
-		msg, _ := tx.AsMessage(env.signer, block.BaseFee())
+		msg, _ := core.TransactionToMessage(tx, env.signer, block.BaseFee())
 		env.state.SetTxContext(tx.Hash(), i)
 		env.blockCtx.L1CostFunc = types.NewL1CostFunc(api.backend.ChainConfig(), env.state)
 		vmenv := vm.NewEVM(env.blockCtx, core.NewEVMTxContext(msg), env.state, api.backend.ChainConfig(), vm.Config{})
-		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas())); err != nil {
+		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.GasLimit)); err != nil {
 			failed = err
 			break
 		}
@@ -200,7 +200,7 @@ func (api *API) getBlockTrace(block *types.Block, env *traceEnv) (*types.BlockTr
 
 func (api *API) getTxResult(env *traceEnv, state *state.StateDB, index int, block *types.Block) error {
 	tx := block.Transactions()[index]
-	msg, _ := tx.AsMessage(env.signer, block.BaseFee())
+	msg, _ := core.TransactionToMessage(tx, env.signer, block.BaseFee())
 	from, _ := types.Sender(env.signer, tx)
 	to := tx.To()
 
@@ -235,7 +235,7 @@ func (api *API) getTxResult(env *traceEnv, state *state.StateDB, index int, bloc
 	state.SetTxContext(txctx.TxHash, txctx.TxIndex)
 
 	// Computes the new state by applying the given message.
-	result, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()))
+	result, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.GasLimit))
 	if err != nil {
 		return fmt.Errorf("tracing failed: %w", err)
 	}
