@@ -108,7 +108,7 @@ func (api *API) createTraceEnv(ctx context.Context, config *TraceConfig, block *
 		coinbase: coinbase,
 		signer:   types.MakeSigner(api.backend.ChainConfig(), block.Number()),
 		state:    statedb,
-		blockCtx: core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil),
+		blockCtx: core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil, api.backend.ChainConfig(), statedb),
 		StorageTrace: &types.StorageTrace{
 			RootBefore:    parent.Root(),
 			RootAfter:     block.Root(),
