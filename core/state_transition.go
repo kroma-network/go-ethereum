@@ -444,7 +444,7 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		if kromaConfig != nil {
 			feeDist := st.evm.Context.FeeDistributionFunc(blockNum, gasUsed, st.evm.Context.BaseFee, effectiveTip)
 			st.state.AddBalance(st.evm.Context.Coinbase, feeDist.Reward)
-			st.state.AddBalance(params.KromaBaseFeeRecipient, feeDist.Protocol)
+			st.state.AddBalance(params.KromaProtocolVault, feeDist.Protocol)
 		} else {
 			fee := new(big.Int)
 			fee.Mul(gasUsed, effectiveTip)
@@ -454,7 +454,7 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 
 	if kromaConfig != nil {
 		if cost := st.evm.Context.L1CostFunc(blockNum, st.msg); cost != nil {
-			st.state.AddBalance(params.KromaL1FeeRecipient, cost)
+			st.state.AddBalance(params.KromaProposerRewardVault, cost)
 		}
 	}
 
