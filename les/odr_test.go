@@ -133,19 +133,17 @@ func odrContractCall(ctx context.Context, db ethdb.Database, config *params.Chai
 				from := statedb.GetOrNewStateObject(bankAddr)
 				from.SetBalance(math.MaxBig256)
 
-				msg := core.NewMessage(
-					from.Address(),
-					&testContractAddr,
-					0,
-					new(big.Int),
-					100000,
-					big.NewInt(params.InitialBaseFee),
-					big.NewInt(params.InitialBaseFee),
-					new(big.Int),
-					data,
-					nil,
-					true,
-				)
+				msg := &core.Message{
+					From:              bankAddr,
+					To:                &testContractAddr,
+					Value:             new(big.Int),
+					GasLimit:          100000,
+					GasPrice:          big.NewInt(params.InitialBaseFee),
+					GasFeeCap:         big.NewInt(params.InitialBaseFee),
+					GasTipCap:         new(big.Int),
+					Data:              data,
+					SkipAccountChecks: true,
+				}
 
 				context := core.NewEVMBlockContext(header, bc, nil, config, statedb)
 				txContext := core.NewEVMTxContext(msg)
@@ -163,19 +161,17 @@ func odrContractCall(ctx context.Context, db ethdb.Database, config *params.Chai
 			state := light.NewState(ctx, header, lc.Odr(), false)
 			// [Scroll: END]
 			state.SetBalance(bankAddr, math.MaxBig256)
-			msg := core.NewMessage(
-				bankAddr,
-				&testContractAddr,
-				0,
-				new(big.Int),
-				100000,
-				big.NewInt(params.InitialBaseFee),
-				big.NewInt(params.InitialBaseFee),
-				new(big.Int),
-				data,
-				nil,
-				true,
-			)
+			msg := &core.Message{
+				From:              bankAddr,
+				To:                &testContractAddr,
+				Value:             new(big.Int),
+				GasLimit:          100000,
+				GasPrice:          big.NewInt(params.InitialBaseFee),
+				GasFeeCap:         big.NewInt(params.InitialBaseFee),
+				GasTipCap:         new(big.Int),
+				Data:              data,
+				SkipAccountChecks: true,
+			}
 			context := core.NewEVMBlockContext(header, lc, nil, config, state)
 			txContext := core.NewEVMTxContext(msg)
 			vmenv := vm.NewEVM(context, txContext, state, config, vm.Config{NoBaseFee: true})
@@ -305,7 +301,7 @@ func testGetTxStatusFromUnindexedPeers(t *testing.T, protocol int) {
 		blockHashes  = make(map[common.Hash]common.Hash)        // Transaction hash to block hash mappings
 		intraIndex   = make(map[common.Hash]uint64)             // Transaction intra-index in block
 	)
-	for number := uint64(1); number < server.backend.Blockchain().CurrentBlock().NumberU64(); number++ {
+	for number := uint64(1); number < server.backend.Blockchain().CurrentBlock().Number.Uint64(); number++ {
 		block := server.backend.Blockchain().GetBlockByNumber(number)
 		if block == nil {
 			t.Fatalf("Failed to retrieve block %d", number)

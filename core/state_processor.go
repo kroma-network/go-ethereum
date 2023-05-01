@@ -138,7 +138,7 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	receipt.GasUsed = result.UsedGas
 
 	nonce := tx.Nonce()
-	if msg.IsDepositTx() {
+	if msg.IsDepositTx {
 		nonce = statedb.GetNonce(msg.From)
 		receipt.DepositNonce = &nonce
 	}

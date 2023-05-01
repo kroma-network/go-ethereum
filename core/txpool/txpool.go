@@ -153,7 +153,7 @@ const (
 // blockChain provides the state of blockchain and current gas limit to do
 // some pre checks in tx pool and event subscribers.
 type blockChain interface {
-	CurrentBlock() *types.Block
+	CurrentBlock() *types.Header
 	GetBlock(hash common.Hash, number uint64) *types.Block
 	StateAt(root common.Hash) (*state.StateDB, error)
 
@@ -260,7 +260,7 @@ type TxPool struct {
 	pendingNonces *noncer        // Pending state tracking virtual nonces
 	currentMaxGas uint64         // Current gas limit for transaction caps
 
-	l1CostFn func(message types.RollupMessage) *big.Int // Current L1 fee cost function
+	l1CostFn func(dataGas types.RollupGasData, isDepositTx bool) *big.Int // Current L1 fee cost function
 
 	locals  *accountSet // Set of local transaction to exempt from eviction rules
 	journal *journal    // Journal of local transaction to back up to disk
@@ -319,7 +319,7 @@ func NewTxPool(config Config, chainconfig *params.ChainConfig, chain blockChain)
 		pool.locals.add(addr)
 	}
 	pool.priced = newPricedList(pool.all)
-	pool.reset(nil, chain.CurrentBlock().Header())
+	pool.reset(nil, chain.CurrentBlock())
 
 	// Start the reorg loop early so it can handle requests generated during journal loading.
 	pool.wg.Add(1)
@@ -371,8 +371,8 @@ func (pool *TxPool) loop() {
 		// Handle ChainHeadEvent
 		case ev := <-pool.chainHeadCh:
 			if ev.Block != nil {
-				pool.requestReset(head.Header(), ev.Block.Header())
-				head = ev.Block
+				pool.requestReset(head, ev.Block.Header())
+				head = ev.Block.Header()
 			}
 
 		// System shutdown.
@@ -656,7 +656,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
 	cost := tx.Cost()
-	if l1Cost := pool.l1CostFn(tx); l1Cost != nil { // add rollup cost
+	if l1Cost := pool.l1CostFn(tx.RollupDataGas(), tx.IsDepositTx()); l1Cost != nil { // add rollup cost
 		cost = cost.Add(cost, l1Cost)
 	}
 	balance := pool.currentState.GetBalance(from)
@@ -1378,7 +1378,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	}
 	// Initialize the internal state to the current head
 	if newHead == nil {
-		newHead = pool.chain.CurrentBlock().Header() // Special case during testing
+		newHead = pool.chain.CurrentBlock() // Special case during testing
 	}
 	statedb, err := pool.chain.StateAt(newHead.Root)
 	if err != nil {
@@ -1390,8 +1390,8 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	pool.currentMaxGas = newHead.GasLimit
 
 	costFn := types.NewL1CostFunc(pool.chainconfig, statedb)
-	pool.l1CostFn = func(message types.RollupMessage) *big.Int {
-		return costFn(newHead.Number.Uint64(), message)
+	pool.l1CostFn = func(dataGas types.RollupGasData, isDepositTx bool) *big.Int {
+		return costFn(newHead.Number.Uint64(), newHead.Time, dataGas, isDepositTx)
 	}
 
 	// Inject any transactions discarded due to reorgs
@@ -1430,7 +1430,8 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 		balance := pool.currentState.GetBalance(addr)
 		if !list.Empty() {
 			// Reduce the cost-cap by L1 rollup cost of the first tx if necessary. Other txs will get filtered out afterwards.
-			if l1Cost := pool.l1CostFn(list.txs.FirstElement()); l1Cost != nil {
+			el := list.txs.FirstElement()
+			if l1Cost := pool.l1CostFn(el.RollupDataGas(), el.IsDepositTx()); l1Cost != nil {
 				balance = new(big.Int).Sub(balance, l1Cost) // negative big int is fine
 			}
 		}
@@ -1634,7 +1635,8 @@ func (pool *TxPool) demoteUnexecutables() {
 		balance := pool.currentState.GetBalance(addr)
 		if !list.Empty() {
 			// Reduce the cost-cap by L1 rollup cost of the first tx if necessary. Other txs will get filtered out afterwards.
-			if l1Cost := pool.l1CostFn(list.txs.FirstElement()); l1Cost != nil {
+			el := list.txs.FirstElement()
+			if l1Cost := pool.l1CostFn(el.RollupDataGas(), el.IsDepositTx()); l1Cost != nil {
 				balance = new(big.Int).Sub(balance, l1Cost) // negative big int is fine
 			}
 		}

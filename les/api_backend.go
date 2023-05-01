@@ -59,8 +59,8 @@ func (b *LesApiBackend) CacheConfig() *core.CacheConfig {
 
 // [Scroll: END]
 
-func (b *LesApiBackend) CurrentBlock() *types.Block {
-	return types.NewBlockWithHeader(b.eth.BlockChain().CurrentHeader())
+func (b *LesApiBackend) CurrentBlock() *types.Header {
+	return b.eth.BlockChain().CurrentHeader()
 }
 
 func (b *LesApiBackend) SetHead(number uint64) {

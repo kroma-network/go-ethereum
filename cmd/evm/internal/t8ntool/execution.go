@@ -177,8 +177,12 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 		vmConfig.Tracer = tracer
 		vmConfig.Debug = (tracer != nil)
 		statedb.SetTxContext(tx.Hash(), txIndex)
-		txContext := core.NewEVMTxContext(msg)
-		snapshot := statedb.Snapshot()
+
+		var (
+			txContext = core.NewEVMTxContext(msg)
+			snapshot  = statedb.Snapshot()
+			prevGas   = gaspool.Gas()
+		)
 		evm := vm.NewEVM(vmContext, txContext, statedb, chainConfig, vmConfig)
 
 		// (ret []byte, usedGas uint64, failed bool, err error)
@@ -187,6 +191,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 			statedb.RevertToSnapshot(snapshot)
 			log.Info("rejected tx", "index", i, "hash", tx.Hash(), "from", msg.From, "error", err)
 			rejectedTxs = append(rejectedTxs, &rejectedTx{i, err.Error()})
+			gaspool.SetGas(prevGas)
 			continue
 		}
 		includedTxs = append(includedTxs, tx)
@@ -216,7 +221,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 			receipt.GasUsed = msgResult.UsedGas
 
 			nonce := tx.Nonce()
-			if msg.IsDepositTx() {
+			if msg.IsDepositTx {
 				nonce = statedb.GetNonce(msg.From)
 				receipt.DepositNonce = &nonce
 			}

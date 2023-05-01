@@ -5,7 +5,6 @@ jobs:
   allow_failures:
     - stage: build
       os: osx
-      go: 1.17.x
       env:
         - azure-osx
 
@@ -117,7 +116,7 @@ jobs:
       env:
         - GO111MODULE=on
       script:
-        - go run build/ci.go test -coverage $TEST_PACKAGES
+        - go run build/ci.go test $TEST_PACKAGES
 
     - stage: build
       if: type = pull_request
@@ -128,7 +127,7 @@ jobs:
       env:
         - GO111MODULE=on
       script:
-        - go run build/ci.go test -coverage $TEST_PACKAGES
+        - go run build/ci.go test $TEST_PACKAGES
 
     - stage: build
       os: linux
@@ -137,7 +136,7 @@ jobs:
       env:
         - GO111MODULE=on
       script:
-        - go run build/ci.go test -coverage $TEST_PACKAGES
+        - go run build/ci.go test $TEST_PACKAGES
 
     # This builder does the Ubuntu PPA nightly uploads
     - stage: build
@@ -186,5 +185,5 @@ jobs:
       env:
         - GO111MODULE=on
       script:
-        - go run build/ci.go test  -race -coverage $TEST_PACKAGES
+        - go run build/ci.go test  -race $TEST_PACKAGES
 

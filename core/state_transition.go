@@ -142,14 +142,10 @@ type Message struct {
 	SkipAccountChecks bool
 
 	// Kroma rollup fields
-	isDepositTx bool
-	mint        *big.Int
-	l1CostGas   types.RollupGasData
+	IsDepositTx   bool                // IsDepositTx indicates the message is force-included and can persist a mint.
+	Mint          *big.Int            // Mint is the amount to mint before EVM processing, or nil if there is no minting.
+	RollupDataGas types.RollupGasData // RollupDataGas indicates the rollup cost of the message, 0 if not a rollup or no cost.
 }
-
-func (m Message) IsDepositTx() bool                  { return m.isDepositTx }
-func (m Message) Mint() *big.Int                     { return m.mint }
-func (m Message) RollupDataGas() types.RollupGasData { return m.l1CostGas }
 
 func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice, gasFeeCap, gasTipCap *big.Int, data []byte, accessList types.AccessList, skipAccountChecks bool) *Message {
 	return &Message{
@@ -165,9 +161,9 @@ func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *b
 		AccessList:        accessList,
 		SkipAccountChecks: skipAccountChecks,
 		// Kroma rollup fields
-		isDepositTx: false,
-		mint:        nil,
-		l1CostGas:   types.RollupGasData{},
+		IsDepositTx:   false,
+		Mint:          nil,
+		RollupDataGas: types.RollupGasData{},
 	}
 }
 
@@ -185,9 +181,9 @@ func TransactionToMessage(tx *types.Transaction, s types.Signer, baseFee *big.In
 		AccessList:        tx.AccessList(),
 		SkipAccountChecks: false,
 		// Kroma rollup fields
-		isDepositTx: tx.IsDepositTx(),
-		mint:        tx.Mint(),
-		l1CostGas:   tx.RollupDataGas(),
+		IsDepositTx:   tx.IsDepositTx(),
+		Mint:          tx.Mint(),
+		RollupDataGas: tx.RollupDataGas(),
 	}
 	// If baseFee provided, set gasPrice to effectiveGasPrice.
 	if baseFee != nil {
@@ -262,8 +258,8 @@ func (st *StateTransition) buyGas() error {
 	mgval := new(big.Int).SetUint64(st.msg.GasLimit)
 	mgval = mgval.Mul(mgval, st.msg.GasPrice)
 	var l1Cost *big.Int
-	if st.evm.Context.L1CostFunc != nil {
-		l1Cost = st.evm.Context.L1CostFunc(st.evm.Context.BlockNumber.Uint64(), st.msg)
+	if st.evm.Context.L1CostFunc != nil && !st.msg.SkipAccountChecks {
+		l1Cost = st.evm.Context.L1CostFunc(st.evm.Context.BlockNumber.Uint64(), st.evm.Context.Time, st.msg.RollupDataGas, st.msg.IsDepositTx)
 	}
 	if l1Cost != nil {
 		mgval = mgval.Add(mgval, l1Cost)
@@ -292,7 +288,7 @@ func (st *StateTransition) buyGas() error {
 
 func (st *StateTransition) preCheck() error {
 	msg := st.msg
-	if msg.IsDepositTx() {
+	if msg.IsDepositTx {
 		// No fee fields to check, no nonce to check, and no need to check if EOA (L1 already verified it for us)
 		// Gas is free, but no refunds!
 		st.initialGas = msg.GasLimit
@@ -316,7 +312,7 @@ func (st *StateTransition) preCheck() error {
 		}
 		// Make sure the sender is an EOA
 		codeHash := st.state.GetCodeHash(msg.From)
-		if codeHash != types.EmptyCodeHash && codeHash != (common.Hash{}) {
+		if codeHash != (common.Hash{}) && codeHash != types.EmptyCodeHash {
 			return fmt.Errorf("%w: address %v, codehash: %s", ErrSenderNoEOA,
 				msg.From.Hex(), codeHash)
 		}
@@ -360,7 +356,7 @@ func (st *StateTransition) preCheck() error {
 // However if any consensus issue encountered, return the error directly with
 // nil evm execution result.
 func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
-	if mint := st.msg.Mint(); mint != nil {
+	if mint := st.msg.Mint; mint != nil {
 		st.state.AddBalance(st.msg.From, mint)
 	}
 	snap := st.state.Snapshot()
@@ -368,7 +364,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	result, err := st.innerTransitionDb()
 	// Failed deposits must still be included. Unless we cannot produce the block at all due to the gas limit.
 	// On deposit failure, we rewind any state changes from after the minting, and increment the nonce.
-	if err != nil && err != ErrGasLimitReached && st.msg.IsDepositTx() {
+	if err != nil && err != ErrGasLimitReached && st.msg.IsDepositTx {
 		st.state.RevertToSnapshot(snap)
 		// Even though we revert the state changes, always increment the nonce for the next deposit transaction
 		st.state.SetNonce(st.msg.From, st.state.GetNonce(st.msg.From)+1)
@@ -451,7 +447,7 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	}
 
 	// if deposit: skip refunds, skip tipping coinbase
-	if msg.IsDepositTx() {
+	if msg.IsDepositTx {
 		// Record deposits as using all their gas (matches the gas pool)
 		return &ExecutionResult{
 			UsedGas:    msg.GasLimit,
@@ -466,7 +462,7 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		// After EIP-3529: refunds are capped to gasUsed / 5
 		st.refundGas(params.RefundQuotientEIP3529)
 	}
-	if st.msg.IsDepositTx() {
+	if st.msg.IsDepositTx {
 		// Skip coinbase payments for deposit tx in Regolith
 		return &ExecutionResult{
 			UsedGas:    st.gasUsed(),
@@ -491,7 +487,7 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 
 	if kromaConfig := st.evm.ChainConfig().Kroma; kromaConfig != nil {
 		st.state.AddBalance(params.KromaBaseFeeRecipient, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
-		if cost := st.evm.Context.L1CostFunc(st.evm.Context.BlockNumber.Uint64(), st.msg); cost != nil {
+		if cost := st.evm.Context.L1CostFunc(st.evm.Context.BlockNumber.Uint64(), st.evm.Context.Time, st.msg.RollupDataGas, st.msg.IsDepositTx); cost != nil {
 			st.state.AddBalance(params.KromaL1FeeRecipient, cost)
 		}
 	}

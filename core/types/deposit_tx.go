@@ -73,6 +73,9 @@ func (tx *DepositTx) gasPrice() *big.Int     { return new(big.Int) }
 func (tx *DepositTx) value() *big.Int        { return tx.Value }
 func (tx *DepositTx) nonce() uint64          { return 0 }
 func (tx *DepositTx) to() *common.Address    { return tx.To }
+func (tx *DepositTx) effectiveGasPrice(dst *big.Int, baseFee *big.Int) *big.Int {
+	return dst.Set(new(big.Int))
+}
 
 func (tx *DepositTx) rawSignatureValues() (v, r, s *big.Int) {
 	return common.Big0, common.Big0, common.Big0
