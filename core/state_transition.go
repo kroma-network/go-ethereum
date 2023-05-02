@@ -443,7 +443,7 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		gasUsed := new(big.Int).SetUint64(st.gasUsed())
 		if kromaConfig != nil {
 			feeDist := st.evm.Context.FeeDistributionFunc(blockNum, gasUsed, st.evm.Context.BaseFee, effectiveTip)
-			st.state.AddBalance(st.evm.Context.Coinbase, feeDist.Reward)
+			st.state.AddBalance(params.KromaValidatorRewardVault, feeDist.Reward)
 			st.state.AddBalance(params.KromaProtocolVault, feeDist.Protocol)
 		} else {
 			fee := new(big.Int)
