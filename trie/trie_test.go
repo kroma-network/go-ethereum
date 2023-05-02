@@ -18,7 +18,6 @@ package trie
 
 import (
 	"bytes"
-	crand "crypto/rand"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -1151,8 +1150,8 @@ func TestDecodeNode(t *testing.T) {
 		elems = make([]byte, 20)
 	)
 	for i := 0; i < 5000000; i++ {
-		crand.Read(hash)
-		crand.Read(elems)
+		prng.Read(hash)
+		prng.Read(elems)
 		decodeNode(hash, elems)
 	}
 }
