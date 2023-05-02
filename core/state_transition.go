@@ -147,26 +147,6 @@ type Message struct {
 	RollupDataGas types.RollupGasData // RollupDataGas indicates the rollup cost of the message, 0 if not a rollup or no cost.
 }
 
-func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice, gasFeeCap, gasTipCap *big.Int, data []byte, accessList types.AccessList, skipAccountChecks bool) *Message {
-	return &Message{
-		From:              from,
-		Nonce:             nonce,
-		GasLimit:          gasLimit,
-		GasPrice:          gasPrice,
-		GasFeeCap:         gasFeeCap,
-		GasTipCap:         gasTipCap,
-		To:                to,
-		Value:             amount,
-		Data:              data,
-		AccessList:        accessList,
-		SkipAccountChecks: skipAccountChecks,
-		// Kroma rollup fields
-		IsDepositTx:   false,
-		Mint:          nil,
-		RollupDataGas: types.RollupGasData{},
-	}
-}
-
 // TransactionToMessage converts a transaction into a Message.
 func TransactionToMessage(tx *types.Transaction, s types.Signer, baseFee *big.Int) (*Message, error) {
 	msg := &Message{
@@ -446,15 +426,6 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		ret, st.gasRemaining, vmerr = st.evm.Call(sender, st.to(), msg.Data, st.gasRemaining, msg.Value)
 	}
 
-	// if deposit: skip refunds, skip tipping coinbase
-	if msg.IsDepositTx {
-		// Record deposits as using all their gas (matches the gas pool)
-		return &ExecutionResult{
-			UsedGas:    msg.GasLimit,
-			Err:        vmerr,
-			ReturnData: ret,
-		}, nil
-	}
 	if !rules.IsLondon {
 		// Before EIP-3529: refunds were capped to gasUsed / 2
 		st.refundGas(params.RefundQuotient)

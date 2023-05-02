@@ -666,10 +666,14 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// Verify that replacing transactions will not result in overdraft
 	list := pool.pending[from]
 	if list != nil { // Sender already has pending txs
-		sum := new(big.Int).Add(tx.Cost(), list.totalcost)
+		sum := new(big.Int).Add(cost, list.totalcost)
 		if repl := list.txs.Get(tx.Nonce()); repl != nil {
 			// Deduct the cost of a transaction replaced by this
-			sum.Sub(sum, repl.Cost())
+			replL1Cost := repl.Cost()
+			if l1Cost := pool.l1CostFn(tx.RollupDataGas(), tx.IsDepositTx()); l1Cost != nil { // add rollup cost
+				replL1Cost = replL1Cost.Add(cost, l1Cost)
+			}
+			sum.Sub(sum, replL1Cost)
 		}
 		if balance.Cmp(sum) < 0 {
 			log.Trace("Replacing transactions would overdraft", "sender", from, "balance", pool.currentState.GetBalance(from), "required", sum)

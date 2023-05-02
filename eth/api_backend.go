@@ -20,6 +20,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/log"
 	"math/big"
 	"time"
 
@@ -288,6 +290,20 @@ func (b *EthAPIBackend) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscri
 }
 
 func (b *EthAPIBackend) SendTx(ctx context.Context, tx *types.Transaction) error {
+	if b.eth.propRPCService != nil {
+		data, err := tx.MarshalBinary()
+		if err != nil {
+			return err
+		}
+		if err := b.eth.propRPCService.CallContext(ctx, nil, "eth_sendRawTransaction", hexutil.Encode(data)); err != nil {
+			return err
+		}
+		// Retain tx in local tx pool after forwarding, for local RPC usage.
+		if err := b.eth.txPool.AddLocal(tx); err != nil {
+			log.Warn("successfully sent tx to sequencer, but failed to persist in local tx pool", "err", err, "tx", tx.Hash())
+		}
+		return nil
+	}
 	return b.eth.txPool.AddLocal(tx)
 }
 

@@ -234,6 +234,7 @@ type txTraceTask struct {
 // TraceChain returns the structured logs created during the execution of EVM
 // between two blocks (excluding start) and returns them as a JSON object.
 func (api *API) TraceChain(ctx context.Context, start, end rpc.BlockNumber, config *TraceConfig) (*rpc.Subscription, error) { // Fetch the block interval that we want to trace
+	// TODO: Need to implement a fallback for this
 	from, err := api.blockByNumber(ctx, start)
 	if err != nil {
 		return nil, err
@@ -855,14 +856,11 @@ func containsTx(block *types.Block, hash common.Hash) bool {
 // and returns them as a JSON object.
 func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *TraceConfig) (interface{}, error) {
 	// GetTransaction returns 0 for the blocknumber if the transaction is not found
-	tx, blockHash, blockNumber, index, err := api.backend.GetTransaction(ctx, hash)
+	_, blockHash, blockNumber, index, err := api.backend.GetTransaction(ctx, hash)
 	if err != nil {
 		return nil, err
 	}
-	// Only mined txes are supported
-	if tx == nil {
-		return nil, errTxNotFound
-	}
+
 	// It shouldn't happen in practice.
 	if blockNumber == 0 {
 		return nil, errors.New("genesis is not traceable")

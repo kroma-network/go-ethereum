@@ -24,7 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"context"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -32,7 +31,6 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -796,15 +794,6 @@ func (w *worker) makeEnv(parent *types.Header, header *types.Header, coinbase co
 	// Retrieve the parent state to execute on top and start a prefetcher for
 	// the miner to speed block sealing up a bit.
 	state, err := w.chain.StateAt(parent.Root)
-	if err != nil && w.chainConfig.Kroma != nil { // Allow the miner to reorg its own chain arbitrarily deep
-		if historicalBackend, ok := w.eth.(BackendWithHistoricalState); ok {
-			var release tracers.StateReleaseFunc
-			parentBlock := w.eth.BlockChain().GetBlockByHash(parent.Hash())
-			state, release, err = historicalBackend.StateAtBlock(context.Background(), parentBlock, ^uint64(0), nil, false, false)
-			state = state.Copy()
-			release()
-		}
-	}
 	if err != nil {
 		return nil, err
 	}

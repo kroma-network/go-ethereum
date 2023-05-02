@@ -210,6 +210,9 @@ type Config struct {
 
 	OverrideKroma *bool
 
+	RollupProposerHTTP        string
+	RollupDisableTxPoolGossip bool
+
 	// [Scroll: START]
 	// Trace option
 	MPTWitness int
