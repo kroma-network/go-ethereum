@@ -17,6 +17,8 @@
 package rlp
 
 import (
+	"encoding/binary"
+	"github.com/holiman/uint256"
 	"io"
 	"math/big"
 	"reflect"
@@ -167,6 +169,23 @@ func (w *encBuffer) writeBigInt(i *big.Int) {
 			d >>= 8
 		}
 	}
+}
+
+// writeUint256 writes z as an integer.
+func (w *encBuffer) writeUint256(z *uint256.Int) {
+	bitlen := z.BitLen()
+	if bitlen <= 64 {
+		w.writeUint64(z.Uint64())
+		return
+	}
+	nBytes := byte((bitlen + 7) / 8)
+	var b [33]byte
+	binary.BigEndian.PutUint64(b[1:9], z[3])
+	binary.BigEndian.PutUint64(b[9:17], z[2])
+	binary.BigEndian.PutUint64(b[17:25], z[1])
+	binary.BigEndian.PutUint64(b[25:33], z[0])
+	b[32-nBytes] = 0x80 + nBytes
+	w.str = append(w.str, b[32-nBytes:]...)
 }
 
 // list adds a new list header to the header stack. It returns the index of the header.
