@@ -18,11 +18,12 @@ package rlp
 
 import (
 	"encoding/binary"
-	"github.com/holiman/uint256"
 	"io"
 	"math/big"
 	"reflect"
 	"sync"
+
+	"github.com/holiman/uint256"
 )
 
 type encBuffer struct {

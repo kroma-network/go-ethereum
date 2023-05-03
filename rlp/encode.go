@@ -19,12 +19,12 @@ package rlp
 import (
 	"errors"
 	"fmt"
-	"github.com/holiman/uint256"
 	"io"
 	"math/big"
 	"reflect"
 
 	"github.com/ethereum/go-ethereum/rlp/internal/rlpstruct"
+	"github.com/holiman/uint256"
 )
 
 var (

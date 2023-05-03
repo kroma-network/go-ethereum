@@ -19,6 +19,7 @@ package miner
 
 import (
 	"errors"
+	"math/big"
 	"testing"
 	"time"
 
@@ -33,7 +34,6 @@ import (
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/trie"
-	"math/big"
 )
 
 type mockBackend struct {

@@ -21,12 +21,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/holiman/uint256"
 	"io"
 	"math/big"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/holiman/uint256"
 
 	"github.com/ethereum/go-ethereum/common/math"
 )

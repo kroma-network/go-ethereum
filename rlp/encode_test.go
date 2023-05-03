@@ -20,12 +20,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/holiman/uint256"
 	"io"
 	"math/big"
 	"runtime"
 	"sync"
 	"testing"
+
+	"github.com/holiman/uint256"
 
 	"github.com/ethereum/go-ethereum/common/math"
 )
