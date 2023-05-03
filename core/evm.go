@@ -57,17 +57,18 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 		random = &header.MixDigest
 	}
 	return vm.BlockContext{
-		CanTransfer: CanTransfer,
-		Transfer:    Transfer,
-		GetHash:     GetHashFn(header, chain),
-		Coinbase:    beneficiary,
-		BlockNumber: new(big.Int).Set(header.Number),
-		Time:        header.Time,
-		Difficulty:  new(big.Int).Set(header.Difficulty),
-		BaseFee:     baseFee,
-		GasLimit:    header.GasLimit,
-		Random:      random,
-		L1CostFunc:  types.NewL1CostFunc(config, statedb),
+		CanTransfer:         CanTransfer,
+		Transfer:            Transfer,
+		GetHash:             GetHashFn(header, chain),
+		Coinbase:            beneficiary,
+		BlockNumber:         new(big.Int).Set(header.Number),
+		Time:                header.Time,
+		Difficulty:          new(big.Int).Set(header.Difficulty),
+		BaseFee:             baseFee,
+		GasLimit:            header.GasLimit,
+		Random:              random,
+		L1CostFunc:          types.NewL1CostFunc(config, statedb),
+		FeeDistributionFunc: types.NewFeeDistributionFunc(config, statedb),
 	}
 }
 

@@ -9,7 +9,6 @@
   - remove daisy chain [#11](https://github.com/kroma-network/go-ethereum/pull/11).
   - enable tx pool sync by force [#13](https://github.com/kroma-network/go-ethereum/pull/13).
   - remove system tx related fields. (e.g, `IsSystemTx()`) [#29](https://github.com/kroma-network/go-ethereum/pull/29).
-  - To add some diffs
 
 ## scroll-geth
 
