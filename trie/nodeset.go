@@ -71,6 +71,7 @@ func (n *memoryNode) isDeleted() bool {
 }
 
 // nodeWithPrev wraps the memoryNode with the previous node value.
+// nolint: unused
 type nodeWithPrev struct {
 	*memoryNode
 	prev []byte // RLP-encoded previous value, nil means it's non-existent
