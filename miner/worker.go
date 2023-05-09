@@ -17,7 +17,6 @@
 package miner
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -26,13 +25,13 @@ import (
 	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -796,15 +795,6 @@ func (w *worker) makeEnv(parent *types.Header, header *types.Header, coinbase co
 	// Retrieve the parent state to execute on top and start a prefetcher for
 	// the miner to speed block sealing up a bit.
 	state, err := w.chain.StateAt(parent.Root)
-	if err != nil && w.chainConfig.Optimism != nil { // Allow the miner to reorg its own chain arbitrarily deep
-		if historicalBackend, ok := w.eth.(BackendWithHistoricalState); ok {
-			var release tracers.StateReleaseFunc
-			parentBlock := w.eth.BlockChain().GetBlockByHash(parent.Hash())
-			state, release, err = historicalBackend.StateAtBlock(context.Background(), parentBlock, ^uint64(0), nil, false, false)
-			state = state.Copy()
-			release()
-		}
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -902,6 +892,13 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 				return signalToErr(signal)
 			}
 		}
+		// [Scroll: START]
+		// If we have collected enough transactions then we're done
+		if !w.chainConfig.IsValidTxCount(env.tcount + 1) {
+			log.Trace("Transaction count limit reached", "have", env.tcount, "want", w.chainConfig.MaxTxPerBlock)
+			break
+		}
+		// [Scroll: END]
 		// If we don't have enough gas for any further transactions then we're done.
 		if env.gasPool.Gas() < params.TxGas {
 			log.Trace("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
@@ -982,7 +979,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 // generateParams wraps various of settings for generating sealing task.
 type generateParams struct {
-	timestamp   uint64            // The timstamp for sealing task
+	timestamp   uint64            // The timestamp for sealing task
 	forceTime   bool              // Flag whether the given timestamp is immutable or not
 	parentHash  common.Hash       // Parent block hash, empty means the latest chain head
 	coinbase    common.Address    // The fee recipient address for including transaction
@@ -1029,7 +1026,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		Coinbase:   genParams.coinbase,
 	}
 	// Set the extra field.
-	if len(w.extra) != 0 && w.chainConfig.Optimism == nil { // Optimism chains must not set any extra data.
+	if len(w.extra) != 0 && w.chainConfig.Kroma == nil { // Kroma chains must not set any extra data.
 		header.Extra = w.extra
 	}
 	// Set the randomness field from the beacon chain if it's available.
@@ -1046,8 +1043,8 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	}
 	if genParams.gasLimit != nil { // override gas limit if specified
 		header.GasLimit = *genParams.gasLimit
-	} else if w.chain.Config().Optimism != nil && w.config.GasCeil != 0 {
-		// configure the gas limit of pending blocks with the miner gas limit config when using optimism
+	} else if w.chain.Config().Kroma != nil && w.config.GasCeil != 0 {
+		// configure the gas limit of pending blocks with the miner gas limit config when using kroma
 		header.GasLimit = w.config.GasCeil
 	}
 	// Run the consensus preparation with the default or customized consensus engine.

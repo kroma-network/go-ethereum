@@ -22,14 +22,9 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"net"
-	"net/http"
 	"reflect"
 	"testing"
 	"time"
-
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -199,14 +194,6 @@ var genesis = &core.Genesis{
 	BaseFee:   big.NewInt(params.InitialBaseFee),
 }
 
-var genesisForHistorical = &core.Genesis{
-	Config:    params.OptimismTestConfig,
-	Alloc:     core.GenesisAlloc{testAddr: {Balance: testBalance}},
-	ExtraData: []byte("test genesis"),
-	Timestamp: 9000,
-	BaseFee:   big.NewInt(params.InitialBaseFee),
-}
-
 var testTx1 = types.MustSignNewTx(testKey, types.LatestSigner(genesis.Config), &types.LegacyTx{
 	Nonce:    0,
 	Value:    big.NewInt(12),
@@ -223,64 +210,9 @@ var testTx2 = types.MustSignNewTx(testKey, types.LatestSigner(genesis.Config), &
 	To:       &common.Address{2},
 })
 
-type mockHistoricalBackend struct{}
-
-func (m *mockHistoricalBackend) Call(ctx context.Context, args ethapi.TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, overrides *ethapi.StateOverride) (hexutil.Bytes, error) {
-	num, ok := blockNrOrHash.Number()
-	if ok && num == 1 {
-		return hexutil.Bytes("test"), nil
-	}
-	return nil, ethereum.NotFound
-}
-
-func (m *mockHistoricalBackend) EstimateGas(ctx context.Context, args ethapi.TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash) (hexutil.Uint64, error) {
-	num, ok := blockNrOrHash.Number()
-	if ok && num == 1 {
-		return hexutil.Uint64(12345), nil
-	}
-	return 0, ethereum.NotFound
-}
-
-func newMockHistoricalBackend(t *testing.T) string {
-	s := rpc.NewServer()
-	err := node.RegisterApis([]rpc.API{
-		{
-			Namespace:     "eth",
-			Service:       new(mockHistoricalBackend),
-			Public:        true,
-			Authenticated: false,
-		},
-	}, nil, s)
-	if err != nil {
-		t.Fatalf("error creating mock historical backend: %v", err)
-	}
-
-	hdlr := node.NewHTTPHandlerStack(s, []string{"*"}, []string{"*"}, nil)
-	mux := http.NewServeMux()
-	mux.Handle("/", hdlr)
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("error creating mock historical backend listener: %v", err)
-	}
-
-	go func() {
-		httpS := &http.Server{Handler: mux}
-		httpS.Serve(listener)
-
-		t.Cleanup(func() {
-			httpS.Shutdown(context.Background())
-		})
-	}()
-
-	return fmt.Sprintf("http://%s", listener.Addr().String())
-}
-
-func newTestBackend(t *testing.T, enableHistoricalState bool) (*node.Node, []*types.Block) {
-	histAddr := newMockHistoricalBackend(t)
-
+func newTestBackend(t *testing.T) (*node.Node, []*types.Block) {
 	// Generate test chain.
-	blocks := generateTestChain(enableHistoricalState)
+	blocks := generateTestChain()
 
 	// Create node
 	n, err := node.New(&node.Config{})
@@ -288,18 +220,8 @@ func newTestBackend(t *testing.T, enableHistoricalState bool) (*node.Node, []*ty
 		t.Fatalf("can't create new node: %v", err)
 	}
 	// Create Ethereum Service
-	var actualGenesis *core.Genesis
-	if enableHistoricalState {
-		actualGenesis = genesisForHistorical
-	} else {
-		actualGenesis = genesis
-	}
-	config := &ethconfig.Config{Genesis: actualGenesis}
+	config := &ethconfig.Config{Genesis: genesis}
 	config.Ethash.PowMode = ethash.ModeFake
-	if enableHistoricalState {
-		config.RollupHistoricalRPC = histAddr
-		config.RollupHistoricalRPCTimeout = time.Second * 5
-	}
 	ethservice, err := eth.New(n, config)
 	if err != nil {
 		t.Fatalf("can't create new ethereum service: %v", err)
@@ -314,7 +236,7 @@ func newTestBackend(t *testing.T, enableHistoricalState bool) (*node.Node, []*ty
 	return n, blocks
 }
 
-func generateTestChain(enableHistoricalState bool) []*types.Block {
+func generateTestChain() []*types.Block {
 	generate := func(i int, g *core.BlockGen) {
 		g.OffsetTime(5)
 		g.SetExtra([]byte("test"))
@@ -324,27 +246,12 @@ func generateTestChain(enableHistoricalState bool) []*types.Block {
 			g.AddTx(testTx2)
 		}
 	}
-	var actualGenesis *core.Genesis
-	if enableHistoricalState {
-		actualGenesis = genesisForHistorical
-	} else {
-		actualGenesis = genesis
-	}
-	_, blocks, _ := core.GenerateChainWithGenesis(actualGenesis, ethash.NewFaker(), 2, generate)
-	return append([]*types.Block{actualGenesis.ToBlock()}, blocks...)
-}
-
-func TestEthClientHistoricalBackend(t *testing.T) {
-	backend, _ := newTestBackend(t, true)
-	client, _ := backend.Attach()
-	defer backend.Close()
-	defer client.Close()
-
-	testHistoricalRPC(t, client)
+	_, blocks, _ := core.GenerateChainWithGenesis(genesis, ethash.NewFaker(), 2, generate)
+	return append([]*types.Block{genesis.ToBlock()}, blocks...)
 }
 
 func TestEthClient(t *testing.T) {
-	backend, chain := newTestBackend(t, false)
+	backend, chain := newTestBackend(t)
 	client, _ := backend.Attach()
 	defer backend.Close()
 	defer client.Close()
@@ -799,35 +706,6 @@ func testEstimateGas(t *testing.T, client *rpc.Client) {
 	}
 	if gas != 21000 {
 		t.Fatalf("unexpected gas price: %v", gas)
-	}
-}
-
-func testHistoricalRPC(t *testing.T, client *rpc.Client) {
-	ec := NewClient(client)
-
-	// Estimate Gas RPC
-	msg := ethereum.CallMsg{
-		From:  testAddr,
-		To:    &common.Address{},
-		Gas:   21000,
-		Value: big.NewInt(1),
-	}
-	var res hexutil.Uint64
-	err := client.CallContext(context.Background(), &res, "eth_estimateGas", toCallArg(msg), rpc.BlockNumberOrHashWithNumber(1))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if res != 12345 {
-		t.Fatalf("invalid result: %d", res)
-	}
-
-	// Call Contract RPC
-	histVal, err := ec.CallContract(context.Background(), msg, big.NewInt(1))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if string(histVal) != "test" {
-		t.Fatalf("expected %s to equal test", string(histVal))
 	}
 }
 

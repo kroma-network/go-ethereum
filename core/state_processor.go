@@ -102,11 +102,6 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
 
-	nonce := tx.Nonce()
-	if msg.IsDepositTx && config.IsOptimismRegolith(evm.Context.Time) {
-		nonce = statedb.GetNonce(msg.From)
-	}
-
 	// Apply the transaction to the current state (included in the env).
 	result, err := ApplyMessage(evm, msg, gp)
 	if err != nil {
@@ -122,9 +117,18 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	}
 	*usedGas += result.UsedGas
 
+	// [Scroll: START]
+	// If the result contains a revert reason, return it.
+	returnVal := result.Return()
+	if len(result.Revert()) > 0 {
+		returnVal = result.Revert()
+	}
+	// [Scroll: END]
 	// Create a new receipt for the transaction, storing the intermediate root and gas used
 	// by the tx.
-	receipt := &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: *usedGas}
+	// [Scroll: START]
+	receipt := &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: *usedGas, ReturnValue: returnVal}
+	// [Scroll: END]
 	if result.Failed() {
 		receipt.Status = types.ReceiptStatusFailed
 	} else {
@@ -133,9 +137,9 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	receipt.TxHash = tx.Hash()
 	receipt.GasUsed = result.UsedGas
 
-	if msg.IsDepositTx && config.IsOptimismRegolith(evm.Context.Time) {
-		// The actual nonce for deposit transactions is only recorded from Regolith onwards.
-		// Before the Regolith fork the DepositNonce must remain nil
+	nonce := tx.Nonce()
+	if msg.IsDepositTx {
+		nonce = statedb.GetNonce(msg.From)
 		receipt.DepositNonce = &nonce
 	}
 

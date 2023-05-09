@@ -24,14 +24,15 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/ethereum/go-ethereum/internal/flags"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
-	"github.com/ethereum/go-ethereum/metrics/exp"
 	"github.com/fjl/memsize/memsizeui"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v2"
+
+	"github.com/ethereum/go-ethereum/internal/flags"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/ethereum/go-ethereum/metrics/exp"
 )
 
 var Memsize memsizeui.Handler
@@ -108,6 +109,14 @@ var (
 		Usage:    "Write execution trace to the given file",
 		Category: flags.LoggingCategory,
 	}
+	// [Scroll: START]
+	// mpt witness settings
+	mptWitnessFlag = &cli.IntFlag{
+		Name:  "trace.mptwitness",
+		Usage: "Output witness for mpt circuit with Specified order (default = no output, 1 = by executing order",
+		Value: 0,
+	}
+	// [Scroll: END]
 )
 
 // Flags holds all command-line flags required for debugging.
@@ -125,6 +134,9 @@ var Flags = []cli.Flag{
 	blockprofilerateFlag,
 	cpuprofileFlag,
 	traceFlag,
+	// [Scroll: START]
+	mptWitnessFlag,
+	// [Scroll: END]
 }
 
 var (
@@ -137,6 +149,24 @@ func init() {
 	glogger.Verbosity(log.LvlInfo)
 	log.Root().SetHandler(glogger)
 }
+
+// [Scroll: START]
+// TraceConfig export options about trace
+type TraceConfig struct {
+	TracePath string
+	// Trace option
+	MPTWitness int
+}
+
+func ConfigTrace(ctx *cli.Context) *TraceConfig {
+	cfg := new(TraceConfig)
+	cfg.TracePath = ctx.String(traceFlag.Name)
+	cfg.MPTWitness = ctx.Int(mptWitnessFlag.Name)
+
+	return cfg
+}
+
+// [Scroll: END]
 
 // Setup initializes profiling and logging based on the CLI flags.
 // It should be called as early as possible in the program.

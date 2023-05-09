@@ -5,12 +5,12 @@ This test contains an EIP-1559 consensus issue which happened on Ropsten, where
 
 Before the issue was fixed, this invocation allowed the transaction to pass into a block:
 ```
-dir=./testdata/12 && ./evm t8n --state.fork=London --input.alloc=$dir/alloc.json --input.txs=$dir/txs.json --input.env=$dir/env.json --output.alloc=stdout --output.result=stdout
+$ dir=./testdata/12 && ./evm t8n --state.fork=London --input.alloc=$dir/alloc.json --input.txs=$dir/txs.json --input.env=$dir/env.json --output.alloc=stdout --output.result=stdout
 ```
 
 With the fix applied, the result is: 
 ```
-dir=./testdata/12 && ./evm t8n --state.fork=London --input.alloc=$dir/alloc.json --input.txs=$dir/txs.json --input.env=$dir/env.json --output.alloc=stdout --output.result=stdout
+$ dir=./testdata/12 && ./evm t8n --state.fork=London --input.alloc=$dir/alloc.json --input.txs=$dir/txs.json --input.env=$dir/env.json --output.alloc=stdout --output.result=stdout
 INFO [03-09|10:43:12.649] rejected tx                              index=0 hash=ccc996..d83435 from=0xa94f5374Fce5edBC8E2a8697C15331677e6EbF0B error="insufficient funds for gas * price + value: address 0xa94f5374Fce5edBC8E2a8697C15331677e6EbF0B have 84000000 want 84000032"
 INFO [03-09|10:43:12.650] Trie dumping started                     root=e05f81..6597a5
 INFO [03-09|10:43:12.650] Trie dumping complete                    accounts=1 elapsed="46.393µs"

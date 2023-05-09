@@ -35,7 +35,7 @@ func VerifyEip1559Header(config *params.ChainConfig, parent, header *types.Heade
 	if !config.IsLondon(parent.Number) {
 		parentGasLimit = parent.GasLimit * config.ElasticityMultiplier()
 	}
-	if config.Optimism == nil { // gasLimit can adjust instantly in optimism
+	if config.Kroma == nil { // gasLimit can adjust instantly in kroma
 		if err := VerifyGaslimit(parentGasLimit, header.GasLimit); err != nil {
 			return err
 		}

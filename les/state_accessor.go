@@ -35,7 +35,10 @@ var noopReleaser = tracers.StateReleaseFunc(func() {})
 
 // stateAtBlock retrieves the state database associated with a certain block.
 func (leth *LightEthereum) stateAtBlock(ctx context.Context, block *types.Block, reexec uint64) (*state.StateDB, tracers.StateReleaseFunc, error) {
-	return light.NewState(ctx, block.Header(), leth.odr), noopReleaser, nil
+	// [Scroll: START]
+	// NOTE(chokobole): This part is different from scroll
+	return light.NewState(ctx, block.Header(), leth.odr, leth.chainConfig.Zktrie), noopReleaser, nil
+	// [Scroll: END]
 }
 
 // stateAtTransaction returns the execution environment of a certain transaction.

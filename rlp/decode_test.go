@@ -27,8 +27,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/holiman/uint256"
+
+	"github.com/ethereum/go-ethereum/common/math"
 )
 
 func TestStreamKind(t *testing.T) {
@@ -466,10 +467,7 @@ var (
 		new(big.Int).Lsh(big.NewInt(0xFFFFFFFFFFFFFF), 16),
 		big.NewInt(0xFFFF),
 	)
-	veryVeryBigInt = new(big.Int).Exp(veryBigInt, big.NewInt(8), nil)
-)
-
-var (
+	veryVeryBigInt   = new(big.Int).Exp(veryBigInt, big.NewInt(8), nil)
 	veryBigInt256, _ = uint256.FromBig(veryBigInt)
 )
 

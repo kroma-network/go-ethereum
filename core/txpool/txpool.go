@@ -100,7 +100,7 @@ var (
 	evictionInterval    = time.Minute     // Time interval to check for evictable transactions
 	statsReportInterval = 8 * time.Second // Time interval to report transaction pool stats
 
-	// L1 Info Gas Overhead is the amount of gas the the L1 info deposit consumes.
+	// L1 Info Gas Overhead is the amount of gas the L1 info deposit consumes.
 	// It is removed from the tx pool max gas to better indicate that L2 transactions
 	// are not able to consume all of the gas in a L2 block as the L1 info deposit is always present.
 	l1InfoGasOverhead = uint64(70_000)
@@ -701,7 +701,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 // pending promotion and execution. If the transaction is a replacement for an already
 // pending or queued one, it overwrites the previous transaction if its price is higher.
 //
-// If a newly added transaction is marked as local, its sending account will be
+// If a newly added transaction is marked as local, its sending account will
 // be added to the allowlist, preventing any associated transaction from being dropped
 // out of the pool due to pricing constraints.
 func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err error) {
@@ -1396,13 +1396,13 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	pool.currentState = statedb
 	pool.pendingNonces = newNoncer(statedb)
 	pool.currentMaxGas = newHead.GasLimit
-	if pool.chainconfig.IsOptimism() {
+	if pool.chainconfig.IsKroma() {
 		pool.currentMaxGas -= l1InfoGasOverhead
 	}
 
 	costFn := types.NewL1CostFunc(pool.chainconfig, statedb)
 	pool.l1CostFn = func(dataGas types.RollupGasData, isDepositTx bool) *big.Int {
-		return costFn(newHead.Number.Uint64(), newHead.Time, dataGas, isDepositTx)
+		return costFn(newHead.Number.Uint64(), dataGas, isDepositTx)
 	}
 
 	// Inject any transactions discarded due to reorgs

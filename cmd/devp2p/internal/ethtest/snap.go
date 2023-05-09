@@ -257,7 +257,7 @@ func (s *Suite) TestSnapGetByteCodes(t *utesting.T) {
 		},
 		// Empties
 		{
-			nBytes: 10000, hashes: []common.Hash{types.EmptyRootHash},
+			nBytes: 10000, hashes: []common.Hash{types.EmptyMPTRootHash},
 			expHashes: 0,
 		},
 		{

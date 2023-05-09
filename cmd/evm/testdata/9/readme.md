@@ -58,7 +58,7 @@ $ dir=./testdata/9 && ./evm t8n --state.fork=London --input.alloc=$dir/alloc.jso
 
 If we try to execute it on older rules: 
 ```
-dir=./testdata/9 && ./evm t8n --state.fork=Berlin --input.alloc=$dir/alloc.json --input.txs=$dir/txs.json --input.env=$dir/env.json --output.alloc=stdout
+$ dir=./testdata/9 && ./evm t8n --state.fork=Berlin --input.alloc=$dir/alloc.json --input.txs=$dir/txs.json --input.env=$dir/env.json --output.alloc=stdout
 ERROR(10): Failed signing transactions: ERROR(10): Tx 0: failed to sign tx: transaction type not supported
 ```
 
@@ -66,7 +66,7 @@ It fails, due to the `evm t8n` cannot sign them in with the given signer. We can
 by feeding it presigned transactions, located in `txs_signed.json`. 
 
 ```
-dir=./testdata/9 && ./evm t8n --state.fork=Berlin --input.alloc=$dir/alloc.json --input.txs=$dir/txs_signed.json --input.env=$dir/env.json 
+$ dir=./testdata/9 && ./evm t8n --state.fork=Berlin --input.alloc=$dir/alloc.json --input.txs=$dir/txs_signed.json --input.env=$dir/env.json 
 WARN [03-09|11:06:22.065] rejected tx                              index=0 hash=334e09..f8dce5 error="transaction type not supported"
 INFO [03-09|11:06:22.066] rejected tx                              index=1 hash=a9c6c6..fa4036 from=0xa94f5374Fce5edBC8E2a8697C15331677e6EbF0B error="nonce too high: address 0xa94f5374Fce5edBC8E2a8697C15331677e6EbF0B, tx: 1 state: 0"
 INFO [03-09|11:06:22.066] Trie dumping started                     root=6eebe9..a0fda5

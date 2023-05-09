@@ -274,19 +274,9 @@ var (
 		Usage:    "Manually specify the Shanghai fork timestamp, overriding the bundled setting",
 		Category: flags.EthCategory,
 	}
-	OverrideOptimismBedrock = &flags.BigFlag{
-		Name:     "override.bedrock",
-		Usage:    "Manually specify OptimsimBedrock, overriding the bundled setting",
-		Category: flags.EthCategory,
-	}
-	OverrideOptimismRegolith = &flags.BigFlag{
-		Name:     "override.regolith",
-		Usage:    "Manually specify the OptimsimRegolith fork timestamp, overriding the bundled setting",
-		Category: flags.EthCategory,
-	}
-	OverrideOptimism = &cli.BoolFlag{
-		Name:     "override.optimism",
-		Usage:    "Manually specify optimism",
+	OverrideKroma = &cli.BoolFlag{
+		Name:     "override.kroma",
+		Usage:    "Manually specify kroma",
 		Category: flags.EthCategory,
 	}
 	// Light server and client settings
@@ -914,32 +904,6 @@ var (
 		Usage:    "Gas price below which gpo will ignore transactions",
 		Value:    ethconfig.Defaults.GPO.IgnorePrice.Int64(),
 		Category: flags.GasPriceCategory,
-	}
-
-	// Rollup Flags
-	RollupSequencerHTTPFlag = &cli.StringFlag{
-		Name:     "rollup.sequencerhttp",
-		Usage:    "HTTP endpoint for the sequencer mempool",
-		Category: flags.RollupCategory,
-	}
-
-	RollupHistoricalRPCFlag = &cli.StringFlag{
-		Name:     "rollup.historicalrpc",
-		Usage:    "RPC endpoint for historical data.",
-		Category: flags.RollupCategory,
-	}
-
-	RollupHistoricalRPCTimeoutFlag = &cli.StringFlag{
-		Name:     "rollup.historicalrpctimeout",
-		Usage:    "Timeout for historical RPC requests.",
-		Value:    "5s",
-		Category: flags.RollupCategory,
-	}
-
-	RollupDisableTxPoolGossipFlag = &cli.BoolFlag{
-		Name:     "rollup.disabletxpoolgossip",
-		Usage:    "Disable transaction pool gossip.",
-		Category: flags.RollupCategory,
 	}
 
 	// Metrics flags
@@ -1899,17 +1863,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 			cfg.EthDiscoveryURLs = SplitAndTrim(urls)
 		}
 	}
-	// Only configure sequencer http flag if we're running in verifier mode i.e. --mine is disabled.
-	if ctx.IsSet(RollupSequencerHTTPFlag.Name) && !ctx.IsSet(MiningEnabledFlag.Name) {
-		cfg.RollupSequencerHTTP = ctx.String(RollupSequencerHTTPFlag.Name)
-	}
-	if ctx.IsSet(RollupHistoricalRPCFlag.Name) {
-		cfg.RollupHistoricalRPC = ctx.String(RollupHistoricalRPCFlag.Name)
-	}
-	if ctx.IsSet(RollupHistoricalRPCTimeoutFlag.Name) {
-		cfg.RollupHistoricalRPCTimeout = ctx.Duration(RollupHistoricalRPCTimeoutFlag.Name)
-	}
-	cfg.RollupDisableTxPoolGossip = ctx.Bool(RollupDisableTxPoolGossipFlag.Name)
+
 	// Override any default configs for hard coded networks.
 	switch {
 	case ctx.Bool(MainnetFlag.Name):

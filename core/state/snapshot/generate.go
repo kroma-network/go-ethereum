@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/VictoriaMetrics/fastcache"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -588,7 +589,7 @@ func generateAccounts(ctx *generatorContext, dl *diskLayer, accMarker []byte) er
 				if bytes.Equal(acc.CodeHash, types.EmptyCodeHash[:]) {
 					dataLen -= 32
 				}
-				if acc.Root == types.EmptyRootHash {
+				if acc.Root == types.EmptyMPTRootHash {
 					dataLen -= 32
 				}
 				snapRecoveredAccountMeter.Mark(1)
@@ -615,7 +616,7 @@ func generateAccounts(ctx *generatorContext, dl *diskLayer, accMarker []byte) er
 
 		// If the iterated account is the contract, create a further loop to
 		// verify or regenerate the contract storage.
-		if acc.Root == types.EmptyRootHash {
+		if acc.Root == types.EmptyMPTRootHash {
 			ctx.removeStorageAt(account)
 		} else {
 			var storeMarker []byte

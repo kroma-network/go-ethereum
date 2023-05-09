@@ -26,6 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -40,7 +42,6 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -197,6 +198,7 @@ func initGenesis(ctx *cli.Context) error {
 		}
 		triedb := trie.NewDatabaseWithConfig(chaindb, &trie.Config{
 			Preimages: ctx.Bool(utils.CachePreimagesFlag.Name),
+			Zktrie:    genesis.Config.Zktrie,
 		})
 		_, hash, err := core.SetupGenesisBlock(chaindb, triedb, genesis)
 		if err != nil {
@@ -458,7 +460,7 @@ func parseDumpConfig(ctx *cli.Context, stack *node.Node) (*state.DumpConfig, eth
 }
 
 func dump(ctx *cli.Context) error {
-	stack, _ := makeConfigNode(ctx)
+	stack, gethConfig := makeConfigNode(ctx)
 	defer stack.Close()
 
 	conf, db, root, err := parseDumpConfig(ctx, stack)
@@ -467,6 +469,7 @@ func dump(ctx *cli.Context) error {
 	}
 	config := &trie.Config{
 		Preimages: true, // always enable preimage lookup
+		Zktrie:    gethConfig.Eth.Genesis.Config.Zktrie,
 	}
 	state, err := state.New(root, state.NewDatabaseWithConfig(db, config), nil)
 	if err != nil {

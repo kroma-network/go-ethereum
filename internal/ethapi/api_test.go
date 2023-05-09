@@ -31,9 +31,8 @@ import (
 
 func TestNewRPCTransactionDepositTx(t *testing.T) {
 	tx := types.NewTx(&types.DepositTx{
-		SourceHash:          common.HexToHash("0x1234"),
-		IsSystemTransaction: true,
-		Mint:                big.NewInt(34),
+		SourceHash: common.HexToHash("0x1234"),
+		Mint:       big.NewInt(34),
 	})
 	nonce := uint64(7)
 	receipt := &types.Receipt{
@@ -48,18 +47,8 @@ func TestNewRPCTransactionDepositTx(t *testing.T) {
 
 	// Should include deposit tx specific fields
 	require.Equal(t, *got.SourceHash, tx.SourceHash(), "newRPCTransaction().SourceHash = %v, want %v", got.SourceHash, tx.SourceHash())
-	require.Equal(t, *got.IsSystemTx, tx.IsSystemTx(), "newRPCTransaction().IsSystemTx = %v, want %v", got.IsSystemTx, tx.IsSystemTx())
 	require.Equal(t, got.Mint, (*hexutil.Big)(tx.Mint()), "newRPCTransaction().Mint = %v, want %v", got.Mint, tx.Mint())
 	require.Equal(t, got.Nonce, (hexutil.Uint64)(nonce), "newRPCTransaction().Mint = %v, want %v", got.Nonce, nonce)
-}
-
-func TestNewRPCTransactionOmitIsSystemTxFalse(t *testing.T) {
-	tx := types.NewTx(&types.DepositTx{
-		IsSystemTransaction: false,
-	})
-	got := newRPCTransaction(tx, common.Hash{}, uint64(12), uint64(1), big.NewInt(0), &params.ChainConfig{}, nil)
-
-	require.Nil(t, got.IsSystemTx, "should omit IsSystemTx when false")
 }
 
 func TestUnmarshalRpcDepositTx(t *testing.T) {
@@ -125,9 +114,8 @@ func TestUnmarshalRpcDepositTx(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			tx := types.NewTx(&types.DepositTx{
-				SourceHash:          common.HexToHash("0x1234"),
-				IsSystemTransaction: true,
-				Mint:                big.NewInt(34),
+				SourceHash: common.HexToHash("0x1234"),
+				Mint:       big.NewInt(34),
 			})
 			rpcTx := newRPCTransaction(tx, common.Hash{}, uint64(12), uint64(1), big.NewInt(0), &params.ChainConfig{}, nil)
 			test.modifier(rpcTx)
@@ -214,7 +202,7 @@ func allTransactionTypes(addr common.Address, config *params.ChainConfig) []type
 			AccessList: types.AccessList{
 				types.AccessTuple{
 					Address:     common.Address{0x2},
-					StorageKeys: []common.Hash{types.EmptyRootHash},
+					StorageKeys: []common.Hash{types.EmptyMPTRootHash},
 				},
 			},
 			V: big.NewInt(32),
@@ -232,7 +220,7 @@ func allTransactionTypes(addr common.Address, config *params.ChainConfig) []type
 			AccessList: types.AccessList{
 				types.AccessTuple{
 					Address:     common.Address{0x2},
-					StorageKeys: []common.Hash{types.EmptyRootHash},
+					StorageKeys: []common.Hash{types.EmptyMPTRootHash},
 				},
 			},
 			V: big.NewInt(32),
@@ -251,7 +239,7 @@ func allTransactionTypes(addr common.Address, config *params.ChainConfig) []type
 			AccessList: types.AccessList{
 				types.AccessTuple{
 					Address:     common.Address{0x2},
-					StorageKeys: []common.Hash{types.EmptyRootHash},
+					StorageKeys: []common.Hash{types.EmptyMPTRootHash},
 				},
 			},
 			V: big.NewInt(32),

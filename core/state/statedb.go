@@ -24,6 +24,8 @@ import (
 	"sort"
 	"time"
 
+	zkt "github.com/kroma-network/zktrie/types"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
@@ -194,6 +196,21 @@ func (s *StateDB) Error() error {
 	return s.dbErr
 }
 
+// [Scroll: START]
+// NOTE(chokobole): This part is different from scroll
+func (s *StateDB) IsZktrie() bool {
+	return s.db.IsZktrie()
+}
+
+func (s *StateDB) GetEmptyRoot() common.Hash {
+	if s.db.TrieDB() == nil {
+		return types.EmptyMPTRootHash
+	}
+	return s.db.TrieDB().EmptyRoot()
+}
+
+// [Scroll: END]
+
 func (s *StateDB) AddLog(log *types.Log) {
 	s.journal.append(addLogChange{txhash: s.thash})
 
@@ -325,6 +342,12 @@ func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 
 // GetProof returns the Merkle proof for a given account.
 func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
+	// [Scroll: START]
+	if s.IsZktrie() {
+		addr_s, _ := zkt.ToSecureKeyBytes(addr.Bytes())
+		return s.GetProofByHash(common.BytesToHash(addr_s.Bytes()))
+	}
+	// [Scroll: END]
 	return s.GetProofByHash(crypto.Keccak256Hash(addr.Bytes()))
 }
 
@@ -334,6 +357,49 @@ func (s *StateDB) GetProofByHash(addrHash common.Hash) ([][]byte, error) {
 	err := s.trie.Prove(addrHash[:], 0, &proof)
 	return proof, err
 }
+
+// [Scroll: START]
+func (s *StateDB) GetLiveStateAccount(addr common.Address) *types.StateAccount {
+	obj, ok := s.stateObjects[addr]
+	if !ok {
+		return nil
+	}
+	return &obj.data
+}
+
+func (s *StateDB) GetRootHash() common.Hash {
+	return s.trie.Hash()
+}
+
+// StorageTrieProof is not in Db interface and used explicitly for reading proof in storage trie (not the dirty value)
+func (s *StateDB) GetStorageTrieProof(a common.Address, key common.Hash) ([][]byte, error) {
+	// try the trie in stateObject first, else we would create one
+	stateObject := s.getStateObject(a)
+	if stateObject == nil {
+		return nil, errors.New("storage trie for requested address does not exist")
+	}
+
+	trie := stateObject.trie
+	var err error
+	if trie == nil {
+		// use a new, temporary trie
+		trie, err = s.db.OpenStorageTrie(stateObject.db.originalRoot, stateObject.addrHash, stateObject.data.Root)
+		if err != nil {
+			return nil, fmt.Errorf("can't create storage trie on root %s: %v ", stateObject.data.Root, err)
+		}
+	}
+
+	var proof proofList
+	if s.IsZktrie() {
+		key_s, _ := zkt.ToSecureKeyBytes(key.Bytes())
+		err = trie.Prove(key_s.Bytes(), 0, &proof)
+	} else {
+		err = trie.Prove(crypto.Keccak256(key.Bytes()), 0, &proof)
+	}
+	return proof, err
+}
+
+// [Scroll: END]
 
 // GetStorageProof returns the Merkle proof for given storage slot.
 func (s *StateDB) GetStorageProof(a common.Address, key common.Hash) ([][]byte, error) {
@@ -345,7 +411,14 @@ func (s *StateDB) GetStorageProof(a common.Address, key common.Hash) ([][]byte, 
 		return nil, errors.New("storage trie for requested address does not exist")
 	}
 	var proof proofList
-	err = trie.Prove(crypto.Keccak256(key.Bytes()), 0, &proof)
+	// [Scroll: START]
+	if s.IsZktrie() {
+		key_s, _ := zkt.ToSecureKeyBytes(key.Bytes())
+		err = trie.Prove(key_s.Bytes(), 0, &proof)
+	} else {
+		err = trie.Prove(crypto.Keccak256(key.Bytes()), 0, &proof)
+	}
+	// [Scroll: END]
 	if err != nil {
 		return nil, err
 	}
@@ -579,7 +652,9 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 				data.CodeHash = types.EmptyCodeHash.Bytes()
 			}
 			if data.Root == (common.Hash{}) {
-				data.Root = types.EmptyRootHash
+				// [Scroll: START]
+				data.Root = s.GetEmptyRoot()
+				// [Scroll: END]
 			}
 		}
 	}
@@ -1063,11 +1138,15 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		s.stateObjectsDestruct = make(map[common.Address]struct{})
 	}
 	if root == (common.Hash{}) {
-		root = types.EmptyRootHash
+		// [Scroll: START]
+		root = s.GetEmptyRoot()
+		// [Scroll: END]
 	}
 	origin := s.originalRoot
 	if origin == (common.Hash{}) {
-		origin = types.EmptyRootHash
+		// [Scroll: START]
+		origin = s.GetEmptyRoot()
+		// [Scroll: END]
 	}
 	if root != origin {
 		start := time.Now()

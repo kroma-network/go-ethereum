@@ -37,8 +37,6 @@ type DepositTx struct {
 	Value *big.Int
 	// gas limit
 	Gas uint64
-	// Field indicating if this transaction is exempt from the L2 gas limit.
-	IsSystemTransaction bool
 	// Normal Tx data
 	Data []byte
 }
@@ -46,14 +44,13 @@ type DepositTx struct {
 // copy creates a deep copy of the transaction data and initializes all fields.
 func (tx *DepositTx) copy() TxData {
 	cpy := &DepositTx{
-		SourceHash:          tx.SourceHash,
-		From:                tx.From,
-		To:                  copyAddressPtr(tx.To),
-		Mint:                nil,
-		Value:               new(big.Int),
-		Gas:                 tx.Gas,
-		IsSystemTransaction: tx.IsSystemTransaction,
-		Data:                common.CopyBytes(tx.Data),
+		SourceHash: tx.SourceHash,
+		From:       tx.From,
+		To:         copyAddressPtr(tx.To),
+		Mint:       nil,
+		Value:      new(big.Int),
+		Gas:        tx.Gas,
+		Data:       common.CopyBytes(tx.Data),
 	}
 	if tx.Mint != nil {
 		cpy.Mint = new(big.Int).Set(tx.Mint)
@@ -76,13 +73,9 @@ func (tx *DepositTx) gasPrice() *big.Int     { return new(big.Int) }
 func (tx *DepositTx) value() *big.Int        { return tx.Value }
 func (tx *DepositTx) nonce() uint64          { return 0 }
 func (tx *DepositTx) to() *common.Address    { return tx.To }
-func (tx *DepositTx) isSystemTx() bool       { return tx.IsSystemTransaction }
-
 func (tx *DepositTx) effectiveGasPrice(dst *big.Int, baseFee *big.Int) *big.Int {
 	return dst.Set(new(big.Int))
 }
-
-func (tx *DepositTx) effectiveNonce() *uint64 { return nil }
 
 func (tx *DepositTx) rawSignatureValues() (v, r, s *big.Int) {
 	return common.Big0, common.Big0, common.Big0

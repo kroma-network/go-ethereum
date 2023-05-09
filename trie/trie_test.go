@@ -29,13 +29,14 @@ import (
 	"testing/quick"
 
 	"github.com/davecgh/go-spew/spew"
+	"golang.org/x/crypto/sha3"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/rlp"
-	"golang.org/x/crypto/sha3"
 )
 
 func init() {
@@ -46,7 +47,7 @@ func init() {
 func TestEmptyTrie(t *testing.T) {
 	trie := NewEmpty(NewDatabase(rawdb.NewMemoryDatabase()))
 	res := trie.Hash()
-	exp := types.EmptyRootHash
+	exp := types.EmptyMPTRootHash
 	if res != exp {
 		t.Errorf("expected %x got %x", exp, res)
 	}
@@ -473,7 +474,7 @@ func runRandTest(rt randTest) bool {
 			}
 		case opProve:
 			hash := tr.Hash()
-			if hash == types.EmptyRootHash {
+			if hash == types.EmptyMPTRootHash {
 				continue
 			}
 			proofDb := rawdb.NewMemoryDatabase()
@@ -740,8 +741,8 @@ func makeAccounts(size int) (addresses [][20]byte, accounts [][]byte) {
 	for i := 0; i < len(accounts); i++ {
 		var (
 			nonce = uint64(random.Int63())
-			root  = types.EmptyRootHash
-			code  = crypto.Keccak256(nil)
+			root  = types.EmptyMPTRootHash
+			code  = types.EmptyCodeHash.Bytes()
 		)
 		// The big.Rand function is not deterministic with regards to 64 vs 32 bit systems,
 		// and will consume different amount of data from the rand source.

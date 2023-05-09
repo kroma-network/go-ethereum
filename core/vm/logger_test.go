@@ -14,17 +14,18 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package logger
+package vm
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math/big"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -44,21 +45,26 @@ func (d *dummyContractRef) SetBalance(*big.Int)        {}
 func (d *dummyContractRef) SetNonce(uint64)            {}
 func (d *dummyContractRef) Balance() *big.Int          { return new(big.Int) }
 
-type dummyStatedb struct {
-	state.StateDB
+// [Scroll: START]
+// makeTestState create a sample test state to test node-wise reconstruction.
+func makeTestState() *state.StateDB {
+	// Create an empty state
+	db := state.NewDatabase(rawdb.NewMemoryDatabase())
+	stateDb, _ := state.New(common.Hash{}, db, nil)
+	return stateDb
 }
 
-func (*dummyStatedb) GetRefund() uint64                                       { return 1337 }
-func (*dummyStatedb) GetState(_ common.Address, _ common.Hash) common.Hash    { return common.Hash{} }
-func (*dummyStatedb) SetState(_ common.Address, _ common.Hash, _ common.Hash) {}
+// [Scroll: END]
 
 func TestStoreCapture(t *testing.T) {
 	var (
-		logger   = NewStructLogger(nil)
-		env      = vm.NewEVM(vm.BlockContext{}, vm.TxContext{}, &dummyStatedb{}, params.TestChainConfig, vm.Config{Debug: true, Tracer: logger})
-		contract = vm.NewContract(&dummyContractRef{}, &dummyContractRef{}, new(big.Int), 100000)
+		logger = NewStructLogger(nil)
+		// [Scroll: START]
+		env = NewEVM(BlockContext{}, TxContext{}, makeTestState(), params.TestChainConfig, Config{Debug: true, Tracer: logger})
+		// [Scroll: END]
+		contract = NewContract(&dummyContractRef{}, &dummyContractRef{}, new(big.Int), 100000)
 	)
-	contract.Code = []byte{byte(vm.PUSH1), 0x1, byte(vm.PUSH1), 0x0, byte(vm.SSTORE)}
+	contract.Code = []byte{byte(PUSH1), 0x1, byte(PUSH1), 0x0, byte(SSTORE)}
 	var index common.Hash
 	logger.CaptureStart(env, common.Address{}, contract.Address(), false, nil, 0, nil)
 	_, err := env.Interpreter().Run(contract, []byte{}, false)
@@ -84,13 +90,21 @@ func TestStructLogMarshalingOmitEmpty(t *testing.T) {
 		want string
 	}{
 		{"empty err and no fields", &StructLog{},
-			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"opName":"STOP"}`},
+			// [Scroll: START]
+			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"opName":"STOP","error":""}`},
+		// [Scroll: END]
 		{"with err", &StructLog{Err: fmt.Errorf("this failed")},
+			// [Scroll: START]
 			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"opName":"STOP","error":"this failed"}`},
-		{"with mem", &StructLog{Memory: make([]byte, 2), MemorySize: 2},
-			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memory":"0x0000","memSize":2,"stack":null,"depth":0,"refund":0,"opName":"STOP"}`},
-		{"with 0-size mem", &StructLog{Memory: make([]byte, 0)},
-			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"opName":"STOP"}`},
+		// [Scroll: END]
+		{"with mem", &StructLog{Memory: *bytes.NewBuffer(make([]byte, 2)), MemorySize: 2},
+			// [Scroll: START]
+			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memory":"0x0000","memSize":2,"stack":null,"depth":0,"refund":0,"opName":"STOP","error":""}`},
+		// [Scroll: END]
+		{"with 0-size mem", &StructLog{Memory: *bytes.NewBuffer(make([]byte, 0))},
+			// [Scroll: START]
+			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"opName":"STOP","error":""}`},
+		// [Scroll: END]
 	}
 
 	for _, tt := range tests {

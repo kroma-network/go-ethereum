@@ -116,10 +116,14 @@ func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
 }
 
 // deriveHash computes the state root according to the genesis specification.
-func (ga *GenesisAlloc) deriveHash() (common.Hash, error) {
+// [Scroll: START]
+func (ga *GenesisAlloc) deriveHash(trieCfg *trie.Config) (common.Hash, error) {
+	// [Scroll: END]
 	// Create an ephemeral in-memory database for computing hash,
 	// all the derived states will be discarded to not pollute disk.
-	db := state.NewDatabase(rawdb.NewMemoryDatabase())
+	// [Scroll: START]
+	db := state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), trieCfg)
+	// [Scroll: END]
 	statedb, err := state.New(common.Hash{}, db, nil)
 	if err != nil {
 		return common.Hash{}, err
@@ -156,7 +160,7 @@ func (ga *GenesisAlloc) flush(db ethdb.Database, triedb *trie.Database, blockhas
 		return err
 	}
 	// Commit newly generated states into disk if it's not empty.
-	if root != types.EmptyRootHash {
+	if root != triedb.EmptyRoot() {
 		if err := triedb.Commit(root, true); err != nil {
 			return err
 		}
@@ -268,10 +272,8 @@ func (e *GenesisMismatchError) Error() string {
 // ChainOverrides contains the changes to chain config.
 type ChainOverrides struct {
 	OverrideShanghai *uint64
-	// optimism
-	OverrideOptimismBedrock  *big.Int
-	OverrideOptimismRegolith *uint64
-	OverrideOptimism         *bool
+	// kroma
+	OverrideKroma *bool
 }
 
 // SetupGenesisBlock writes or updates the genesis block in db.
@@ -297,26 +299,12 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 	}
 	applyOverrides := func(config *params.ChainConfig) {
 		if config != nil {
-			if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(params.OptimismGoerliChainId) == 0 {
-				// Apply Optimism Goerli regolith time
-				config.RegolithTime = &params.OptimismGoerliRegolithTime
-			}
-			if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(params.BaseGoerliChainId) == 0 {
-				// Apply Base Goerli regolith time
-				config.RegolithTime = &params.BaseGoerliRegolithTime
-			}
 			if overrides != nil && overrides.OverrideShanghai != nil {
 				config.ShanghaiTime = overrides.OverrideShanghai
 			}
-			if overrides != nil && overrides.OverrideOptimismBedrock != nil {
-				config.BedrockBlock = overrides.OverrideOptimismBedrock
-			}
-			if overrides != nil && overrides.OverrideOptimismRegolith != nil {
-				config.RegolithTime = overrides.OverrideOptimismRegolith
-			}
-			if overrides != nil && overrides.OverrideOptimism != nil {
-				if *overrides.OverrideOptimism {
-					config.Optimism = &params.OptimismConfig{
+			if overrides != nil && overrides.OverrideKroma != nil {
+				if *overrides.OverrideKroma {
+					config.Kroma = &params.KromaConfig{
 						EIP1559Elasticity:  10,
 						EIP1559Denominator: 50,
 					}
@@ -338,12 +326,24 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 			return genesis.Config, common.Hash{}, err
 		}
 		applyOverrides(genesis.Config)
+		triedb.Zktrie = genesis.Config.Zktrie
 		return genesis.Config, block.Hash(), nil
 	}
+
+	// NOTE(chokobole): Need to fetch Zktrie from chainConfig before triedb.EmptyRoot().
+	foundStoredCfg := false
+	storedcfg := rawdb.ReadChainConfig(db, stored)
+	if storedcfg != nil {
+		foundStoredCfg = true
+	}
+	if foundStoredCfg {
+		triedb.Zktrie = storedcfg.Zktrie
+	}
+
 	// We have the genesis block in database(perhaps in ancient database)
 	// but the corresponding state is missing.
 	header := rawdb.ReadHeader(db, stored, 0)
-	if header.Root != types.EmptyRootHash && !rawdb.HasLegacyTrieNode(db, header.Root) {
+	if header.Root != triedb.EmptyRoot() && !rawdb.HasLegacyTrieNode(db, header.Root) {
 		if genesis == nil {
 			genesis = DefaultGenesisBlock()
 		}
@@ -372,8 +372,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 	if err := newcfg.CheckConfigForkOrder(); err != nil {
 		return newcfg, common.Hash{}, err
 	}
-	storedcfg := rawdb.ReadChainConfig(db, stored)
-	if storedcfg == nil {
+	if !foundStoredCfg {
 		log.Warn("Found genesis block without chain config")
 		rawdb.WriteChainConfig(db, stored, newcfg)
 		return newcfg, stored, nil
@@ -460,7 +459,13 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 
 // ToBlock returns the genesis block according to genesis specification.
 func (g *Genesis) ToBlock() *types.Block {
-	root, err := g.Alloc.deriveHash()
+	// [Scroll: START]
+	var trieCfg *trie.Config
+	if g.Config != nil {
+		trieCfg = &trie.Config{Zktrie: g.Config.Zktrie}
+	}
+	root, err := g.Alloc.deriveHash(trieCfg)
+	// [Scroll: END]
 	if err != nil {
 		panic(err)
 	}
@@ -538,7 +543,9 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *trie.Database) (*types.Block
 // Note the state changes will be committed in hash-based scheme, use Commit
 // if path-scheme is preferred.
 func (g *Genesis) MustCommit(db ethdb.Database) *types.Block {
-	block, err := g.Commit(db, trie.NewDatabase(db))
+	block, err := g.Commit(db, trie.NewDatabaseWithConfig(db, &trie.Config{
+		Zktrie: g.Config != nil && g.Config.Zktrie,
+	}))
 	if err != nil {
 		panic(err)
 	}
@@ -620,7 +627,10 @@ func DeveloperGenesisBlock(period uint64, gasLimit uint64, faucet common.Address
 			common.BytesToAddress([]byte{7}): {Balance: big.NewInt(1)}, // ECScalarMul
 			common.BytesToAddress([]byte{8}): {Balance: big.NewInt(1)}, // ECPairing
 			common.BytesToAddress([]byte{9}): {Balance: big.NewInt(1)}, // BLAKE2b
-			faucet:                           {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(9))},
+			// [Scroll: START]
+			// LSH 250 due to finite field limitation
+			faucet: {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 250), big.NewInt(9))},
+			// [Scroll: END]
 		},
 	}
 }

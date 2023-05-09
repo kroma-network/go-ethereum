@@ -26,7 +26,6 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
@@ -39,7 +38,6 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -57,6 +55,13 @@ type EthAPIBackend struct {
 func (b *EthAPIBackend) ChainConfig() *params.ChainConfig {
 	return b.eth.blockchain.Config()
 }
+
+// [Scroll: START]
+func (b *EthAPIBackend) CacheConfig() *core.CacheConfig {
+	return b.eth.blockchain.CacheConfig()
+}
+
+// [Scroll: END]
 
 func (b *EthAPIBackend) CurrentBlock() *types.Header {
 	return b.eth.blockchain.CurrentBlock()
@@ -283,20 +288,6 @@ func (b *EthAPIBackend) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscri
 }
 
 func (b *EthAPIBackend) SendTx(ctx context.Context, tx *types.Transaction) error {
-	if b.eth.seqRPCService != nil {
-		data, err := tx.MarshalBinary()
-		if err != nil {
-			return err
-		}
-		if err := b.eth.seqRPCService.CallContext(ctx, nil, "eth_sendRawTransaction", hexutil.Encode(data)); err != nil {
-			return err
-		}
-		// Retain tx in local tx pool after forwarding, for local RPC usage.
-		if err := b.eth.txPool.AddLocal(tx); err != nil {
-			log.Warn("successfully sent tx to sequencer, but failed to persist in local tx pool", "err", err, "tx", tx.Hash())
-		}
-		return nil
-	}
 	return b.eth.txPool.AddLocal(tx)
 }
 
@@ -419,10 +410,6 @@ func (b *EthAPIBackend) StateAtBlock(ctx context.Context, block *types.Block, re
 
 func (b *EthAPIBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (*core.Message, vm.BlockContext, *state.StateDB, tracers.StateReleaseFunc, error) {
 	return b.eth.stateAtTransaction(ctx, block, txIndex, reexec)
-}
-
-func (b *EthAPIBackend) HistoricalRPCService() *rpc.Client {
-	return b.eth.historicalRPCService
 }
 
 func (b *EthAPIBackend) Genesis() *types.Block {

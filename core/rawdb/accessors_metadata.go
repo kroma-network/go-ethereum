@@ -64,8 +64,8 @@ func ReadChainConfig(db ethdb.KeyValueReader, hash common.Hash) *params.ChainCon
 		log.Error("Invalid chain config JSON", "hash", hash, "err", err)
 		return nil
 	}
-	if config.Optimism != nil {
-		config.Clique = nil // get rid of legacy clique data in chain config (optimism goerli issue)
+	if config.Kroma != nil {
+		config.Clique = nil // get rid of legacy clique data in chain config (kroma goerli issue)
 	}
 	return &config
 }

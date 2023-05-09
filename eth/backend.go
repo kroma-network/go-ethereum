@@ -18,14 +18,12 @@
 package eth
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"math/big"
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -75,9 +73,6 @@ type Ethereum struct {
 	ethDialCandidates  enode.Iterator
 	snapDialCandidates enode.Iterator
 	merger             *consensus.Merger
-
-	seqRPCService        *rpc.Client
-	historicalRPCService *rpc.Client
 
 	// DB interfaces
 	chainDb ethdb.Database // Block chain database
@@ -195,6 +190,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			TrieTimeLimit:       config.TrieTimeout,
 			SnapshotLimit:       config.SnapshotCache,
 			Preimages:           config.Preimages,
+			// [Scroll: START]
+			MPTWitness: config.MPTWitness,
+			// [Scroll: END]
 		}
 	)
 	// Override the chain config with provided settings.
@@ -202,26 +200,20 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.OverrideShanghai != nil {
 		overrides.OverrideShanghai = config.OverrideShanghai
 	}
-	if config.OverrideOptimismBedrock != nil {
-		overrides.OverrideOptimismBedrock = config.OverrideOptimismBedrock
-	}
-	if config.OverrideOptimismRegolith != nil {
-		overrides.OverrideOptimismRegolith = config.OverrideOptimismRegolith
-	}
-	if config.OverrideOptimism != nil {
-		overrides.OverrideOptimism = config.OverrideOptimism
+	if config.OverrideKroma != nil {
+		overrides.OverrideKroma = config.OverrideKroma
 	}
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit)
 	if err != nil {
 		return nil, err
 	}
-	if chainConfig := eth.blockchain.Config(); chainConfig.Optimism != nil { // config.Genesis.Config.ChainID cannot be used because it's based on CLI flags only, thus default to mainnet L1
-		config.NetworkId = chainConfig.ChainID.Uint64() // optimism defaults eth network ID to chain ID
+	if chainConfig := eth.blockchain.Config(); chainConfig.Kroma != nil { // config.Genesis.Config.ChainID cannot be used because it's based on CLI flags only, thus default to mainnet L1
+		config.NetworkId = chainConfig.ChainID.Uint64() // kroma defaults eth network ID to chain ID
 		eth.networkID = config.NetworkId
 	}
 	log.Info("Initialising Ethereum protocol", "network", config.NetworkId, "dbversion", dbVer)
 
-	if eth.blockchain.Config().Optimism != nil { // Optimism Bedrock depends on Merge functionality
+	if eth.blockchain.Config().Kroma != nil {
 		eth.merger.FinalizePoS()
 	}
 
@@ -249,7 +241,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		EventMux:       eth.eventMux,
 		Checkpoint:     checkpoint,
 		RequiredBlocks: config.RequiredBlocks,
-		NoTxGossip:     config.RollupDisableTxPoolGossip,
 	}); err != nil {
 		return nil, err
 	}
@@ -278,26 +269,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	if config.RollupSequencerHTTP != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		client, err := rpc.DialContext(ctx, config.RollupSequencerHTTP)
-		cancel()
-		if err != nil {
-			return nil, err
-		}
-		eth.seqRPCService = client
-	}
-
-	if config.RollupHistoricalRPC != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), config.RollupHistoricalRPCTimeout)
-		client, err := rpc.DialContext(ctx, config.RollupHistoricalRPC)
-		cancel()
-		if err != nil {
-			return nil, err
-		}
-		eth.historicalRPCService = client
-	}
-
 	// Start the RPC service
 	eth.netRPCService = ethapi.NewNetAPI(eth.p2pServer, config.NetworkId)
 
@@ -316,7 +287,7 @@ func makeExtraData(extra []byte) []byte {
 	if len(extra) == 0 {
 		// create default extradata
 		extra, _ = rlp.EncodeToBytes([]interface{}{
-			uint(params.OPVersionMajor<<16 | params.OPVersionMinor<<8 | params.OPVersionPatch),
+			uint(params.KromaVersionMajor<<16 | params.KromaVersionMinor<<8 | params.KromaVersionPatch),
 			"geth",
 			runtime.Version(),
 			runtime.GOOS,
@@ -532,7 +503,7 @@ func (s *Ethereum) SyncMode() downloader.SyncMode {
 // network protocols to start.
 func (s *Ethereum) Protocols() []p2p.Protocol {
 	protos := eth.MakeProtocols((*ethHandler)(s.handler), s.networkID, s.ethDialCandidates)
-	if s.config.SnapshotCache > 0 {
+	if !s.blockchain.Config().Zktrie && s.config.SnapshotCache > 0 {
 		protos = append(protos, snap.MakeProtocols((*snapHandler)(s.handler), s.snapDialCandidates)...)
 	}
 	return protos
@@ -577,12 +548,6 @@ func (s *Ethereum) Stop() error {
 	s.miner.Close()
 	s.blockchain.Stop()
 	s.engine.Close()
-	if s.seqRPCService != nil {
-		s.seqRPCService.Close()
-	}
-	if s.historicalRPCService != nil {
-		s.historicalRPCService.Close()
-	}
 
 	// Clean shutdown marker as the last thing before closing db
 	s.shutdownTracker.Stop()

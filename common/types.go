@@ -28,8 +28,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"golang.org/x/crypto/sha3"
+
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 // Lengths of hashes and addresses in bytes.
@@ -227,6 +228,15 @@ func IsHexAddress(s string) bool {
 
 // Bytes gets the string representation of the underlying address.
 func (a Address) Bytes() []byte { return a[:] }
+
+// [Scroll: START]
+func (a Address) Bytes32() []byte {
+	ret := make([]byte, 32)
+	copy(ret, a.Bytes())
+	return ret
+}
+
+// [Scroll: END]
 
 // Hash converts an address to a hash by left-padding it with zeros.
 func (a Address) Hash() Hash { return BytesToHash(a[:]) }

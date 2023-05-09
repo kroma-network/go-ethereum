@@ -23,10 +23,12 @@ import (
 )
 
 var (
-	// The base fee portion of the transaction fee accumulates at this predeploy
-	OptimismBaseFeeRecipient = common.HexToAddress("0x4200000000000000000000000000000000000019")
+	// The protocol fee portion of the transaction fee accumulates at this predeploy
+	KromaProtocolVault = common.HexToAddress("0x4200000000000000000000000000000000000006")
 	// The L1 portion of the transaction fee accumulates at this predeploy
-	OptimismL1FeeRecipient = common.HexToAddress("0x420000000000000000000000000000000000001A")
+	KromaProposerRewardVault = common.HexToAddress("0x4200000000000000000000000000000000000007")
+	// The validator reward portion of the transaction fee accumulates at this predeploy
+	KromaValidatorRewardVault = common.HexToAddress("0x4200000000000000000000000000000000000008")
 )
 
 const (

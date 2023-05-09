@@ -31,23 +31,27 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 )
 
-var (
-	sha3Nil = crypto.Keccak256Hash(nil)
-)
-
-func NewState(ctx context.Context, head *types.Header, odr OdrBackend) *state.StateDB {
-	state, _ := state.New(head.Root, NewStateDatabase(ctx, head, odr), nil)
+// [Scroll: START]
+// NOTE(chokobole): This part is different from scroll
+func NewState(ctx context.Context, head *types.Header, odr OdrBackend, zktrie bool) *state.StateDB {
+	state, _ := state.New(head.Root, NewStateDatabase(ctx, head, odr, zktrie), nil)
 	return state
 }
 
-func NewStateDatabase(ctx context.Context, head *types.Header, odr OdrBackend) state.Database {
-	return &odrDatabase{ctx, StateTrieID(head), odr}
+func NewStateDatabase(ctx context.Context, head *types.Header, odr OdrBackend, zktrie bool) state.Database {
+	return &odrDatabase{ctx, StateTrieID(head), odr, zktrie}
 }
+
+// [Scroll: END]
 
 type odrDatabase struct {
 	ctx     context.Context
 	id      *TrieID
 	backend OdrBackend
+	// [Scroll: START]
+	// NOTE(chokobole): This part is different from scroll
+	zktrie bool
+	// [Scroll: END]
 }
 
 func (db *odrDatabase) OpenTrie(root common.Hash) (state.Trie, error) {
@@ -72,7 +76,7 @@ func (db *odrDatabase) CopyTrie(t state.Trie) state.Trie {
 }
 
 func (db *odrDatabase) ContractCode(addrHash, codeHash common.Hash) ([]byte, error) {
-	if codeHash == sha3Nil {
+	if codeHash == types.EmptyCodeHash {
 		return nil, nil
 	}
 	code := rawdb.ReadCode(db.backend.Database(), codeHash)
@@ -98,6 +102,14 @@ func (db *odrDatabase) TrieDB() *trie.Database {
 func (db *odrDatabase) DiskDB() ethdb.KeyValueStore {
 	panic("not implemented")
 }
+
+// [Scroll: START]
+// NOTE(chokobole): This part is different from scroll
+func (db *odrDatabase) IsZktrie() bool {
+	return db.zktrie
+}
+
+// [Scroll: END]
 
 type odrTrie struct {
 	db   *odrDatabase

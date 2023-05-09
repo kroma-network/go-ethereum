@@ -58,6 +58,12 @@ type Database interface {
 
 	// TrieDB retrieves the low level trie database used for data storage.
 	TrieDB() *trie.Database
+
+	// [Scroll: START]
+	// NOTE(chokobole): This part is different from scroll
+	// Returns whether it uses Zktrie.
+	IsZktrie() bool
+	// [Scroll: END]
 }
 
 // Trie is a Ethereum Merkle Patricia trie.
@@ -163,6 +169,15 @@ type cachingDB struct {
 
 // OpenTrie opens the main account trie at a specific root hash.
 func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
+	// [Scroll: START]
+	if db.triedb.Zktrie {
+		tr, err := trie.NewZkTrie(root, trie.NewZktrieDatabaseFromTriedb(db.triedb))
+		if err != nil {
+			return nil, err
+		}
+		return tr, nil
+	}
+	// [Scroll: END]
 	tr, err := trie.NewStateTrie(trie.StateTrieID(root), db.triedb)
 	if err != nil {
 		return nil, err
@@ -172,6 +187,15 @@ func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
 
 // OpenStorageTrie opens the storage trie of an account.
 func (db *cachingDB) OpenStorageTrie(stateRoot common.Hash, addrHash, root common.Hash) (Trie, error) {
+	// [Scroll: START]
+	if db.triedb.Zktrie {
+		tr, err := trie.NewZkTrie(root, trie.NewZktrieDatabaseFromTriedb(db.triedb))
+		if err != nil {
+			return nil, err
+		}
+		return tr, nil
+	}
+	// [Scroll: END]
 	tr, err := trie.NewStateTrie(trie.StorageTrieID(stateRoot, addrHash, root), db.triedb)
 	if err != nil {
 		return nil, err
@@ -184,6 +208,10 @@ func (db *cachingDB) CopyTrie(t Trie) Trie {
 	switch t := t.(type) {
 	case *trie.StateTrie:
 		return t.Copy()
+	// [Scroll: START]
+	case *trie.ZkTrie:
+		return t.Copy()
+	// [Scroll: END]
 	default:
 		panic(fmt.Errorf("unknown trie type %T", t))
 	}
@@ -239,3 +267,12 @@ func (db *cachingDB) DiskDB() ethdb.KeyValueStore {
 func (db *cachingDB) TrieDB() *trie.Database {
 	return db.triedb
 }
+
+// [Scroll: START]
+// NOTE(chokobole): This part is different from scroll
+// Returns whether it uses Zktrie.
+func (db *cachingDB) IsZktrie() bool {
+	return db.triedb.Zktrie
+}
+
+// [Scroll: END]

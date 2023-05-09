@@ -333,7 +333,12 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		return nil, nil
 	}
 	for i := 0; i < n; i++ {
-		statedb, err := state.New(parent.Root(), state.NewDatabase(db), nil)
+		// [Scroll: START]
+		// NOTE(chokobole): This part is different from scroll
+		statedb, err := state.New(parent.Root(), state.NewDatabaseWithConfig(db, &trie.Config{
+			Zktrie: config.Zktrie,
+		}), nil)
+		// [Scroll: END]
 		if err != nil {
 			panic(err)
 		}
@@ -350,7 +355,9 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 // then generate chain on top.
 func GenerateChainWithGenesis(genesis *Genesis, engine consensus.Engine, n int, gen func(int, *BlockGen)) (ethdb.Database, []*types.Block, []types.Receipts) {
 	db := rawdb.NewMemoryDatabase()
-	_, err := genesis.Commit(db, trie.NewDatabase(db))
+	_, err := genesis.Commit(db, trie.NewDatabaseWithConfig(db, &trie.Config{
+		Zktrie: genesis.Config != nil && genesis.Config.Zktrie,
+	}))
 	if err != nil {
 		panic(err)
 	}

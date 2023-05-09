@@ -86,7 +86,6 @@ type TxData interface {
 	value() *big.Int
 	nonce() uint64
 	to() *common.Address
-	isSystemTx() bool
 
 	rawSignatureValues() (v, r, s *big.Int)
 	setSignatureValues(chainID, v, r, s *big.Int)
@@ -338,12 +337,6 @@ func (tx *Transaction) Mint() *big.Int {
 // IsDepositTx returns true if the transaction is a deposit tx type.
 func (tx *Transaction) IsDepositTx() bool {
 	return tx.Type() == DepositTxType
-}
-
-// IsSystemTx returns true for deposits that are system transactions. These transactions
-// are executed in an unmetered environment & do not contribute to the block gas limit.
-func (tx *Transaction) IsSystemTx() bool {
-	return tx.inner.isSystemTx()
 }
 
 // Cost returns gas * gasPrice + value.

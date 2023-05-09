@@ -323,6 +323,26 @@ func (ec *Client) SubscribeNewHead(ctx context.Context, ch chan<- *types.Header)
 	return ec.c.EthSubscribe(ctx, ch, "newHeads")
 }
 
+// [Scroll: START]
+// GetBlockTraceByHash returns the BlockResult given the block hash.
+func (ec *Client) GetBlockTraceByHash(ctx context.Context, blockHash common.Hash) (*types.BlockTrace, error) {
+	blockResult := &types.BlockTrace{}
+	return blockResult, ec.c.CallContext(ctx, &blockResult, "kroma_getBlockTraceByNumberOrHash", blockHash)
+}
+
+// GetBlockTraceByNumber returns the BlockResult given the block number.
+func (ec *Client) GetBlockTraceByNumber(ctx context.Context, number *big.Int) (*types.BlockTrace, error) {
+	blockResult := &types.BlockTrace{}
+	return blockResult, ec.c.CallContext(ctx, &blockResult, "kroma_getBlockTraceByNumberOrHash", toBlockNumArg(number))
+}
+
+// SubscribeNewBlockTrace subscribes to block execution trace when a new block is created.
+func (ec *Client) SubscribeNewBlockTrace(ctx context.Context, ch chan<- *types.BlockTrace) (ethereum.Subscription, error) {
+	return ec.c.EthSubscribe(ctx, ch, "newBlockTrace")
+}
+
+// [Scroll: END]
+
 // State Access
 
 // NetworkID returns the network ID for this client.

@@ -27,13 +27,9 @@ type RollupGasData struct {
 	Zeroes, Ones uint64
 }
 
-func (r RollupGasData) DataGas(time uint64, cfg *params.ChainConfig) (gas uint64) {
+func (r RollupGasData) DataGas() (gas uint64) {
 	gas = r.Zeroes * params.TxDataZeroGas
-	if cfg.IsRegolith(time) {
-		gas += r.Ones * params.TxDataNonZeroGasEIP2028
-	} else {
-		gas += (r.Ones + 68) * params.TxDataNonZeroGasEIP2028
-	}
+	gas += r.Ones * params.TxDataNonZeroGasEIP2028
 	return gas
 }
 
@@ -43,7 +39,8 @@ type StateGetter interface {
 
 // L1CostFunc is used in the state transition to determine the cost of a rollup message.
 // Returns nil if there is no cost.
-type L1CostFunc func(blockNum uint64, blockTime uint64, dataGas RollupGasData, isDepositTx bool) *big.Int
+// blockTime is deleted because it was used to determine whether it was before or after regolith.
+type L1CostFunc func(blockNum uint64, dataGas RollupGasData, isDepositTx bool) *big.Int
 
 var (
 	L1BaseFeeSlot = common.BigToHash(big.NewInt(1))
@@ -51,7 +48,7 @@ var (
 	ScalarSlot    = common.BigToHash(big.NewInt(6))
 )
 
-var L1BlockAddr = common.HexToAddress("0x4200000000000000000000000000000000000015")
+var L1BlockAddr = common.HexToAddress("0x4200000000000000000000000000000000000002")
 
 // NewL1CostFunc returns a function used for calculating L1 fee cost.
 // This depends on the oracles because gas costs can change over time.
@@ -59,9 +56,9 @@ var L1BlockAddr = common.HexToAddress("0x420000000000000000000000000000000000001
 func NewL1CostFunc(config *params.ChainConfig, statedb StateGetter) L1CostFunc {
 	cacheBlockNum := ^uint64(0)
 	var l1BaseFee, overhead, scalar *big.Int
-	return func(blockNum uint64, blockTime uint64, dataGas RollupGasData, isDepositTx bool) *big.Int {
-		rollupDataGas := dataGas.DataGas(blockTime, config) // Only fake txs for RPC view-calls are 0.
-		if config.Optimism == nil || isDepositTx || rollupDataGas == 0 {
+	return func(blockNum uint64, dataGas RollupGasData, isDepositTx bool) *big.Int {
+		rollupDataGas := dataGas.DataGas() // Only fake txs for RPC view-calls are 0.
+		if config.Kroma == nil || isDepositTx || rollupDataGas == 0 {
 			return nil
 		}
 		if blockNum != cacheBlockNum {

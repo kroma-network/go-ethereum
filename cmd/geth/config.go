@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/internal/debug"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/ethereum/go-ethereum/internal/version"
@@ -150,6 +151,9 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	if ctx.IsSet(utils.EthStatsURLFlag.Name) {
 		cfg.Ethstats.URL = ctx.String(utils.EthStatsURLFlag.Name)
 	}
+	// [Scroll: START]
+	applyTraceConfig(ctx, &cfg.Eth)
+	// [Scroll: END]
 	applyMetricConfig(ctx, &cfg)
 
 	return stack, cfg
@@ -162,17 +166,9 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 		v := ctx.Uint64(utils.OverrideShanghai.Name)
 		cfg.Eth.OverrideShanghai = &v
 	}
-
-	if ctx.IsSet(utils.OverrideOptimismBedrock.Name) {
-		cfg.Eth.OverrideOptimismBedrock = flags.GlobalBig(ctx, utils.OverrideOptimismBedrock.Name)
-	}
-	if ctx.IsSet(utils.OverrideOptimismRegolith.Name) {
-		v := ctx.Uint64(utils.OverrideOptimismRegolith.Name)
-		cfg.Eth.OverrideOptimismRegolith = &v
-	}
-	if ctx.IsSet(utils.OverrideOptimism.Name) {
-		override := ctx.Bool(utils.OverrideOptimism.Name)
-		cfg.Eth.OverrideOptimism = &override
+	if ctx.IsSet(utils.OverrideKroma.Name) {
+		override := ctx.Bool(utils.OverrideKroma.Name)
+		cfg.Eth.OverrideKroma = &override
 	}
 
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
@@ -225,6 +221,14 @@ func dumpConfig(ctx *cli.Context) error {
 
 	return nil
 }
+
+// [Scroll: START]
+func applyTraceConfig(ctx *cli.Context, cfg *ethconfig.Config) {
+	subCfg := debug.ConfigTrace(ctx)
+	cfg.MPTWitness = subCfg.MPTWitness
+}
+
+// [Scroll: END]
 
 func applyMetricConfig(ctx *cli.Context, cfg *gethConfig) {
 	if ctx.IsSet(utils.MetricsEnabledFlag.Name) {

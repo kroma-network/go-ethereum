@@ -23,12 +23,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"runtime"
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -37,7 +37,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
@@ -83,11 +82,13 @@ type Backend interface {
 	GetTransaction(ctx context.Context, txHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error)
 	RPCGasCap() uint64
 	ChainConfig() *params.ChainConfig
+	// [Scroll: START]
+	CacheConfig() *core.CacheConfig
+	// [Scroll: END]
 	Engine() consensus.Engine
 	ChainDb() ethdb.Database
 	StateAtBlock(ctx context.Context, block *types.Block, reexec uint64, base *state.StateDB, readOnly bool, preferDisk bool) (*state.StateDB, StateReleaseFunc, error)
 	StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (*core.Message, vm.BlockContext, *state.StateDB, StateReleaseFunc, error)
-	HistoricalRPCService() *rpc.Client
 }
 
 // API is the collection of tracing APIs exposed over the private debugging endpoint.
@@ -138,7 +139,7 @@ func (api *API) blockByNumber(ctx context.Context, number rpc.BlockNumber) (*typ
 		return nil, err
 	}
 	if block == nil {
-		return nil, fmt.Errorf("block #%d not found", number)
+		return nil, fmt.Errorf("block #%d %w", number, ethereum.NotFound)
 	}
 	return block, nil
 }
@@ -151,7 +152,7 @@ func (api *API) blockByHash(ctx context.Context, hash common.Hash) (*types.Block
 		return nil, err
 	}
 	if block == nil {
-		return nil, fmt.Errorf("block %s not found", hash.Hex())
+		return nil, fmt.Errorf("block %s %w", hash.Hex(), ethereum.NotFound)
 	}
 	return block, nil
 }
@@ -174,7 +175,7 @@ func (api *API) blockByNumberAndHash(ctx context.Context, number rpc.BlockNumber
 
 // TraceConfig holds extra parameters to trace functions.
 type TraceConfig struct {
-	*logger.Config
+	*vm.LogConfig
 	Tracer  *string
 	Timeout *string
 	Reexec  *uint64
@@ -193,7 +194,7 @@ type TraceCallConfig struct {
 
 // StdTraceConfig holds extra parameters to standard-json trace functions.
 type StdTraceConfig struct {
-	logger.Config
+	vm.LogConfig
 	Reexec *uint64
 	TxHash common.Hash
 }
@@ -460,20 +461,6 @@ func (api *API) TraceBlockByNumber(ctx context.Context, number rpc.BlockNumber, 
 	if err != nil {
 		return nil, err
 	}
-
-	if api.backend.ChainConfig().IsOptimismPreBedrock(block.Number()) {
-		if api.backend.HistoricalRPCService() != nil {
-			var histResult []*txTraceResult
-			err = api.backend.HistoricalRPCService().CallContext(ctx, &histResult, "debug_traceBlockByNumber", number, config)
-			if err != nil {
-				return nil, fmt.Errorf("historical backend error: %w", err)
-			}
-			return histResult, nil
-		} else {
-			return nil, rpc.ErrNoHistoricalFallback
-		}
-	}
-
 	return api.traceBlock(ctx, block, config)
 }
 
@@ -484,20 +471,6 @@ func (api *API) TraceBlockByHash(ctx context.Context, hash common.Hash, config *
 	if err != nil {
 		return nil, err
 	}
-
-	if api.backend.ChainConfig().IsOptimismPreBedrock(block.Number()) {
-		if api.backend.HistoricalRPCService() != nil {
-			var histResult []*txTraceResult
-			err = api.backend.HistoricalRPCService().CallContext(ctx, &histResult, "debug_traceBlockByHash", hash, config)
-			if err != nil {
-				return nil, fmt.Errorf("historical backend error: %w", err)
-			}
-			return histResult, nil
-		} else {
-			return nil, rpc.ErrNoHistoricalFallback
-		}
-	}
-
 	return api.traceBlock(ctx, block, config)
 }
 
@@ -527,7 +500,7 @@ func (api *API) TraceBlockFromFile(ctx context.Context, file string, config *Tra
 func (api *API) TraceBadBlock(ctx context.Context, hash common.Hash, config *TraceConfig) ([]*txTraceResult, error) {
 	block := rawdb.ReadBadBlock(api.backend.ChainDb(), hash)
 	if block == nil {
-		return nil, fmt.Errorf("bad block %#x not found", hash)
+		return nil, fmt.Errorf("bad block %#x %w", hash, ethereum.NotFound)
 	}
 	return api.traceBlock(ctx, block, config)
 }
@@ -547,13 +520,12 @@ func (api *API) StandardTraceBlockToFile(ctx context.Context, hash common.Hash, 
 // of intermediate roots: the stateroot after each transaction.
 func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config *TraceConfig) ([]common.Hash, error) {
 	block, _ := api.blockByHash(ctx, hash)
-	// TODO: Cannot get intermediate roots for pre-bedrock block without daisy chain
 	if block == nil {
 		// Check in the bad blocks
 		block = rawdb.ReadBadBlock(api.backend.ChainDb(), hash)
 	}
 	if block == nil {
-		return nil, fmt.Errorf("block %#x not found", hash)
+		return nil, fmt.Errorf("block %#x %w", hash, ethereum.NotFound)
 	}
 	if block.NumberU64() == 0 {
 		return nil, errors.New("genesis is not traceable")
@@ -612,7 +584,7 @@ func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config 
 func (api *API) StandardTraceBadBlockToFile(ctx context.Context, hash common.Hash, config *StdTraceConfig) ([]string, error) {
 	block := rawdb.ReadBadBlock(api.backend.ChainDb(), hash)
 	if block == nil {
-		return nil, fmt.Errorf("bad block %#x not found", hash)
+		return nil, fmt.Errorf("bad block %#x %w", hash, ethereum.NotFound)
 	}
 	return api.standardTraceBlockToFile(ctx, block, config)
 }
@@ -762,7 +734,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 	// If we're tracing a single transaction, make sure it's present
 	if config != nil && config.TxHash != (common.Hash{}) {
 		if !containsTx(block, config.TxHash) {
-			return nil, fmt.Errorf("transaction %#x not found in block", config.TxHash)
+			return nil, fmt.Errorf("transaction %#x %w in block", config.TxHash, ethereum.NotFound)
 		}
 	}
 	if block.NumberU64() == 0 {
@@ -784,11 +756,11 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 
 	// Retrieve the tracing configurations, or use default values
 	var (
-		logConfig logger.Config
+		logConfig vm.LogConfig
 		txHash    common.Hash
 	)
 	if config != nil {
-		logConfig = config.Config
+		logConfig = config.LogConfig
 		txHash = config.TxHash
 	}
 	logConfig.Debug = true
@@ -837,7 +809,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 			writer = bufio.NewWriter(dump)
 			vmConf = vm.Config{
 				Debug:                   true,
-				Tracer:                  logger.NewJSONLogger(&logConfig, writer),
+				Tracer:                  vm.NewJSONLogger(&logConfig, writer),
 				EnablePreimageRecording: true,
 			}
 		}
@@ -885,19 +857,6 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 	_, blockHash, blockNumber, index, err := api.backend.GetTransaction(ctx, hash)
 	if err != nil {
 		return nil, err
-	}
-
-	if api.backend.ChainConfig().IsOptimismPreBedrock(new(big.Int).SetUint64(blockNumber)) {
-		if api.backend.HistoricalRPCService() != nil {
-			var histResult json.RawMessage
-			err := api.backend.HistoricalRPCService().CallContext(ctx, &histResult, "debug_traceTransaction", hash, config)
-			if err != nil {
-				return nil, fmt.Errorf("historical backend error: %w", err)
-			}
-			return histResult, nil
-		} else {
-			return nil, rpc.ErrNoHistoricalFallback
-		}
 	}
 
 	// It shouldn't happen in practice.
@@ -954,11 +913,6 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 	if err != nil {
 		return nil, err
 	}
-
-	if api.backend.ChainConfig().IsOptimismPreBedrock(block.Number()) {
-		return nil, errors.New("l2geth does not have a debug_traceCall method")
-	}
-
 	// try to recompute the state
 	reexec := defaultTraceReexec
 	if config != nil && config.Reexec != nil {
@@ -1005,7 +959,7 @@ func (api *API) traceTx(ctx context.Context, message *core.Message, txctx *Conte
 		config = &TraceConfig{}
 	}
 	// Default tracer is the struct logger
-	tracer = logger.NewStructLogger(config.Config)
+	tracer = vm.NewStructLogger(config.LogConfig)
 	if config.Tracer != nil {
 		tracer, err = DefaultDirectory.New(*config.Tracer, txctx, config.TracerConfig)
 		if err != nil {
@@ -1047,6 +1001,14 @@ func APIs(backend Backend) []rpc.API {
 			Namespace: "debug",
 			Service:   NewAPI(backend),
 		},
+		// [Scroll: START]
+		{
+			Namespace: "kroma",
+			Version:   "1.0",
+			Service:   TraceBlock(NewAPI(backend)),
+			Public:    true,
+		},
+		// [Scroll: END]
 	}
 }
 

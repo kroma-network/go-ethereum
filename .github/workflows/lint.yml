@@ -1,0 +1,26 @@
+name: Lint
+
+on:
+  - push
+
+jobs:
+  lint:
+    name: Lint check
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go 1.19
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.19'
+      - run: go mod download
+
+      - name: check
+        run: make lint
