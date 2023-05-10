@@ -227,7 +227,7 @@ func runBenchmark(b *testing.B, t *StateTest) {
 			evm := vm.NewEVM(context, txContext, statedb, config, vmconfig)
 
 			// Create "contract" for sender to cache code analysis.
-			sender := vm.NewContract(vm.AccountRef(msg.From()), vm.AccountRef(msg.From()),
+			sender := vm.NewContract(vm.AccountRef(msg.From), vm.AccountRef(msg.From),
 				nil, 0)
 
 			var (
@@ -238,12 +238,12 @@ func runBenchmark(b *testing.B, t *StateTest) {
 			b.ResetTimer()
 			for n := 0; n < b.N; n++ {
 				snapshot := statedb.Snapshot()
-				statedb.Prepare(rules, msg.From(), context.Coinbase, msg.To(), vm.ActivePrecompiles(rules), msg.AccessList())
+				statedb.Prepare(rules, msg.From, context.Coinbase, msg.To, vm.ActivePrecompiles(rules), msg.AccessList)
 				b.StartTimer()
 				start := time.Now()
 
 				// Execute the message.
-				_, leftOverGas, err := evm.Call(sender, *msg.To(), msg.Data(), msg.Gas(), msg.Value())
+				_, leftOverGas, err := evm.Call(sender, *msg.To, msg.Data, msg.GasLimit, msg.Value)
 				if err != nil {
 					b.Error(err)
 					return
@@ -252,7 +252,7 @@ func runBenchmark(b *testing.B, t *StateTest) {
 				b.StopTimer()
 				elapsed += uint64(time.Since(start))
 				refund += statedb.GetRefund()
-				gasUsed += msg.Gas() - leftOverGas
+				gasUsed += msg.GasLimit - leftOverGas
 
 				statedb.RevertToSnapshot(snapshot)
 			}

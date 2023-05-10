@@ -16,11 +16,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Go 1.18
+      - name: Setup Go 1.19
         uses: actions/setup-go@v4
         with:
-          go-version: '1.18'
+          go-version: '1.19'
       - run: go mod download
-      
+
       - name: check
         run: make lint

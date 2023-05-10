@@ -48,8 +48,9 @@ import (
 )
 
 var (
-	errStateNotFound = errors.New("state not found")
-	errBlockNotFound = errors.New("block not found")
+	errStateNotFound       = errors.New("state not found")
+	errBlockNotFound       = errors.New("block not found")
+	errTransactionNotFound = errors.New("transaction not found")
 )
 
 type testBackend struct {
@@ -109,13 +110,16 @@ func (b *testBackend) BlockByHash(ctx context.Context, hash common.Hash) (*types
 
 func (b *testBackend) BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error) {
 	if number == rpc.PendingBlockNumber || number == rpc.LatestBlockNumber {
-		return b.chain.CurrentBlock(), nil
+		return b.chain.GetBlockByNumber(b.chain.CurrentBlock().Number.Uint64()), nil
 	}
 	return b.chain.GetBlockByNumber(uint64(number)), nil
 }
 
 func (b *testBackend) GetTransaction(ctx context.Context, txHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error) {
 	tx, hash, blockNumber, index := rawdb.ReadTransaction(b.chaindb, txHash)
+	if tx == nil {
+		return nil, common.Hash{}, 0, 0, errTransactionNotFound
+	}
 	return tx, hash, blockNumber, index, nil
 }
 
@@ -163,7 +167,7 @@ func (b *testBackend) StateAtBlock(ctx context.Context, block *types.Block, reex
 	return statedb, release, nil
 }
 
-func (b *testBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, StateReleaseFunc, error) {
+func (b *testBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (*core.Message, vm.BlockContext, *state.StateDB, StateReleaseFunc, error) {
 	parent := b.chain.GetBlock(block.ParentHash(), block.NumberU64()-1)
 	if parent == nil {
 		return nil, vm.BlockContext{}, nil, nil, errBlockNotFound
@@ -178,7 +182,7 @@ func (b *testBackend) StateAtTransaction(ctx context.Context, block *types.Block
 	// Recompute transactions up to the target index.
 	signer := types.MakeSigner(b.chainConfig, block.Number())
 	for idx, tx := range block.Transactions() {
-		msg, _ := tx.AsMessage(signer, block.BaseFee())
+		msg, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
 		txContext := core.NewEVMTxContext(msg)
 		context := core.NewEVMBlockContext(block.Header(), b.chain, nil, b.chainConfig, statedb)
 		if idx == txIndex {
@@ -380,12 +384,6 @@ func TestTraceTransaction(t *testing.T) {
 		StructLogs:  []*types.StructLogRes{},
 	}) {
 		t.Error("Transaction tracing result is different")
-	}
-
-	// Test non-existent transaction
-	_, err = api.TraceTransaction(context.Background(), common.Hash{42}, nil)
-	if !errors.Is(err, errTxNotFound) {
-		t.Fatalf("want %v, have %v", errTxNotFound, err)
 	}
 }
 

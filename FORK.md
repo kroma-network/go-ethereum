@@ -2,7 +2,8 @@
 
 ## op-geth
 
-- commit: `13ee9ab`
+- tag: `v1.101105.1`
+- commit: `24ae687`
 - differences
   - change predeployed contract address [#17](https://github.com/kroma-network/go-ethereum/pull/17).
   - remove daisy chain [#11](https://github.com/kroma-network/go-ethereum/pull/11).

@@ -33,18 +33,14 @@ func (r RollupGasData) DataGas() (gas uint64) {
 	return gas
 }
 
-type RollupMessage interface {
-	RollupDataGas() RollupGasData
-	IsDepositTx() bool
-}
-
 type StateGetter interface {
 	GetState(common.Address, common.Hash) common.Hash
 }
 
 // L1CostFunc is used in the state transition to determine the cost of a rollup message.
 // Returns nil if there is no cost.
-type L1CostFunc func(blockNum uint64, msg RollupMessage) *big.Int
+// blockTime is deleted because it was used to determine whether it was before or after regolith.
+type L1CostFunc func(blockNum uint64, dataGas RollupGasData, isDepositTx bool) *big.Int
 
 var (
 	L1BaseFeeSlot = common.BigToHash(big.NewInt(1))
@@ -60,9 +56,9 @@ var L1BlockAddr = common.HexToAddress("0x420000000000000000000000000000000000000
 func NewL1CostFunc(config *params.ChainConfig, statedb StateGetter) L1CostFunc {
 	cacheBlockNum := ^uint64(0)
 	var l1BaseFee, overhead, scalar *big.Int
-	return func(blockNum uint64, msg RollupMessage) *big.Int {
-		rollupDataGas := msg.RollupDataGas().DataGas() // Only fake txs for RPC view-calls are 0.
-		if config.Kroma == nil || msg.IsDepositTx() || rollupDataGas == 0 {
+	return func(blockNum uint64, dataGas RollupGasData, isDepositTx bool) *big.Int {
+		rollupDataGas := dataGas.DataGas() // Only fake txs for RPC view-calls are 0.
+		if config.Kroma == nil || isDepositTx || rollupDataGas == 0 {
 			return nil
 		}
 		if blockNum != cacheBlockNum {
