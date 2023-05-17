@@ -31,7 +31,7 @@ jobs:
         run: |
           if [[ $GITHUB_REF_TYPE == 'branch' ]];
           then
-            echo "version=dev-$(echo $GITHUB_SHA | cut -c1-12)" >> $GITHUB_OUTPUT
+            echo "version=dev-$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
           else
             echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
