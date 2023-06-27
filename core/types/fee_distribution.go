@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	ValidatorRewardRatioSlot = common.BigToHash(big.NewInt(7))
+	ValidatorRewardScalarSlot = common.BigToHash(big.NewInt(7))
 )
 
 // FeeDistributionFunc is used in the state transition to determine the validation reward and protocol fee.
@@ -38,16 +38,16 @@ type FeeDistribution struct {
 
 func NewFeeDistributionFunc(config *params.ChainConfig, statedb StateGetter) FeeDistributionFunc {
 	cacheBlockNum := ^uint64(0)
-	var ratio uint64
+	var scalar uint64
 	return func(blockNum uint64, gasUsed, baseFee, effectiveTip *big.Int) *FeeDistribution {
 		if config.Kroma == nil {
 			return nil
 		}
 
 		if blockNum != cacheBlockNum {
-			ratio = statedb.GetState(L1BlockAddr, ValidatorRewardRatioSlot).Big().Uint64()
-			if ratio > 10000 {
-				ratio = 0
+			scalar = statedb.GetState(L1BlockAddr, ValidatorRewardScalarSlot).Big().Uint64()
+			if scalar > 10000 {
+				scalar = 0
 			}
 
 			cacheBlockNum = blockNum
@@ -56,7 +56,7 @@ func NewFeeDistributionFunc(config *params.ChainConfig, statedb StateGetter) Fee
 		fee.Mul(gasUsed, baseFee)
 		fee.Add(fee, new(big.Int).Mul(gasUsed, effectiveTip))
 
-		R := big.NewRat(int64(ratio), 10000)
+		R := big.NewRat(int64(scalar), 10000)
 		reward := new(big.Int).Mul(fee, R.Num())
 		reward.Div(reward, R.Denom())
 
