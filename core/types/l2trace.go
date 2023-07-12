@@ -153,21 +153,22 @@ type StorageWrapper struct {
 }
 
 type TransactionData struct {
-	Type     uint8           `json:"type"`
-	Nonce    uint64          `json:"nonce"`
-	TxHash   string          `json:"txHash"`
-	Gas      uint64          `json:"gas"`
-	GasPrice *hexutil.Big    `json:"gasPrice"`
-	From     common.Address  `json:"from"`
-	To       *common.Address `json:"to"`
-	ChainId  *hexutil.Big    `json:"chainId"`
-	Mint     *hexutil.Big    `json:"mint"`
-	Value    *hexutil.Big    `json:"value"`
-	Data     string          `json:"data"`
-	IsCreate bool            `json:"isCreate"`
-	V        *hexutil.Big    `json:"v"`
-	R        *hexutil.Big    `json:"r"`
-	S        *hexutil.Big    `json:"s"`
+	Type       uint8           `json:"type"`
+	Nonce      uint64          `json:"nonce"`
+	TxHash     string          `json:"txHash"`
+	Gas        uint64          `json:"gas"`
+	GasPrice   *hexutil.Big    `json:"gasPrice"`
+	From       common.Address  `json:"from"`
+	To         *common.Address `json:"to"`
+	ChainId    *hexutil.Big    `json:"chainId"`
+	Mint       *hexutil.Big    `json:"mint"`
+	Value      *hexutil.Big    `json:"value"`
+	Data       string          `json:"data"`
+	IsCreate   bool            `json:"isCreate"`
+	SourceHash common.Hash     `json:"sourceHash"`
+	V          *hexutil.Big    `json:"v"`
+	R          *hexutil.Big    `json:"r"`
+	S          *hexutil.Big    `json:"s"`
 }
 
 // NewTransactionData returns a transaction that will serialize to the trace
@@ -177,21 +178,22 @@ func NewTransactionData(tx *Transaction, blockNumber uint64, config *params.Chai
 	from, _ := Sender(signer, tx)
 	v, r, s := tx.RawSignatureValues()
 	result := &TransactionData{
-		Type:     tx.Type(),
-		TxHash:   tx.Hash().String(),
-		Nonce:    tx.Nonce(),
-		ChainId:  (*hexutil.Big)(tx.ChainId()),
-		From:     from,
-		Gas:      tx.Gas(),
-		GasPrice: (*hexutil.Big)(tx.GasPrice()),
-		To:       tx.To(),
-		Mint:     (*hexutil.Big)(tx.Mint()),
-		Value:    (*hexutil.Big)(tx.Value()),
-		Data:     hexutil.Encode(tx.Data()),
-		IsCreate: tx.To() == nil,
-		V:        (*hexutil.Big)(v),
-		R:        (*hexutil.Big)(r),
-		S:        (*hexutil.Big)(s),
+		Type:       tx.Type(),
+		TxHash:     tx.Hash().String(),
+		Nonce:      tx.Nonce(),
+		ChainId:    (*hexutil.Big)(tx.ChainId()),
+		From:       from,
+		Gas:        tx.Gas(),
+		GasPrice:   (*hexutil.Big)(tx.GasPrice()),
+		To:         tx.To(),
+		Mint:       (*hexutil.Big)(tx.Mint()),
+		Value:      (*hexutil.Big)(tx.Value()),
+		Data:       hexutil.Encode(tx.Data()),
+		IsCreate:   tx.To() == nil,
+		SourceHash: tx.SourceHash(),
+		V:          (*hexutil.Big)(v),
+		R:          (*hexutil.Big)(r),
+		S:          (*hexutil.Big)(s),
 	}
 	return result
 }
