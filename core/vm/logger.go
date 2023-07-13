@@ -504,6 +504,7 @@ func (l *StructLogger) MaybeAddFeeRecipientsToStatesAffected(tx *types.Transacti
 	if !tx.IsDepositTx() {
 		l.statesAffected[params.KromaProtocolVault] = struct{}{}
 		l.statesAffected[params.KromaProposerRewardVault] = struct{}{}
+		l.statesAffected[params.KromaValidatorRewardVault] = struct{}{}
 	}
 }
 
