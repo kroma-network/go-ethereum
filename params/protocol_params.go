@@ -23,10 +23,12 @@ import (
 )
 
 var (
-	// The base fee portion of the transaction fee accumulates at this predeploy
-	KanvasBaseFeeRecipient = common.HexToAddress("0x4200000000000000000000000000000000000006")
+	// The protocol fee portion of the transaction fee accumulates at this predeploy
+	KromaProtocolVault = common.HexToAddress("0x4200000000000000000000000000000000000006")
 	// The L1 portion of the transaction fee accumulates at this predeploy
-	KanvasL1FeeRecipient = common.HexToAddress("0x4200000000000000000000000000000000000007")
+	KromaProposerRewardVault = common.HexToAddress("0x4200000000000000000000000000000000000007")
+	// The validator reward portion of the transaction fee accumulates at this predeploy
+	KromaValidatorRewardVault = common.HexToAddress("0x4200000000000000000000000000000000000008")
 )
 
 const (

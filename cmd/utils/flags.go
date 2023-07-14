@@ -274,9 +274,9 @@ var (
 		Usage:    "Manually specify the Shanghai fork timestamp, overriding the bundled setting",
 		Category: flags.EthCategory,
 	}
-	OverrideKanvas = &cli.BoolFlag{
-		Name:     "override.kanvas",
-		Usage:    "Manually specify kanvas",
+	OverrideKroma = &cli.BoolFlag{
+		Name:     "override.kroma",
+		Usage:    "Manually specify kroma",
 		Category: flags.EthCategory,
 	}
 	// Light server and client settings

@@ -102,9 +102,10 @@ func (ec *Client) PeerCount(ctx context.Context) (uint64, error) {
 }
 
 type rpcBlock struct {
-	Hash         common.Hash      `json:"hash"`
-	Transactions []rpcTransaction `json:"transactions"`
-	UncleHashes  []common.Hash    `json:"uncles"`
+	Hash         common.Hash         `json:"hash"`
+	Transactions []rpcTransaction    `json:"transactions"`
+	UncleHashes  []common.Hash       `json:"uncles"`
+	Withdrawals  []*types.Withdrawal `json:"withdrawals,omitempty"`
 }
 
 func (ec *Client) getBlock(ctx context.Context, method string, args ...interface{}) (*types.Block, error) {
@@ -112,15 +113,19 @@ func (ec *Client) getBlock(ctx context.Context, method string, args ...interface
 	err := ec.c.CallContext(ctx, &raw, method, args...)
 	if err != nil {
 		return nil, err
-	} else if len(raw) == 0 {
-		return nil, ethereum.NotFound
 	}
+
 	// Decode header and transactions.
 	var head *types.Header
-	var body rpcBlock
 	if err := json.Unmarshal(raw, &head); err != nil {
 		return nil, err
 	}
+	// When the block is not found, the API returns JSON null.
+	if head == nil {
+		return nil, ethereum.NotFound
+	}
+
+	var body rpcBlock
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return nil, err
 	}
@@ -169,7 +174,7 @@ func (ec *Client) getBlock(ctx context.Context, method string, args ...interface
 		}
 		txs[i] = tx.tx
 	}
-	return types.NewBlockWithHeader(head).WithBody(txs, uncles), nil
+	return types.NewBlockWithHeader(head).WithBody(txs, uncles).WithWithdrawals(body.Withdrawals), nil
 }
 
 // HeaderByHash returns the block header with the given hash.
@@ -319,21 +324,21 @@ func (ec *Client) SubscribeNewHead(ctx context.Context, ch chan<- *types.Header)
 }
 
 // [Scroll: START]
-// GetBlockResultByHash returns the BlockResult given the block hash.
-func (ec *Client) GetBlockResultByHash(ctx context.Context, blockHash common.Hash) (*types.BlockResult, error) {
-	blockResult := &types.BlockResult{}
-	return blockResult, ec.c.CallContext(ctx, &blockResult, "kanvas_getBlockResultByNumberOrHash", blockHash)
+// GetBlockTraceByHash returns the BlockResult given the block hash.
+func (ec *Client) GetBlockTraceByHash(ctx context.Context, blockHash common.Hash) (*types.BlockTrace, error) {
+	blockResult := &types.BlockTrace{}
+	return blockResult, ec.c.CallContext(ctx, &blockResult, "kroma_getBlockTraceByNumberOrHash", blockHash)
 }
 
-// GetBlockResultByNumber returns the BlockResult given the block number.
-func (ec *Client) GetBlockResultByNumber(ctx context.Context, number *big.Int) (*types.BlockResult, error) {
-	blockResult := &types.BlockResult{}
-	return blockResult, ec.c.CallContext(ctx, &blockResult, "kanvas_getBlockResultByNumberOrHash", toBlockNumArg(number))
+// GetBlockTraceByNumber returns the BlockResult given the block number.
+func (ec *Client) GetBlockTraceByNumber(ctx context.Context, number *big.Int) (*types.BlockTrace, error) {
+	blockResult := &types.BlockTrace{}
+	return blockResult, ec.c.CallContext(ctx, &blockResult, "kroma_getBlockTraceByNumberOrHash", toBlockNumArg(number))
 }
 
-// SubscribeNewBlockResult subscribes to block execution trace when a new block is created.
-func (ec *Client) SubscribeNewBlockResult(ctx context.Context, ch chan<- *types.BlockResult) (ethereum.Subscription, error) {
-	return ec.c.EthSubscribe(ctx, ch, "newBlockResult")
+// SubscribeNewBlockTrace subscribes to block execution trace when a new block is created.
+func (ec *Client) SubscribeNewBlockTrace(ctx context.Context, ch chan<- *types.BlockTrace) (ethereum.Subscription, error) {
+	return ec.c.EthSubscribe(ctx, ch, "newBlockTrace")
 }
 
 // [Scroll: END]

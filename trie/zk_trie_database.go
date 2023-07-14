@@ -7,6 +7,8 @@ import (
 
 	"github.com/syndtr/goleveldb/leveldb"
 
+	zktrie "github.com/kroma-network/zktrie/trie"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 )
@@ -45,9 +47,21 @@ func (l *ZktrieDatabase) Get(key []byte) ([]byte, error) {
 	if ok {
 		return value, nil
 	}
+	if l.db.cleans != nil {
+		if enc := l.db.cleans.Get(nil, concatKey); enc != nil {
+			memcacheCleanHitMeter.Mark(1)
+			memcacheCleanReadMeter.Mark(int64(len(enc)))
+			return enc, nil
+		}
+	}
 	v, err := l.db.diskdb.Get(concatKey)
 	if err == leveldb.ErrNotFound {
-		return nil, ErrNotFound
+		return nil, zktrie.ErrKeyNotFound
+	}
+	if l.db.cleans != nil {
+		l.db.cleans.Set(concatKey[:], v)
+		memcacheCleanMissMeter.Mark(1)
+		memcacheCleanWriteMeter.Mark(int64(len(v)))
 	}
 	return v, err
 }
@@ -55,12 +69,10 @@ func (l *ZktrieDatabase) Get(key []byte) ([]byte, error) {
 func (l *ZktrieDatabase) UpdatePreimage(preimage []byte, hashField *big.Int) {
 	db := l.db
 	if db.preimages != nil { // Ugly direct check but avoids the below write lock
-		db.lock.Lock()
 		// we must copy the input key
 		preimages := make(map[common.Hash][]byte)
 		preimages[common.BytesToHash(hashField.Bytes())] = common.CopyBytes(preimage)
 		db.preimages.insertPreimage(preimages)
-		db.lock.Unlock()
 	}
 }
 

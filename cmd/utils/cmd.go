@@ -30,6 +30,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -41,7 +43,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/urfave/cli/v2"
 )
 
 const (
@@ -222,7 +223,7 @@ func missingBlocks(chain *core.BlockChain, blocks []*types.Block) []*types.Block
 	head := chain.CurrentBlock()
 	for i, block := range blocks {
 		// If we're behind the chain head, only check block, state is available at head
-		if head.NumberU64() > block.NumberU64() {
+		if head.Number.Uint64() > block.NumberU64() {
 			if !chain.HasBlock(block.Hash(), block.NumberU64()) {
 				return blocks[i:]
 			}

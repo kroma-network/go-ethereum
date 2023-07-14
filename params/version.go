@@ -21,28 +21,29 @@ import (
 )
 
 const (
+	// Version is the version of upstream geth
 	VersionMajor = 1        // Major version component of the current release
 	VersionMinor = 11       // Minor version component of the current release
-	VersionPatch = 2        // Patch version component of the current release
+	VersionPatch = 5        // Patch version component of the current release
 	VersionMeta  = "stable" // Version metadata to append to the version string
 
-	// KanvasVersion is the version of kanvas-geth
-	KanvasVersionMajor = 0          // Major version component of the current release
-	KanvasVersionMinor = 1          // Minor version component of the current release
-	KanvasVersionPatch = 0          // Patch version component of the current release
-	KanvasVersionMeta  = "unstable" // Version metadata to append to the version string
+	// KromaVersion is the version of kroma-geth
+	KromaVersionMajor = 0          // Major version component of the current release
+	KromaVersionMinor = 1          // Minor version component of the current release
+	KromaVersionPatch = 0          // Patch version component of the current release
+	KromaVersionMeta  = "unstable" // Version metadata to append to the version string
 )
 
 // Version holds the textual version string.
 var Version = func() string {
-	return fmt.Sprintf("%d.%d.%d", KanvasVersionMajor, KanvasVersionMinor, KanvasVersionPatch)
+	return fmt.Sprintf("%d.%d.%d", KromaVersionMajor, KromaVersionMinor, KromaVersionPatch)
 }()
 
 // VersionWithMeta holds the textual version string including the metadata.
 var VersionWithMeta = func() string {
 	v := Version
-	if KanvasVersionMeta != "" {
-		v += "-" + KanvasVersionMeta
+	if KromaVersionMeta != "" {
+		v += "-" + KromaVersionMeta
 	}
 	return v
 }()
@@ -66,8 +67,8 @@ var GethVersionWithMeta = func() string {
 // releases.
 func ArchiveVersion(gitCommit string) string {
 	vsn := Version
-	if KanvasVersionMeta != "stable" {
-		vsn += "-" + KanvasVersionMeta
+	if KromaVersionMeta != "stable" {
+		vsn += "-" + KromaVersionMeta
 	}
 	if len(gitCommit) >= 8 {
 		vsn += "-" + gitCommit[:8]
@@ -80,7 +81,7 @@ func VersionWithCommit(gitCommit, gitDate string) string {
 	if len(gitCommit) >= 8 {
 		vsn += "-" + gitCommit[:8]
 	}
-	if (KanvasVersionMeta != "stable") && (gitDate != "") {
+	if (KromaVersionMeta != "stable") && (gitDate != "") {
 		vsn += "-" + gitDate
 	}
 	return vsn

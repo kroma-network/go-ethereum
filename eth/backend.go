@@ -200,18 +200,22 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.OverrideShanghai != nil {
 		overrides.OverrideShanghai = config.OverrideShanghai
 	}
-	if config.OverrideKanvas != nil {
-		overrides.OverrideKanvas = config.OverrideKanvas
+	if config.OverrideKroma != nil {
+		overrides.OverrideKroma = config.OverrideKroma
 	}
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit)
 	if err != nil {
 		return nil, err
 	}
-	if chainConfig := eth.blockchain.Config(); chainConfig.Kanvas != nil { // config.Genesis.Config.ChainID cannot be used because it's based on CLI flags only, thus default to mainnet L1
-		config.NetworkId = chainConfig.ChainID.Uint64() // kanvas defaults eth network ID to chain ID
+	if chainConfig := eth.blockchain.Config(); chainConfig.Kroma != nil { // config.Genesis.Config.ChainID cannot be used because it's based on CLI flags only, thus default to mainnet L1
+		config.NetworkId = chainConfig.ChainID.Uint64() // kroma defaults eth network ID to chain ID
 		eth.networkID = config.NetworkId
 	}
 	log.Info("Initialising Ethereum protocol", "network", config.NetworkId, "dbversion", dbVer)
+
+	if eth.blockchain.Config().Kroma != nil {
+		eth.merger.FinalizePoS()
+	}
 
 	eth.bloomIndexer.Start(eth.blockchain)
 
@@ -283,7 +287,7 @@ func makeExtraData(extra []byte) []byte {
 	if len(extra) == 0 {
 		// create default extradata
 		extra, _ = rlp.EncodeToBytes([]interface{}{
-			uint(params.KanvasVersionMajor<<16 | params.KanvasVersionMinor<<8 | params.KanvasVersionPatch),
+			uint(params.KromaVersionMajor<<16 | params.KromaVersionMinor<<8 | params.KromaVersionPatch),
 			"geth",
 			runtime.Version(),
 			runtime.GOOS,
@@ -499,7 +503,7 @@ func (s *Ethereum) SyncMode() downloader.SyncMode {
 // network protocols to start.
 func (s *Ethereum) Protocols() []p2p.Protocol {
 	protos := eth.MakeProtocols((*ethHandler)(s.handler), s.networkID, s.ethDialCandidates)
-	if s.config.SnapshotCache > 0 {
+	if !s.blockchain.Config().Zktrie && s.config.SnapshotCache > 0 {
 		protos = append(protos, snap.MakeProtocols((*snapHandler)(s.handler), s.snapDialCandidates)...)
 	}
 	return protos

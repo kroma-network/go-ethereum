@@ -28,13 +28,14 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/holiman/uint256"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/holiman/uint256"
 )
 
 // Storage represents a contract's storage.
@@ -501,8 +502,9 @@ func (l *StructLogger) Output() []byte { return l.output }
 
 func (l *StructLogger) MaybeAddFeeRecipientsToStatesAffected(tx *types.Transaction) {
 	if !tx.IsDepositTx() {
-		l.statesAffected[params.KanvasBaseFeeRecipient] = struct{}{}
-		l.statesAffected[params.KanvasL1FeeRecipient] = struct{}{}
+		l.statesAffected[params.KromaProtocolVault] = struct{}{}
+		l.statesAffected[params.KromaProposerRewardVault] = struct{}{}
+		l.statesAffected[params.KromaValidatorRewardVault] = struct{}{}
 	}
 }
 

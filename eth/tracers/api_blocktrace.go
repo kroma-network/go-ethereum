@@ -16,12 +16,13 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie/zkproof"
 )
 
 type TraceBlock interface {
-	GetBlockResultByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, config *TraceConfig) (trace *types.BlockResult, err error)
+	GetBlockTraceByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, config *TraceConfig) (trace *types.BlockTrace, err error)
 }
 
 type traceEnv struct {
@@ -44,8 +45,8 @@ type traceEnv struct {
 	executionResults []*types.ExecutionResult
 }
 
-// GetBlockResultByNumberOrHash replays the block and returns the structured BlockResult by hash or number.
-func (api *API) GetBlockResultByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, config *TraceConfig) (trace *types.BlockResult, err error) {
+// GetBlockTraceByNumberOrHash replays the block and returns the structured BlockResult by hash or number.
+func (api *API) GetBlockTraceByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, config *TraceConfig) (trace *types.BlockTrace, err error) {
 	var block *types.Block
 	if number, ok := blockNrOrHash.Number(); ok {
 		block, err = api.blockByNumber(ctx, number)
@@ -77,7 +78,7 @@ func (api *API) GetBlockResultByNumberOrHash(ctx context.Context, blockNrOrHash 
 		return nil, err
 	}
 
-	return api.getBlockResult(block, env)
+	return api.getBlockTrace(block, env)
 }
 
 // Make trace environment for current block.
@@ -107,7 +108,7 @@ func (api *API) createTraceEnv(ctx context.Context, config *TraceConfig, block *
 		coinbase: coinbase,
 		signer:   types.MakeSigner(api.backend.ChainConfig(), block.Number()),
 		state:    statedb,
-		blockCtx: core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil),
+		blockCtx: core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil, api.backend.ChainConfig(), statedb),
 		StorageTrace: &types.StorageTrace{
 			RootBefore:    parent.Root(),
 			RootAfter:     block.Root(),
@@ -133,7 +134,7 @@ func (api *API) createTraceEnv(ctx context.Context, config *TraceConfig, block *
 	return env, nil
 }
 
-func (api *API) getBlockResult(block *types.Block, env *traceEnv) (*types.BlockResult, error) {
+func (api *API) getBlockTrace(block *types.Block, env *traceEnv) (*types.BlockTrace, error) {
 	// Execute all the transaction contained within the block concurrently
 	var (
 		txs   = block.Transactions()
@@ -169,11 +170,10 @@ func (api *API) getBlockResult(block *types.Block, env *traceEnv) (*types.BlockR
 		jobs <- &txTraceTask{statedb: env.state.Copy(), index: i}
 
 		// Generate the next state snapshot fast without tracing
-		msg, _ := tx.AsMessage(env.signer, block.BaseFee())
+		msg, _ := core.TransactionToMessage(tx, env.signer, block.BaseFee())
 		env.state.SetTxContext(tx.Hash(), i)
-		env.blockCtx.L1CostFunc = types.NewL1CostFunc(api.backend.ChainConfig(), env.state)
 		vmenv := vm.NewEVM(env.blockCtx, core.NewEVMTxContext(msg), env.state, api.backend.ChainConfig(), vm.Config{})
-		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas())); err != nil {
+		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.GasLimit)); err != nil {
 			failed = err
 			break
 		}
@@ -194,12 +194,12 @@ func (api *API) getBlockResult(block *types.Block, env *traceEnv) (*types.BlockR
 		}
 	}
 
-	return api.fillBlockResult(env, block)
+	return api.fillBlockTrace(env, block)
 }
 
 func (api *API) getTxResult(env *traceEnv, state *state.StateDB, index int, block *types.Block) error {
 	tx := block.Transactions()[index]
-	msg, _ := tx.AsMessage(env.signer, block.BaseFee())
+	msg, _ := core.TransactionToMessage(tx, env.signer, block.BaseFee())
 	from, _ := types.Sender(env.signer, tx)
 	to := tx.To()
 
@@ -225,7 +225,6 @@ func (api *API) getTxResult(env *traceEnv, state *state.StateDB, index int, bloc
 		}
 	}
 
-	env.blockCtx.L1CostFunc = types.NewL1CostFunc(api.backend.ChainConfig(), state)
 	tracer := vm.NewStructLogger(env.config.LogConfig)
 	// Run the transaction with tracing enabled.
 	vmenv := vm.NewEVM(env.blockCtx, core.NewEVMTxContext(msg), state, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true})
@@ -234,7 +233,7 @@ func (api *API) getTxResult(env *traceEnv, state *state.StateDB, index int, bloc
 	state.SetTxContext(txctx.TxHash, txctx.TxIndex)
 
 	// Computes the new state by applying the given message.
-	result, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()))
+	result, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.GasLimit))
 	if err != nil {
 		return fmt.Errorf("tracing failed: %w", err)
 	}
@@ -336,21 +335,27 @@ func (api *API) getTxResult(env *traceEnv, state *state.StateDB, index int, bloc
 }
 
 // Fill blockResult content after all the txs are finished running.
-func (api *API) fillBlockResult(env *traceEnv, block *types.Block) (*types.BlockResult, error) {
+func (api *API) fillBlockTrace(env *traceEnv, block *types.Block) (*types.BlockTrace, error) {
 	statedb := env.state
-	txs := block.Transactions()
-	coinbase := types.AccountWrapper{
-		Address:  env.coinbase,
-		Nonce:    statedb.GetNonce(env.coinbase),
-		Balance:  (*hexutil.Big)(statedb.GetBalance(env.coinbase)),
-		CodeHash: statedb.GetCodeHash(env.coinbase),
+	txs := make([]*types.TransactionData, block.Transactions().Len())
+	for i, tx := range block.Transactions() {
+		txs[i] = types.NewTransactionData(tx, block.NumberU64(), api.backend.ChainConfig())
 	}
-	blockResult := &types.BlockResult{
-		BlockTrace:       types.NewTraceBlock(api.backend.ChainConfig(), block, &coinbase),
+	blockTrace := &types.BlockTrace{
+		ChainID: api.backend.ChainConfig().ChainID.Uint64(),
+		Version: params.VersionWithMeta,
+		Coinbase: &types.AccountWrapper{
+			Address:  env.coinbase,
+			Nonce:    statedb.GetNonce(env.coinbase),
+			Balance:  (*hexutil.Big)(statedb.GetBalance(env.coinbase)),
+			CodeHash: statedb.GetCodeHash(env.coinbase),
+		},
+		Header:           block.Header(),
 		StorageTrace:     env.StorageTrace,
 		ExecutionResults: env.executionResults,
+		Transactions:     txs,
 	}
-	for i, tx := range txs {
+	for i, tx := range block.Transactions() {
 		evmTrace := env.executionResults[i]
 		// probably a Contract Call
 		if len(tx.Data()) != 0 && tx.To() != nil {
@@ -365,10 +370,10 @@ func (api *API) fillBlockResult(env *traceEnv, block *types.Block) (*types.Block
 
 	// only zktrie model has the ability to get `mptwitness`.
 	if api.backend.ChainConfig().Zktrie {
-		if err := zkproof.FillBlockResultForMPTWitness(zkproof.MPTWitnessType(api.backend.CacheConfig().MPTWitness), blockResult); err != nil {
+		if err := zkproof.FillBlockTraceForMPTWitness(zkproof.MPTWitnessType(api.backend.CacheConfig().MPTWitness), blockTrace); err != nil {
 			log.Error("fill mpt witness fail", "error", err)
 		}
 	}
 
-	return blockResult, nil
+	return blockTrace, nil
 }

@@ -30,9 +30,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/route53/types"
+	"github.com/urfave/cli/v2"
+
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/dnsdisc"
-	"github.com/urfave/cli/v2"
 )
 
 const (
@@ -329,8 +330,9 @@ func (c *route53Client) collectRecords(name string) (map[string]recordSet, error
 	var req route53.ListResourceRecordSetsInput
 	req.HostedZoneId = &c.zoneID
 	existing := make(map[string]recordSet)
+	log.Info("Loading existing TXT records", "name", name, "zone", c.zoneID)
 	for page := 0; ; page++ {
-		log.Info("Loading existing TXT records", "name", name, "zone", c.zoneID, "page", page)
+		log.Debug("Loading existing TXT records", "name", name, "zone", c.zoneID, "page", page)
 		resp, err := c.api.ListResourceRecordSets(context.TODO(), &req)
 		if err != nil {
 			return existing, err
@@ -360,7 +362,7 @@ func (c *route53Client) collectRecords(name string) (map[string]recordSet, error
 		req.StartRecordName = resp.NextRecordName
 		req.StartRecordType = resp.NextRecordType
 	}
-
+	log.Info("Loaded existing TXT records", "name", name, "zone", c.zoneID, "records", len(existing))
 	return existing, nil
 }
 

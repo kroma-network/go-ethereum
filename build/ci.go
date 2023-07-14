@@ -53,6 +53,7 @@ import (
 	"time"
 
 	"github.com/cespare/cp"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto/signify"
 	"github.com/ethereum/go-ethereum/internal/build"
@@ -139,7 +140,7 @@ var (
 	// This is the version of Go that will be downloaded by
 	//
 	//     go run ci.go install -dlgo
-	dlgoVersion = "1.20.1"
+	dlgoVersion = "1.20.2"
 
 	// This is the version of Go that will be used to bootstrap the PPA builder.
 	//
@@ -512,7 +513,7 @@ func doDocker(cmdline []string) {
 	case env.Branch == "master":
 		tags = []string{"latest"}
 	case strings.HasPrefix(env.Tag, "v1."):
-		tags = []string{"stable", fmt.Sprintf("release-1.%d", params.KanvasVersionMinor), "v" + params.Version}
+		tags = []string{"stable", fmt.Sprintf("release-1.%d", params.KromaVersionMinor), "v" + params.Version}
 	}
 	// If architecture specific image builds are requested, build and push them
 	if *image {

@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 // ChainContext supports retrieving headers and consensus parameters from the
@@ -36,7 +37,7 @@ type ChainContext interface {
 }
 
 // NewEVMBlockContext creates a new context for use in the EVM.
-func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common.Address) vm.BlockContext {
+func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common.Address, config *params.ChainConfig, statedb types.StateGetter) vm.BlockContext {
 	var (
 		beneficiary common.Address
 		baseFee     *big.Int
@@ -56,27 +57,29 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 		random = &header.MixDigest
 	}
 	return vm.BlockContext{
-		CanTransfer: CanTransfer,
-		Transfer:    Transfer,
-		GetHash:     GetHashFn(header, chain),
-		Coinbase:    beneficiary,
-		BlockNumber: new(big.Int).Set(header.Number),
-		Time:        header.Time,
-		Difficulty:  new(big.Int).Set(header.Difficulty),
-		BaseFee:     baseFee,
-		GasLimit:    header.GasLimit,
-		Random:      random,
+		CanTransfer:         CanTransfer,
+		Transfer:            Transfer,
+		GetHash:             GetHashFn(header, chain),
+		Coinbase:            beneficiary,
+		BlockNumber:         new(big.Int).Set(header.Number),
+		Time:                header.Time,
+		Difficulty:          new(big.Int).Set(header.Difficulty),
+		BaseFee:             baseFee,
+		GasLimit:            header.GasLimit,
+		Random:              random,
+		L1CostFunc:          types.NewL1CostFunc(config, statedb),
+		FeeDistributionFunc: types.NewFeeDistributionFunc(config, statedb),
 	}
 }
 
 // NewEVMTxContext creates a new transaction context for a single transaction.
-func NewEVMTxContext(msg Message) vm.TxContext {
+func NewEVMTxContext(msg *Message) vm.TxContext {
 	return vm.TxContext{
-		Origin: msg.From(),
+		Origin: msg.From,
 		// [Scroll: START]
-		To: msg.To(),
+		To: msg.To,
 		// [Scroll: END]
-		GasPrice: new(big.Int).Set(msg.GasPrice()),
+		GasPrice: new(big.Int).Set(msg.GasPrice),
 	}
 }
 

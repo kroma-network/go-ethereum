@@ -163,7 +163,7 @@ func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 	return params.NetSstoreDirtyGas, nil
 }
 
-// Here come the EIP220 rules:
+// Here come the EIP2200 rules:
 //
 //	(0.) If *gasleft* is less than or equal to 2300, fail the current call.
 //	(1.) If current value equals new value (this is a no-op), SLOAD_GAS is deducted.
@@ -455,7 +455,7 @@ func gasStaticCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memo
 
 // [Scroll: START]
 /*
-NOTE: SELFDESTRUCT is disabled in Kanvas. This is not meant to disable
+NOTE: SELFDESTRUCT is disabled in Kroma. This is not meant to disable
 forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
 func gasSelfdestruct(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var gas uint64

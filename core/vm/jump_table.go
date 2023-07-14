@@ -98,7 +98,7 @@ func newMergeInstructionSet() JumpTable {
 }
 
 // newLondonInstructionSet returns the frontier, homestead, byzantium,
-// contantinople, istanbul, petersburg, berlin and london instructions.
+// constantinople, istanbul, petersburg, berlin and london instructions.
 func newLondonInstructionSet() JumpTable {
 	instructionSet := newBerlinInstructionSet()
 	enable3529(&instructionSet) // EIP-3529: Reduction in refunds https://eips.ethereum.org/EIPS/eip-3529
@@ -107,7 +107,7 @@ func newLondonInstructionSet() JumpTable {
 }
 
 // newBerlinInstructionSet returns the frontier, homestead, byzantium,
-// contantinople, istanbul, petersburg and berlin instructions.
+// constantinople, istanbul, petersburg and berlin instructions.
 func newBerlinInstructionSet() JumpTable {
 	instructionSet := newIstanbulInstructionSet()
 	enable2929(&instructionSet) // Access lists for trie accesses https://eips.ethereum.org/EIPS/eip-2929
@@ -115,7 +115,7 @@ func newBerlinInstructionSet() JumpTable {
 }
 
 // newIstanbulInstructionSet returns the frontier, homestead, byzantium,
-// contantinople, istanbul and petersburg instructions.
+// constantinople, istanbul and petersburg instructions.
 func newIstanbulInstructionSet() JumpTable {
 	instructionSet := newConstantinopleInstructionSet()
 
@@ -127,7 +127,7 @@ func newIstanbulInstructionSet() JumpTable {
 }
 
 // newConstantinopleInstructionSet returns the frontier, homestead,
-// byzantium and contantinople instructions.
+// byzantium and constantinople instructions.
 func newConstantinopleInstructionSet() JumpTable {
 	instructionSet := newByzantiumInstructionSet()
 	instructionSet[SHL] = &operation{
@@ -1036,7 +1036,7 @@ func newFrontierInstructionSet() JumpTable {
 		},
 		// [Scroll: START]
 		/*
-			NOTE: SELFDESTRUCT is disabled in Kanvas. This is not meant to disable
+			NOTE: SELFDESTRUCT is disabled in Kroma. This is not meant to disable
 			forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
 			SELFDESTRUCT: {
 				execute:    opSelfdestruct,

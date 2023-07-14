@@ -22,10 +22,11 @@ import (
 	"bytes"
 	"fmt"
 
-	zktrie "github.com/wemixkanvas/zktrie/trie"
-	zkt "github.com/wemixkanvas/zktrie/types"
+	zktrie "github.com/kroma-network/zktrie/trie"
+	zkt "github.com/kroma-network/zktrie/types"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto/poseidon"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -82,14 +83,9 @@ func (t *ZkTrie) Get(key []byte) []byte {
 // TryUpdateAccount will abstract the write of an account to the
 // ZkTrie.
 func (t *ZkTrie) TryUpdateAccount(address common.Address, acc *types.StateAccount) error {
-	key, err := zkt.ToSecureKeyBytes(address.Bytes())
-	if err != nil {
-		return err
-	}
-	keyBytes := key.Bytes()
-	sanityCheckByte32Key(keyBytes)
+	sanityCheckByte32Key(address.Bytes())
 	value, flag := acc.MarshalFields()
-	return t.ZkTrie.TryUpdate(keyBytes, flag, value)
+	return t.ZkTrie.TryUpdate(address.Bytes(), flag, value)
 }
 
 // [Scroll: END]
@@ -144,6 +140,12 @@ func (t *ZkTrie) GetKey(kHashBytes []byte) []byte {
 func (t *ZkTrie) Commit(bool) (common.Hash, *NodeSet) {
 	// in current implementation, every update of trie already writes into database
 	// so Commit does nothing
+	node, err := t.Tree().GetNode(t.Tree().Root())
+	if err != nil {
+		panic(err)
+	}
+
+	rawdb.WriteLegacyTrieNode(t.db.db.diskdb, t.Hash(), node.Value())
 	return t.Hash(), nil
 }
 
@@ -193,7 +195,7 @@ func (t *ZkTrie) NodeIterator(start []byte) NodeIterator {
 // with the node that proves the absence of the key.
 func (t *ZkTrie) Prove(key []byte, fromLevel uint, proofDb ethdb.KeyValueWriter) error {
 	err := t.ZkTrie.Prove(key, fromLevel, func(n *zktrie.Node) error {
-		key, err := n.Key()
+		nodeHash, err := n.NodeHash()
 		if err != nil {
 			return err
 		}
@@ -206,7 +208,7 @@ func (t *ZkTrie) Prove(key []byte, fromLevel uint, proofDb ethdb.KeyValueWriter)
 				//return fmt.Errorf("key preimage not found for [%x] ref %x", n.NodeKey.Bytes(), k.Bytes())
 			}
 		}
-		return proofDb.Put(key[:], n.Value())
+		return proofDb.Put(nodeHash[:], n.Value())
 	})
 	if err != nil {
 		return err
@@ -253,19 +255,11 @@ func VerifyProofSMT(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueRead
 // [Scroll: START]
 // NOTE(chokobole): This part is different from scroll
 func (t *ZkTrie) TryDeleteAccount(address common.Address) error {
-	key, err := zkt.ToSecureKeyBytes(address.Bytes())
-	if err != nil {
-		return err
-	}
-	return t.TryDelete(key.Bytes())
+	return t.TryDelete(address.Bytes())
 }
 
 func (t *ZkTrie) TryGetAccount(address common.Address) (*types.StateAccount, error) {
-	key, err := zkt.ToSecureKeyBytes(address.Bytes())
-	if err != nil {
-		return nil, err
-	}
-	res, err := t.TryGet(key.Bytes())
+	res, err := t.TryGet(address.Bytes())
 	if res == nil || err != nil {
 		return nil, err
 	}

@@ -272,8 +272,8 @@ func (e *GenesisMismatchError) Error() string {
 // ChainOverrides contains the changes to chain config.
 type ChainOverrides struct {
 	OverrideShanghai *uint64
-	// kanvas
-	OverrideKanvas *bool
+	// kroma
+	OverrideKroma *bool
 }
 
 // SetupGenesisBlock writes or updates the genesis block in db.
@@ -302,9 +302,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 			if overrides != nil && overrides.OverrideShanghai != nil {
 				config.ShanghaiTime = overrides.OverrideShanghai
 			}
-			if overrides != nil && overrides.OverrideKanvas != nil {
-				if *overrides.OverrideKanvas {
-					config.Kanvas = &params.KanvasConfig{
+			if overrides != nil && overrides.OverrideKroma != nil {
+				if *overrides.OverrideKroma {
+					config.Kroma = &params.KromaConfig{
 						EIP1559Elasticity:  10,
 						EIP1559Denominator: 50,
 					}
@@ -326,8 +326,20 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 			return genesis.Config, common.Hash{}, err
 		}
 		applyOverrides(genesis.Config)
+		triedb.Zktrie = genesis.Config.Zktrie
 		return genesis.Config, block.Hash(), nil
 	}
+
+	// NOTE(chokobole): Need to fetch Zktrie from chainConfig before triedb.EmptyRoot().
+	foundStoredCfg := false
+	storedcfg := rawdb.ReadChainConfig(db, stored)
+	if storedcfg != nil {
+		foundStoredCfg = true
+	}
+	if foundStoredCfg {
+		triedb.Zktrie = storedcfg.Zktrie
+	}
+
 	// We have the genesis block in database(perhaps in ancient database)
 	// but the corresponding state is missing.
 	header := rawdb.ReadHeader(db, stored, 0)
@@ -360,8 +372,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 	if err := newcfg.CheckConfigForkOrder(); err != nil {
 		return newcfg, common.Hash{}, err
 	}
-	storedcfg := rawdb.ReadChainConfig(db, stored)
-	if storedcfg == nil {
+	if !foundStoredCfg {
 		log.Warn("Found genesis block without chain config")
 		rawdb.WriteChainConfig(db, stored, newcfg)
 		return newcfg, stored, nil
@@ -532,7 +543,9 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *trie.Database) (*types.Block
 // Note the state changes will be committed in hash-based scheme, use Commit
 // if path-scheme is preferred.
 func (g *Genesis) MustCommit(db ethdb.Database) *types.Block {
-	block, err := g.Commit(db, trie.NewDatabase(db))
+	block, err := g.Commit(db, trie.NewDatabaseWithConfig(db, &trie.Config{
+		Zktrie: g.Config != nil && g.Config.Zktrie,
+	}))
 	if err != nil {
 		panic(err)
 	}

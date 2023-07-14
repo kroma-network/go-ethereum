@@ -24,14 +24,13 @@ import (
 	"sort"
 	"time"
 
-	zkt "github.com/wemixkanvas/zktrie/types"
+	zkt "github.com/kroma-network/zktrie/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/codehash"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
@@ -84,8 +83,10 @@ type StateDB struct {
 	// DB error.
 	// State objects are used by the consensus core and VM which are
 	// unable to deal with database-level errors. Any error that occurs
-	// during a database read is memoized here and will eventually be returned
-	// by StateDB.Commit.
+	// during a database read is memoized here and will eventually be
+	// returned by StateDB.Commit. Notably, this error is also shared
+	// by all cached state objects in case the database failure occurs
+	// when accessing state of accounts.
 	dbErr error
 
 	// The refund counter, also used by state transitioning.
@@ -128,8 +129,6 @@ type StateDB struct {
 	StorageUpdated int
 	AccountDeleted int
 	StorageDeleted int
-
-	codeHashFn func([]byte) common.Hash
 }
 
 // New creates a new state from a given trie.
@@ -158,13 +157,6 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		if sdb.snap = sdb.snaps.Snapshot(root); sdb.snap != nil {
 			sdb.snapAccounts = make(map[common.Hash][]byte)
 			sdb.snapStorage = make(map[common.Hash]map[common.Hash][]byte)
-		}
-	}
-	if db.IsZktrie() {
-		sdb.codeHashFn = codehash.CodeHash
-	} else {
-		sdb.codeHashFn = func(data []byte) common.Hash {
-			return crypto.Keccak256Hash(data)
 		}
 	}
 	return sdb, nil
@@ -199,6 +191,7 @@ func (s *StateDB) setError(err error) {
 	}
 }
 
+// Error returns the memorized database failure occurred earlier.
 func (s *StateDB) Error() error {
 	return s.dbErr
 }
@@ -506,9 +499,7 @@ func (s *StateDB) SetNonce(addr common.Address, nonce uint64) {
 func (s *StateDB) SetCode(addr common.Address, code []byte) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
-		// [Scroll: START]
-		stateObject.SetCode(s.codeHashFn(code), code)
-		// [Scroll: END]
+		stateObject.SetCode(crypto.Keccak256Hash(code), code)
 	}
 }
 
@@ -563,13 +554,11 @@ func (s *StateDB) SetTransientState(addr common.Address, key, value common.Hash)
 	if prev == value {
 		return
 	}
-
 	s.journal.append(transientStorageChange{
 		account:  &addr,
 		key:      key,
 		prevalue: prev,
 	})
-
 	s.setTransientState(addr, key, value)
 }
 
@@ -797,7 +786,6 @@ func (s *StateDB) Copy() *StateDB {
 		preimages:            make(map[common.Hash][]byte, len(s.preimages)),
 		journal:              newJournal(),
 		hasher:               crypto.NewKeccakState(),
-		codeHashFn:           s.codeHashFn,
 	}
 	// Copy the dirty states, logs, and preimages
 	for addr := range s.journal.dirties {
@@ -1045,6 +1033,7 @@ func (s *StateDB) clearJournalAndRefund() {
 
 // Commit writes the state to the underlying in-memory trie database.
 func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
+	// Short circuit in case any database failure occurred earlier.
 	if s.dbErr != nil {
 		return common.Hash{}, fmt.Errorf("commit aborted due to earlier error: %v", s.dbErr)
 	}
@@ -1058,8 +1047,8 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		storageTrieNodesUpdated int
 		storageTrieNodesDeleted int
 		nodes                   = trie.NewMergedNodeSet()
+		codeWriter              = s.db.DiskDB().NewBatch()
 	)
-	codeWriter := s.db.DiskDB().NewBatch()
 	for addr := range s.stateObjectsDirty {
 		if obj := s.stateObjects[addr]; !obj.deleted {
 			// Write any contract code associated with the state object
