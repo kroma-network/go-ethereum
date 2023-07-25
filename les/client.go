@@ -94,8 +94,15 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 		return nil, err
 	}
 	var overrides core.ChainOverrides
+	overrides.CircuitParams = new(params.CircuitParams)
 	if config.OverrideShanghai != nil {
 		overrides.OverrideShanghai = config.OverrideShanghai
+	}
+	if config.CircuitParams != nil && config.CircuitParams.MaxTxs != nil {
+		overrides.CircuitParams.MaxTxs = config.CircuitParams.MaxTxs
+	}
+	if config.CircuitParams != nil && config.CircuitParams.MaxCalldata != nil {
+		overrides.CircuitParams.MaxCalldata = config.CircuitParams.MaxCalldata
 	}
 	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, trie.NewDatabase(chainDb), config.Genesis, &overrides)
 	if _, isCompat := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !isCompat {

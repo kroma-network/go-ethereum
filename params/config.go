@@ -469,6 +469,9 @@ type ChainConfig struct {
 
 	// Maximum number of transactions per block [optional]
 	MaxTxPerBlock *int `json:"maxTxPerBlock,omitempty"`
+
+	// Maximum tx payload size of blocks that we produce [optional]
+	MaxTxPayloadBytesPerBlock *int `json:"maxTxPayloadBytesPerBlock,omitempty"`
 	// [Scroll: END]
 }
 
@@ -697,6 +700,11 @@ func (c *ChainConfig) IsKroma() bool {
 // IsValidTxCount returns whether the given block's transaction count is below the limit.
 func (c *ChainConfig) IsValidTxCount(count int) bool {
 	return c.MaxTxPerBlock == nil || count <= *c.MaxTxPerBlock
+}
+
+// IsValidBlockSize returns whether the given block's transaction payload size is below the limit.
+func (c *ChainConfig) IsValidBlockSize(size int) bool {
+	return c.MaxTxPayloadBytesPerBlock == nil || size <= *c.MaxTxPayloadBytesPerBlock
 }
 
 // [Scroll: END]
@@ -1034,4 +1042,9 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool, timestamp uint64) Rules 
 		isCancun:         c.IsCancun(timestamp),
 		isPrague:         c.IsPrague(timestamp),
 	}
+}
+
+type CircuitParams struct {
+	MaxTxs      *int
+	MaxCalldata *int
 }

@@ -170,6 +170,15 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 		override := ctx.Bool(utils.OverrideKroma.Name)
 		cfg.Eth.OverrideKroma = &override
 	}
+	cfg.Eth.CircuitParams = new(params.CircuitParams)
+	if ctx.IsSet(utils.MaxTxsFlag.Name) {
+		maxTxs := ctx.Int(utils.MaxTxsFlag.Name)
+		cfg.Eth.CircuitParams.MaxTxs = &maxTxs
+	}
+	if ctx.IsSet(utils.MaxCalldataFlag.Name) {
+		maxCalldata := ctx.Int(utils.MaxCalldataFlag.Name)
+		cfg.Eth.CircuitParams.MaxCalldata = &maxCalldata
+	}
 
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
 
