@@ -676,8 +676,8 @@ var (
 	// CircuitParams settings
 	MaxTxsFlag = &cli.IntFlag{
 		Name:     "circuitparams.maxtxs",
-		Usage:    "Allowed max number of transactions in a block (default = 200)",
-		Value:    200,
+		Usage:    "Allowed max number of transactions in a block (default = 100)",
+		Value:    100,
 		Category: flags.CircuitParamsCategory,
 	}
 	// https://eips.ethereum.org/EIPS/eip-170.
