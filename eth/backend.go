@@ -197,11 +197,18 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	)
 	// Override the chain config with provided settings.
 	var overrides core.ChainOverrides
+	overrides.CircuitParams = new(params.CircuitParams)
 	if config.OverrideShanghai != nil {
 		overrides.OverrideShanghai = config.OverrideShanghai
 	}
 	if config.OverrideKroma != nil {
 		overrides.OverrideKroma = config.OverrideKroma
+	}
+	if config.CircuitParams != nil && config.CircuitParams.MaxTxs != nil {
+		overrides.CircuitParams.MaxTxs = config.CircuitParams.MaxTxs
+	}
+	if config.CircuitParams != nil && config.CircuitParams.MaxCalldata != nil {
+		overrides.CircuitParams.MaxCalldata = config.CircuitParams.MaxCalldata
 	}
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit)
 	if err != nil {

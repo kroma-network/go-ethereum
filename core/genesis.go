@@ -274,6 +274,7 @@ type ChainOverrides struct {
 	OverrideShanghai *uint64
 	// kroma
 	OverrideKroma *bool
+	CircuitParams *params.CircuitParams
 }
 
 // SetupGenesisBlock writes or updates the genesis block in db.
@@ -309,6 +310,12 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 						EIP1559Denominator: 50,
 					}
 				}
+			}
+			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxTxs != nil {
+				config.MaxTxPerBlock = overrides.CircuitParams.MaxTxs
+			}
+			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxCalldata != nil {
+				config.MaxTxPayloadBytesPerBlock = overrides.CircuitParams.MaxCalldata
 			}
 		}
 	}

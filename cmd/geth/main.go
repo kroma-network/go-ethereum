@@ -54,6 +54,8 @@ const (
 var (
 	// flags that configure the node
 	nodeFlags = flags.Merge([]cli.Flag{
+		utils.MaxTxsFlag,
+		utils.MaxCalldataFlag,
 		utils.IdentityFlag,
 		utils.UnlockedAccountFlag,
 		utils.PasswordFileFlag,
