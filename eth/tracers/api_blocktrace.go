@@ -339,7 +339,7 @@ func (api *API) fillBlockTrace(env *traceEnv, block *types.Block) (*types.BlockT
 	statedb := env.state
 	txs := make([]*types.TransactionData, block.Transactions().Len())
 	for i, tx := range block.Transactions() {
-		txs[i] = types.NewTransactionData(tx, block.NumberU64(), api.backend.ChainConfig())
+		txs[i] = types.NewTransactionData(tx, block.NumberU64(), api.backend.ChainConfig(), block.BaseFee())
 	}
 	blockTrace := &types.BlockTrace{
 		ChainID: api.backend.ChainConfig().ChainID.Uint64(),

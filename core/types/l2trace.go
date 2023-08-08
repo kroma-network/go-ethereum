@@ -10,6 +10,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -166,6 +167,7 @@ type TransactionData struct {
 	Data       string          `json:"data"`
 	IsCreate   bool            `json:"isCreate"`
 	SourceHash common.Hash     `json:"sourceHash"`
+	AccessList AccessList      `json:"accessList"`
 	V          *hexutil.Big    `json:"v"`
 	R          *hexutil.Big    `json:"r"`
 	S          *hexutil.Big    `json:"s"`
@@ -173,10 +175,23 @@ type TransactionData struct {
 
 // NewTransactionData returns a transaction that will serialize to the trace
 // representation, with the given location metadata set (if available).
-func NewTransactionData(tx *Transaction, blockNumber uint64, config *params.ChainConfig) *TransactionData {
+func NewTransactionData(tx *Transaction, blockNumber uint64, config *params.ChainConfig, baseFee *big.Int) *TransactionData {
 	signer := MakeSigner(config, big.NewInt(0).SetUint64(blockNumber))
 	from, _ := Sender(signer, tx)
 	v, r, s := tx.RawSignatureValues()
+
+	var gasPrice *big.Int
+	switch tx.Type() {
+	case LegacyTxType, AccessListTxType, DepositTxType:
+		gasPrice = tx.GasPrice()
+	case DynamicFeeTxType:
+		if baseFee != nil {
+			gasPrice = math.BigMin(new(big.Int).Add(tx.GasTipCap(), baseFee), tx.GasFeeCap())
+		} else {
+			gasPrice = tx.GasPrice()
+		}
+	}
+
 	result := &TransactionData{
 		Type:       tx.Type(),
 		TxHash:     tx.Hash().String(),
@@ -184,13 +199,14 @@ func NewTransactionData(tx *Transaction, blockNumber uint64, config *params.Chai
 		ChainId:    (*hexutil.Big)(tx.ChainId()),
 		From:       from,
 		Gas:        tx.Gas(),
-		GasPrice:   (*hexutil.Big)(tx.GasPrice()),
+		GasPrice:   (*hexutil.Big)(gasPrice),
 		To:         tx.To(),
 		Mint:       (*hexutil.Big)(tx.Mint()),
 		Value:      (*hexutil.Big)(tx.Value()),
 		Data:       hexutil.Encode(tx.Data()),
 		IsCreate:   tx.To() == nil,
 		SourceHash: tx.SourceHash(),
+		AccessList: tx.AccessList(),
 		V:          (*hexutil.Big)(v),
 		R:          (*hexutil.Big)(r),
 		S:          (*hexutil.Big)(s),
