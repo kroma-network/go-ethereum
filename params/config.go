@@ -699,12 +699,12 @@ func (c *ChainConfig) IsKroma() bool {
 // [Scroll: START]
 // IsValidTxCount returns whether the given block's transaction count is below the limit.
 func (c *ChainConfig) IsValidTxCount(count int) bool {
-	return c.MaxTxPerBlock == nil || count <= *c.MaxTxPerBlock
+	return c.MaxTxPerBlock == nil || *c.MaxTxPerBlock == 0 || count <= *c.MaxTxPerBlock
 }
 
 // IsValidBlockSize returns whether the given block's transaction payload size is below the limit.
 func (c *ChainConfig) IsValidBlockSize(size int) bool {
-	return c.MaxTxPayloadBytesPerBlock == nil || size <= *c.MaxTxPayloadBytesPerBlock
+	return c.MaxTxPayloadBytesPerBlock == nil || *c.MaxTxPayloadBytesPerBlock == 0 || size <= *c.MaxTxPayloadBytesPerBlock
 }
 
 // [Scroll: END]
