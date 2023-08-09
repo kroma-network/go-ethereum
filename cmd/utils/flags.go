@@ -676,16 +676,14 @@ var (
 	// CircuitParams settings
 	MaxTxsFlag = &cli.IntFlag{
 		Name:     "circuitparams.maxtxs",
-		Usage:    "Allowed max number of transactions in a block (default = 100)",
-		Value:    100,
+		Usage:    "Allowed max number of transactions in a block (default = 0). When it's 0, no limit",
+		Value:    0,
 		Category: flags.CircuitParamsCategory,
 	}
-	// https://eips.ethereum.org/EIPS/eip-170.
-	// 24576 is max calldata for a contract, 122880 = 24576 * 5 (same but written 120 * 1024 in scroll)
 	MaxCalldataFlag = &cli.IntFlag{
 		Name:     "circuitparams.maxcalldata",
-		Usage:    "Allowed sum of transactions' calldata in a block (default = 122880 = 24576 * 5)",
-		Value:    122880,
+		Usage:    "Allowed sum of transactions' calldata in a block (default = 0). When it's 0, no limit",
+		Value:    0,
 		Category: flags.CircuitParamsCategory,
 	}
 
