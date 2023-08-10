@@ -367,6 +367,16 @@ func (b *Block) Size() uint64 {
 	return uint64(c)
 }
 
+// PayloadSize returns the sum of all transactions' sizes in a block.
+func (b *Block) PayloadSize() int {
+	// add up all txs' sizes
+	var totalSize uint64
+	for _, tx := range b.transactions {
+		totalSize += tx.Size()
+	}
+	return int(totalSize)
+}
+
 // SanityCheck can be used to prevent that unbounded fields are
 // stuffed with junk data to add processing overhead
 func (b *Block) SanityCheck() error {

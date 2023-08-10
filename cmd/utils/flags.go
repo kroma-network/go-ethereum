@@ -673,6 +673,20 @@ var (
 		Category:  flags.MiscCategory,
 	}
 
+	// CircuitParams settings
+	MaxTxsFlag = &cli.IntFlag{
+		Name:     "circuitparams.maxtxs",
+		Usage:    "Allowed max number of transactions in a block (default = 0). When it's 0, no limit",
+		Value:    0,
+		Category: flags.CircuitParamsCategory,
+	}
+	MaxCalldataFlag = &cli.IntFlag{
+		Name:     "circuitparams.maxcalldata",
+		Usage:    "Allowed sum of transactions' calldata in a block (default = 0). When it's 0, no limit",
+		Value:    0,
+		Category: flags.CircuitParamsCategory,
+	}
+
 	// RPC settings
 	IPCDisabledFlag = &cli.BoolFlag{
 		Name:     "ipcdisable",

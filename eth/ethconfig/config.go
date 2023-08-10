@@ -214,6 +214,7 @@ type Config struct {
 	// Trace option
 	MPTWitness int
 	// [Scroll: END]
+	CircuitParams *params.CircuitParams
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain configuration.
