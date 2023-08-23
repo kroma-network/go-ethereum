@@ -18,6 +18,8 @@ package params
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 )
 
 // Version is the version of upstream geth
@@ -29,12 +31,32 @@ const (
 )
 
 // KromaVersion is the version of kroma-geth
-const (
+var (
 	KromaVersionMajor = 0          // Major version component of the current release
 	KromaVersionMinor = 1          // Minor version component of the current release
 	KromaVersionPatch = 0          // Patch version component of the current release
 	KromaVersionMeta  = "unstable" // Version metadata to append to the version string
 )
+
+// This is set at build-time by the linker when the build is done by build/ci.go.
+var gitTag string
+
+// Override the version variables if the gitTag was set at build time.
+var _ = func() (_ string) {
+	semver := regexp.MustCompile(`^v([0-9]+)\.([0-9]+)\.([0-9]+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+)?$`)
+	version := semver.FindStringSubmatch(gitTag)
+	if version == nil {
+		return
+	}
+	if version[4] == "" {
+		version[4] = "stable"
+	}
+	KromaVersionMajor, _ = strconv.Atoi(version[1])
+	KromaVersionMinor, _ = strconv.Atoi(version[2])
+	KromaVersionPatch, _ = strconv.Atoi(version[3])
+	KromaVersionMeta = version[4]
+	return
+}()
 
 // Version holds the textual version string.
 var Version = func() string {

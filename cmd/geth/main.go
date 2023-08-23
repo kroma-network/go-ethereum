@@ -144,6 +144,7 @@ var (
 		// kroma does not support
 		// RollupSequencerHTTPFlag, RollupHistoricalRPCFlag, RollupHistoricalRPCTimeoutFlag, RollupDisableTxPoolGossipFlag
 		utils.RollupComputePendingBlock,
+		utils.RollupAllowPendingTxFilters,
 		configFileFlag,
 	}, utils.NetworkFlags, utils.DatabasePathFlags)
 

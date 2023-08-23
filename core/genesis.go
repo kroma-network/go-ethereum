@@ -63,6 +63,11 @@ type Genesis struct {
 	GasUsed    uint64      `json:"gasUsed"`
 	ParentHash common.Hash `json:"parentHash"`
 	BaseFee    *big.Int    `json:"baseFeePerGas"`
+
+	// StateHash represents the genesis state, to allow instantiation of a chain with missing initial state.
+	// Chains with history pruning, or extraordinarily large genesis allocation (e.g. after a regenesis event)
+	// may utilize this to get started, and then state-sync the latest state, while still verifying the header chain.
+	StateHash *common.Hash `json:"stateHash,omitempty"`
 }
 
 func ReadGenesis(db ethdb.Database) (*Genesis, error) {
@@ -463,14 +468,19 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 
 // ToBlock returns the genesis block according to genesis specification.
 func (g *Genesis) ToBlock() *types.Block {
-	// [Scroll: START]
 	var trieCfg *trie.Config
+	var root common.Hash
+	var err error
 	if g.Config != nil {
 		trieCfg = &trie.Config{Zktrie: g.Config.Zktrie}
 	}
-	root, err := g.Alloc.deriveHash(trieCfg)
-	// [Scroll: END]
-	if err != nil {
+	if g.StateHash != nil {
+		if len(g.Alloc) > 0 {
+			panic(fmt.Errorf("cannot both have genesis hash %s "+
+				"and non-empty state-allocation", *g.StateHash))
+		}
+		root = *g.StateHash
+	} else if root, err = g.Alloc.deriveHash(trieCfg); err != nil {
 		panic(err)
 	}
 	head := &types.Header{

@@ -165,6 +165,8 @@ type Config struct {
 
 	OverrideKroma *bool
 
+	RollupAllowPendingTxFilters  bool
+
 	// [Scroll: START]
 	// Trace option
 	MPTWitness int
