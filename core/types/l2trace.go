@@ -159,6 +159,8 @@ type TransactionData struct {
 	TxHash     string          `json:"txHash"`
 	Gas        uint64          `json:"gas"`
 	GasPrice   *hexutil.Big    `json:"gasPrice"`
+	GasTipCap  *hexutil.Big    `json:"maxPriorityFeePerGas"`
+	GasFeeCap  *hexutil.Big    `json:"maxFeePerGas"`
 	From       common.Address  `json:"from"`
 	To         *common.Address `json:"to"`
 	ChainId    *hexutil.Big    `json:"chainId"`
@@ -200,6 +202,8 @@ func NewTransactionData(tx *Transaction, blockNumber uint64, config *params.Chai
 		From:       from,
 		Gas:        tx.Gas(),
 		GasPrice:   (*hexutil.Big)(gasPrice),
+		GasTipCap:  (*hexutil.Big)(tx.GasTipCap()),
+		GasFeeCap:  (*hexutil.Big)(tx.GasFeeCap()),
 		To:         tx.To(),
 		Mint:       (*hexutil.Big)(tx.Mint()),
 		Value:      (*hexutil.Big)(tx.Value()),
