@@ -26,8 +26,6 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/tyler-smith/go-bip39"
-
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -48,6 +46,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/tyler-smith/go-bip39"
 )
 
 var ErrHeaderNotFound = fmt.Errorf("header %w", ethereum.NotFound)
@@ -92,7 +91,7 @@ type feeHistoryResult struct {
 
 // FeeHistory returns the fee market history.
 func (s *EthereumAPI) FeeHistory(ctx context.Context, blockCount math.HexOrDecimal64, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (*feeHistoryResult, error) {
-	oldest, reward, baseFee, gasUsed, err := s.b.FeeHistory(ctx, int(blockCount), lastBlock, rewardPercentiles)
+	oldest, reward, baseFee, gasUsed, err := s.b.FeeHistory(ctx, uint64(blockCount), lastBlock, rewardPercentiles)
 	if err != nil {
 		return nil, err
 	}
@@ -744,7 +743,7 @@ func (s *BlockChainAPI) GetHeaderByNumber(ctx context.Context, number rpc.BlockN
 	header, err := s.b.HeaderByNumber(ctx, number)
 	if header != nil && err == nil {
 		response := s.rpcMarshalHeader(ctx, header)
-		if number == rpc.PendingBlockNumber {
+		if number == rpc.PendingBlockNumber && s.b.ChainConfig().Kroma == nil { // don't remove info if kroma
 			// Pending header need to nil out a few fields
 			for _, field := range []string{"hash", "nonce", "miner"} {
 				response[field] = nil
@@ -773,7 +772,7 @@ func (s *BlockChainAPI) GetBlockByNumber(ctx context.Context, number rpc.BlockNu
 	block, err := s.b.BlockByNumber(ctx, number)
 	if block != nil && err == nil {
 		response, err := s.rpcMarshalBlock(ctx, block, true, fullTx)
-		if err == nil && number == rpc.PendingBlockNumber {
+		if err == nil && number == rpc.PendingBlockNumber && s.b.ChainConfig().Kroma == nil { // don't remove info if kroma
 			// Pending blocks need to nil out a few fields
 			for _, field := range []string{"hash", "nonce", "miner"} {
 				response[field] = nil
@@ -1355,6 +1354,10 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 			result.Nonce = hexutil.Uint64(*receipt.DepositNonce)
 		}
 	case types.LegacyTxType:
+		if v.Sign() == 0 && r.Sign() == 0 && s.Sign() == 0 { // pre-bedrock relayed tx does not have a signature
+			result.ChainID = (*hexutil.Big)(new(big.Int).Set(config.ChainID))
+			break
+		}
 		// if a legacy transaction has an EIP-155 chain id, include it explicitly
 		if id := tx.ChainId(); id.Sign() != 0 {
 			result.ChainID = (*hexutil.Big)(id)
@@ -1514,7 +1517,7 @@ func AccessList(ctx context.Context, b Backend, blockNrOrHash rpc.BlockNumberOrH
 
 		// Apply the transaction with the access list tracer
 		tracer := vm.NewAccessListTracer(accessList, args.from(), to, precompiles)
-		config := vm.Config{Tracer: tracer, Debug: true, NoBaseFee: true}
+		config := vm.Config{Tracer: tracer, NoBaseFee: true}
 		vmenv, _, err := b.GetEVM(ctx, msg, statedb, header, &config)
 		if err != nil {
 			return nil, 0, nil, err

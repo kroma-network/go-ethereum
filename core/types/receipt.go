@@ -375,7 +375,6 @@ func (r *ReceiptForStorage) DecodeRLP(s *rlp.Stream) error {
 	if stored.DepositNonce != nil {
 		r.DepositNonce = stored.DepositNonce
 	}
-
 	return nil
 }
 
@@ -471,7 +470,8 @@ func (rs Receipts) DeriveFields(config *params.ChainConfig, hash common.Hash, nu
 				if !txs[i].IsDepositTx() {
 					gas := txs[i].RollupDataGas().DataGas()
 					rs[i].L1GasPrice = l1Basefee
-					rs[i].L1GasUsed = new(big.Int).SetUint64(gas)
+					// GasUsed reported in receipt should include the overhead
+					rs[i].L1GasUsed = new(big.Int).Add(new(big.Int).SetUint64(gas), overhead)
 					rs[i].L1Fee = L1Cost(gas, l1Basefee, overhead, scalar)
 					rs[i].FeeScalar = feeScalar
 				}

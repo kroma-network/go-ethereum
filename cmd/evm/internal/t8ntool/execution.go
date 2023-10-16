@@ -21,8 +21,6 @@ import (
 	"math/big"
 	"os"
 
-	"golang.org/x/crypto/sha3"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
@@ -38,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"golang.org/x/crypto/sha3"
 )
 
 type Prestate struct {
@@ -175,7 +174,6 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 			return nil, nil, err
 		}
 		vmConfig.Tracer = tracer
-		vmConfig.Debug = (tracer != nil)
 		statedb.SetTxContext(tx.Hash(), txIndex)
 
 		var (

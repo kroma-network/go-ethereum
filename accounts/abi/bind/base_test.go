@@ -24,8 +24,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -34,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/stretchr/testify/assert"
 )
 
 func mockSign(addr common.Address, tx *types.Transaction) (*types.Transaction, error) { return tx, nil }
@@ -185,6 +184,23 @@ func TestUnpackIndexedStringTyLogIntoMap(t *testing.T) {
 		"memo":   []byte{88},
 	}
 	unpackAndCheck(t, bc, expectedReceivedMap, mockLog)
+}
+
+func TestUnpackAnonymousLogIntoMap(t *testing.T) {
+	mockLog := newMockLog(nil, common.HexToHash("0x0"))
+
+	abiString := `[{"anonymous":false,"inputs":[{"indexed":false,"name":"amount","type":"uint256"}],"name":"received","type":"event"}]`
+	parsedAbi, _ := abi.JSON(strings.NewReader(abiString))
+	bc := bind.NewBoundContract(common.HexToAddress("0x0"), parsedAbi, nil, nil, nil)
+
+	var received map[string]interface{}
+	err := bc.UnpackLogIntoMap(received, "received", mockLog)
+	if err == nil {
+		t.Error("unpacking anonymous event is not supported")
+	}
+	if err.Error() != "no event signature" {
+		t.Errorf("expected error 'no event signature', got '%s'", err)
+	}
 }
 
 func TestUnpackIndexedSliceTyLogIntoMap(t *testing.T) {

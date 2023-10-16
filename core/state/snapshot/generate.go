@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/VictoriaMetrics/fastcache"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -231,7 +230,7 @@ func (dl *diskLayer) proveRange(ctx *generatorContext, trieId *trie.ID, prefix [
 	if origin == nil && !diskMore {
 		stackTr := trie.NewStackTrie(nil)
 		for i, key := range keys {
-			stackTr.TryUpdate(key, vals[i])
+			stackTr.Update(key, vals[i])
 		}
 		if gotRoot := stackTr.Hash(); gotRoot != root {
 			return &proofResult{

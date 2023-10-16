@@ -25,7 +25,6 @@ import (
 	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -60,7 +59,7 @@ const (
 
 	// minRecommitInterval is the minimal time interval to recreate the sealing block with
 	// any newly arrived transactions.
-	minRecommitInterval = 1 * time.Second
+	minRecommitInterval = 100 * time.Millisecond
 
 	// maxRecommitInterval is the maximum time interval to recreate the sealing block with
 	// any newly arrived transactions.
@@ -166,7 +165,7 @@ const (
 
 // newWorkReq represents a request for new sealing work submitting with relative interrupt notifier.
 type newWorkReq struct {
-	interrupt *int32
+	interrupt *atomic.Int32
 	noempty   bool
 	timestamp int64
 }
@@ -241,15 +240,15 @@ type worker struct {
 	snapshotState    *state.StateDB
 
 	// atomic status counters
-	running int32 // The indicator whether the consensus engine is running or not.
-	newTxs  int32 // New arrival transaction count since last sealing work submitting.
+	running atomic.Bool  // The indicator whether the consensus engine is running or not.
+	newTxs  atomic.Int32 // New arrival transaction count since last sealing work submitting.
 
 	// noempty is the flag used to control whether the feature of pre-seal empty
 	// block is enabled. The default value is false(pre-seal is enabled by default).
 	// But in some special scenario the consensus engine will seal blocks instantaneously,
 	// in this case this feature will add all empty blocks into canonical chain
 	// non-stop and no real transaction will be included.
-	noempty uint32
+	noempty atomic.Bool
 
 	// newpayloadTimeout is the maximum timeout allowance for creating payload.
 	// The default value is 2 seconds but node operator can set it to arbitrary
@@ -374,16 +373,19 @@ func (w *worker) setRecommitInterval(interval time.Duration) {
 
 // disablePreseal disables pre-sealing feature
 func (w *worker) disablePreseal() {
-	atomic.StoreUint32(&w.noempty, 1)
+	w.noempty.Store(true)
 }
 
 // enablePreseal enables pre-sealing feature
 func (w *worker) enablePreseal() {
-	atomic.StoreUint32(&w.noempty, 0)
+	w.noempty.Store(false)
 }
 
 // pending returns the pending state and corresponding block.
 func (w *worker) pending() (*types.Block, *state.StateDB) {
+	if w.chainConfig.Kroma != nil && !w.config.RollupComputePendingBlock {
+		return nil, nil // when not computing the pending block, there is never a pending state
+	}
 	// return a snapshot to avoid contention on currentMu mutex
 	w.snapshotMu.RLock()
 	defer w.snapshotMu.RUnlock()
@@ -395,6 +397,12 @@ func (w *worker) pending() (*types.Block, *state.StateDB) {
 
 // pendingBlock returns pending block.
 func (w *worker) pendingBlock() *types.Block {
+	if w.chainConfig.Kroma != nil && !w.config.RollupComputePendingBlock {
+		// For compatibility when not computing a pending block, we serve the latest block as "pending"
+		headHeader := w.eth.BlockChain().CurrentHeader()
+		headBlock := w.eth.BlockChain().GetBlock(headHeader.Hash(), headHeader.Number.Uint64())
+		return headBlock
+	}
 	// return a snapshot to avoid contention on currentMu mutex
 	w.snapshotMu.RLock()
 	defer w.snapshotMu.RUnlock()
@@ -403,6 +411,9 @@ func (w *worker) pendingBlock() *types.Block {
 
 // pendingBlockAndReceipts returns pending block and corresponding receipts.
 func (w *worker) pendingBlockAndReceipts() (*types.Block, types.Receipts) {
+	if w.chainConfig.Kroma != nil && !w.config.RollupComputePendingBlock {
+		return nil, nil // when not computing the pending block, there are no pending receipts, and thus no pending logs
+	}
 	// return a snapshot to avoid contention on currentMu mutex
 	w.snapshotMu.RLock()
 	defer w.snapshotMu.RUnlock()
@@ -411,24 +422,24 @@ func (w *worker) pendingBlockAndReceipts() (*types.Block, types.Receipts) {
 
 // start sets the running status as 1 and triggers new work submitting.
 func (w *worker) start() {
-	atomic.StoreInt32(&w.running, 1)
+	w.running.Store(true)
 	w.startCh <- struct{}{}
 }
 
 // stop sets the running status as 0.
 func (w *worker) stop() {
-	atomic.StoreInt32(&w.running, 0)
+	w.running.Store(false)
 }
 
 // isRunning returns an indicator whether worker is running or not.
 func (w *worker) isRunning() bool {
-	return atomic.LoadInt32(&w.running) == 1
+	return w.running.Load()
 }
 
 // close terminates all background threads maintained by the worker.
 // Note the worker does not support being closed multiple times.
 func (w *worker) close() {
-	atomic.StoreInt32(&w.running, 0)
+	w.running.Store(false)
 	close(w.exitCh)
 	w.wg.Wait()
 }
@@ -458,8 +469,21 @@ func recalcRecommit(minRecommit, prev time.Duration, target float64, inc bool) t
 // newWorkLoop is a standalone goroutine to submit new sealing work upon received events.
 func (w *worker) newWorkLoop(recommit time.Duration) {
 	defer w.wg.Done()
+	if w.chainConfig.Kroma != nil && !w.config.RollupComputePendingBlock {
+		for { // do not update the pending-block, instead drain work without doing it, to keep producers from blocking.
+			select {
+			case <-w.startCh:
+			case <-w.chainHeadCh:
+			case <-w.resubmitIntervalCh:
+			case <-w.resubmitAdjustCh:
+			case <-w.exitCh:
+				return
+			}
+		}
+	}
+
 	var (
-		interrupt   *int32
+		interrupt   *atomic.Int32
 		minRecommit = recommit // minimal resubmit interval specified by user.
 		timestamp   int64      // timestamp for each round of sealing.
 	)
@@ -471,16 +495,16 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
 		if interrupt != nil {
-			atomic.StoreInt32(interrupt, s)
+			interrupt.Store(s)
 		}
-		interrupt = new(int32)
+		interrupt = new(atomic.Int32)
 		select {
 		case w.newWorkCh <- &newWorkReq{interrupt: interrupt, noempty: noempty, timestamp: timestamp}:
 		case <-w.exitCh:
 			return
 		}
 		timer.Reset(recommit)
-		atomic.StoreInt32(&w.newTxs, 0)
+		w.newTxs.Store(0)
 	}
 	// clearPending cleans the stale pending tasks.
 	clearPending := func(number uint64) {
@@ -510,7 +534,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			// higher priced transactions. Disable this overhead for pending blocks.
 			if w.isRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0) {
 				// Short circuit if no new transaction arrives.
-				if atomic.LoadInt32(&w.newTxs) == 0 {
+				if w.newTxs.Load() == 0 {
 					timer.Reset(recommit)
 					continue
 				}
@@ -620,6 +644,9 @@ func (w *worker) mainLoop() {
 			}
 
 		case ev := <-w.txsCh:
+			if w.chainConfig.Kroma != nil && !w.config.RollupComputePendingBlock {
+				continue // don't update the pending-block snapshot if we are not computing the pending block
+			}
 			// Apply transactions to the pending state if we're not sealing
 			//
 			// Note all transactions received may not be continuous with transactions
@@ -652,7 +679,7 @@ func (w *worker) mainLoop() {
 					w.commitWork(nil, true, time.Now().Unix())
 				}
 			}
-			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
+			w.newTxs.Add(int32(len(ev.Txs)))
 
 		// System stopped
 		case <-w.exitCh:
@@ -879,7 +906,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 	return receipt.Logs, nil
 }
 
-func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByPriceAndNonce, interrupt *int32) error {
+func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByPriceAndNonce, interrupt *atomic.Int32) error {
 	gasLimit := env.header.GasLimit
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
@@ -889,7 +916,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	for {
 		// Check interruption signal and abort building if it's fired.
 		if interrupt != nil {
-			if signal := atomic.LoadInt32(interrupt); signal != commitInterruptNone {
+			if signal := interrupt.Load(); signal != commitInterruptNone {
 				return signalToErr(signal)
 			}
 		}
@@ -934,20 +961,10 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 		logs, err := w.commitTransaction(env, tx)
 		switch {
-		case errors.Is(err, core.ErrGasLimitReached):
-			// Pop the current out-of-gas transaction without shifting in the next from the account
-			log.Trace("Gas limit exceeded for current block", "sender", from)
-			txs.Pop()
-
 		case errors.Is(err, core.ErrNonceTooLow):
 			// New head notification data race between the transaction pool and miner, shift
 			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
 			txs.Shift()
-
-		case errors.Is(err, core.ErrNonceTooHigh):
-			// Reorg notification data race between the transaction pool and miner, skip account =
-			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
-			txs.Pop()
 
 		case errors.Is(err, nil):
 			// Everything ok, collect the logs and shift in the next transaction from the same account
@@ -956,16 +973,11 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			env.blockSize += int(tx.Size())
 			txs.Shift()
 
-		case errors.Is(err, types.ErrTxTypeNotSupported):
-			// Pop the unsupported transaction without shifting in the next from the account
-			log.Trace("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
-			txs.Pop()
-
 		default:
-			// Strange error, discard the transaction and get the next in line (note, the
-			// nonce-too-high clause will prevent us from executing in vain).
+			// Transaction is regarded as invalid, drop all consecutive transactions from
+			// the same sender because of `nonce-too-high` clause.
 			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
-			txs.Shift()
+			txs.Pop()
 		}
 	}
 	if !w.isRunning() && len(coalescedLogs) > 0 {
@@ -1093,7 +1105,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 // fillTransactions retrieves the pending transactions from the txpool and fills them
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
-func (w *worker) fillTransactions(interrupt *int32, env *environment) error {
+func (w *worker) fillTransactions(interrupt *atomic.Int32, env *environment) error {
 	// Split the pending transactions into locals and remotes
 	// Fill the block with all available pending transactions.
 	pending := w.eth.TxPool().Pending(true)
@@ -1142,9 +1154,9 @@ func (w *worker) generateWork(genParams *generateParams) (*types.Block, *big.Int
 
 	// forced transactions done, fill rest of block with transactions
 	if !genParams.noTxs {
-		interrupt := new(int32)
+		interrupt := new(atomic.Int32)
 		timer := time.AfterFunc(w.newpayloadTimeout, func() {
-			atomic.StoreInt32(interrupt, commitInterruptTimeout)
+			interrupt.Store(commitInterruptTimeout)
 		})
 		defer timer.Stop()
 
@@ -1162,7 +1174,7 @@ func (w *worker) generateWork(genParams *generateParams) (*types.Block, *big.Int
 
 // commitWork generates several new sealing tasks based on the parent block
 // and submit them to the sealer.
-func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
+func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int64) {
 	start := time.Now()
 
 	// Set the coinbase if the worker is running or it's required
@@ -1183,7 +1195,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	}
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
-	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {
+	if !noempty && !w.noempty.Load() {
 		w.commit(work.copy(), nil, false, start)
 	}
 	// Fill pending transactions from the txpool into the block.

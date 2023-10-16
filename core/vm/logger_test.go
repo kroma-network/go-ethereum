@@ -60,7 +60,7 @@ func TestStoreCapture(t *testing.T) {
 	var (
 		logger = NewStructLogger(nil)
 		// [Scroll: START]
-		env = NewEVM(BlockContext{}, TxContext{}, makeTestState(), params.TestChainConfig, Config{Debug: true, Tracer: logger})
+		env = NewEVM(BlockContext{}, TxContext{}, makeTestState(), params.TestChainConfig, Config{Tracer: logger})
 		// [Scroll: END]
 		contract = NewContract(&dummyContractRef{}, &dummyContractRef{}, new(big.Int), 100000)
 	)

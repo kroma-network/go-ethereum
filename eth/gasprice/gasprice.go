@@ -37,16 +37,20 @@ const sampleNumber = 3 // Number of transactions sampled in a block
 var (
 	DefaultMaxPrice    = big.NewInt(500 * params.GWei)
 	DefaultIgnorePrice = big.NewInt(2 * params.Wei)
+
+	DefaultMinSuggestedPriorityFee = big.NewInt(1e8 * params.Wei) // 0.1 gwei, for Optimism fee suggestion
 )
 
 type Config struct {
 	Blocks           int
 	Percentile       int
-	MaxHeaderHistory int
-	MaxBlockHistory  int
+	MaxHeaderHistory uint64
+	MaxBlockHistory  uint64
 	Default          *big.Int `toml:",omitempty"`
 	MaxPrice         *big.Int `toml:",omitempty"`
 	IgnorePrice      *big.Int `toml:",omitempty"`
+
+	MinSuggestedPriorityFee *big.Int `toml:",omitempty"` // for Optimism fee suggestion
 }
 
 // OracleBackend includes all necessary background APIs for oracle.
@@ -71,9 +75,11 @@ type Oracle struct {
 	fetchLock   sync.Mutex
 
 	checkBlocks, percentile           int
-	maxHeaderHistory, maxBlockHistory int
+	maxHeaderHistory, maxBlockHistory uint64
 
 	historyCache *lru.Cache[cacheKey, processedFees]
+
+	minSuggestedPriorityFee *big.Int // for Optimism fee suggestion
 }
 
 // NewOracle returns a new gasprice oracle which can recommend suitable
@@ -128,7 +134,7 @@ func NewOracle(backend OracleBackend, params Config) *Oracle {
 		}
 	}()
 
-	return &Oracle{
+	r := &Oracle{
 		backend:          backend,
 		lastPrice:        params.Default,
 		maxPrice:         maxPrice,
@@ -139,6 +145,17 @@ func NewOracle(backend OracleBackend, params Config) *Oracle {
 		maxBlockHistory:  maxBlockHistory,
 		historyCache:     cache,
 	}
+
+	if backend.ChainConfig().IsKroma() {
+		r.minSuggestedPriorityFee = params.MinSuggestedPriorityFee
+		if r.minSuggestedPriorityFee == nil || r.minSuggestedPriorityFee.Int64() <= 0 {
+			r.minSuggestedPriorityFee = DefaultMinSuggestedPriorityFee
+			log.Warn("Sanitizing invalid optimism gasprice oracle min priority fee suggestion",
+				"provided", params.MinSuggestedPriorityFee,
+				"updated", r.minSuggestedPriorityFee)
+		}
+	}
+	return r
 }
 
 // SuggestTipCap returns a tip cap so that newly created transaction can have a
@@ -168,6 +185,11 @@ func (oracle *Oracle) SuggestTipCap(ctx context.Context) (*big.Int, error) {
 	if headHash == lastHead {
 		return new(big.Int).Set(lastPrice), nil
 	}
+
+	if oracle.backend.ChainConfig().IsKroma() {
+		return oracle.SuggestOptimismPriorityFee(ctx, head, headHash), nil
+	}
+
 	var (
 		sent, exp int
 		number    = head.Number.Uint64()

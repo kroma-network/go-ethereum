@@ -28,9 +28,8 @@ import (
 	"reflect"
 	"strings"
 
-	"golang.org/x/crypto/sha3"
-
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"golang.org/x/crypto/sha3"
 )
 
 // Lengths of hashes and addresses in bytes.
@@ -410,7 +409,7 @@ func (ma *MixedcaseAddress) UnmarshalJSON(input []byte) error {
 }
 
 // MarshalJSON marshals the original value
-func (ma *MixedcaseAddress) MarshalJSON() ([]byte, error) {
+func (ma MixedcaseAddress) MarshalJSON() ([]byte, error) {
 	if strings.HasPrefix(ma.original, "0x") || strings.HasPrefix(ma.original, "0X") {
 		return json.Marshal(fmt.Sprintf("0x%s", ma.original[2:]))
 	}

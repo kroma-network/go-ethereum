@@ -227,7 +227,7 @@ func (api *API) getTxResult(env *traceEnv, state *state.StateDB, index int, bloc
 
 	tracer := vm.NewStructLogger(env.config.LogConfig)
 	// Run the transaction with tracing enabled.
-	vmenv := vm.NewEVM(env.blockCtx, core.NewEVMTxContext(msg), state, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true})
+	vmenv := vm.NewEVM(env.blockCtx, core.NewEVMTxContext(msg), state, api.backend.ChainConfig(), vm.Config{Tracer: tracer, NoBaseFee: true})
 
 	// Call SetTxContext to clear out the statedb access list
 	state.SetTxContext(txctx.TxHash, txctx.TxIndex)

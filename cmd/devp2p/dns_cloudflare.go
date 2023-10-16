@@ -22,10 +22,9 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cloudflare-go"
-	"github.com/urfave/cli/v2"
-
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/dnsdisc"
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -145,7 +144,7 @@ func (c *cloudflareClient) uploadRecords(name string, records map[string]string)
 			_, err = c.CreateDNSRecord(context.Background(), c.zoneID, record)
 		} else if old.Content != val {
 			// Entry already exists, only change its content.
-			log.Debug(fmt.Sprintf("Updating %s from %q to %q", path, old.Content, val))
+			log.Info(fmt.Sprintf("Updating %s from %q to %q", path, old.Content, val))
 			updated++
 			old.Content = val
 			err = c.UpdateDNSRecord(context.Background(), c.zoneID, old.ID, old)
