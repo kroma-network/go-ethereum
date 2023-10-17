@@ -390,7 +390,7 @@ func (w *zktrieProofWriter) traceAccountUpdate(addr common.Address, updateAccDat
 	}
 
 	if accData != nil {
-		if err := w.tracingZktrie.TryUpdateAccount(addr, accData); err != nil {
+		if err := w.tracingZktrie.UpdateAccount(addr, accData); err != nil {
 			return nil, fmt.Errorf("update zktrie account state fail: %s", err)
 		}
 		w.tracingAccounts[addr] = accData
