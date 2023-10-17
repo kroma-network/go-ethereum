@@ -347,7 +347,7 @@ func TestDeriveFields(t *testing.T) {
 	}
 }
 
-func TestDeriveOptimismTxReceipt(t *testing.T) {
+func TestDeriveKromaTxReceipt(t *testing.T) {
 	to4 := common.HexToAddress("0x4")
 	// Create a few transactions to have receipts for
 	txs := Transactions{
@@ -420,8 +420,8 @@ func TestDeriveOptimismTxReceipt(t *testing.T) {
 			BlockNumber:       blockNumber,
 			TransactionIndex:  1,
 			L1GasPrice:        big.NewInt(5000),
-			L1GasUsed:         big.NewInt(3976),
-			L1Fee:             big.NewInt(39760000),
+			L1GasUsed:         big.NewInt(2888),
+			L1Fee:             big.NewInt(28880000),
 			FeeScalar:         big.NewFloat(2),
 		},
 	}
