@@ -11,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
-// SuggestOptimismPriorityFee returns a max priority fee value that can be used such that newly
+// SuggestKromaPriorityFee returns a max priority fee value that can be used such that newly
 // created transactions have a very high chance to be included in the following blocks, using a
 // simplified and more predictable algorithm appropriate for chains like Kroma with a single
 // known block builder.
@@ -35,7 +35,7 @@ import (
 // rise in order to reach a market price that appropriately reflects demand. We accomplish this by
 // returning a suggestion that is a significant amount (10%) higher than the median effective
 // priority fee from the previous block.
-func (oracle *Oracle) SuggestOptimismPriorityFee(ctx context.Context, h *types.Header, headHash common.Hash) *big.Int {
+func (oracle *Oracle) SuggestKromaPriorityFee(ctx context.Context, h *types.Header, headHash common.Hash) *big.Int {
 	suggestion := new(big.Int).Set(oracle.minSuggestedPriorityFee)
 
 	// find the maximum gas used by any of the transactions in the block to use as the capacity

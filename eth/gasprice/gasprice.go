@@ -38,7 +38,7 @@ var (
 	DefaultMaxPrice    = big.NewInt(500 * params.GWei)
 	DefaultIgnorePrice = big.NewInt(2 * params.Wei)
 
-	DefaultMinSuggestedPriorityFee = big.NewInt(1e8 * params.Wei) // 0.1 gwei, for Optimism fee suggestion
+	DefaultMinSuggestedPriorityFee = big.NewInt(1e8 * params.Wei) // 0.1 gwei, for Kroma fee suggestion
 )
 
 type Config struct {
@@ -50,7 +50,7 @@ type Config struct {
 	MaxPrice         *big.Int `toml:",omitempty"`
 	IgnorePrice      *big.Int `toml:",omitempty"`
 
-	MinSuggestedPriorityFee *big.Int `toml:",omitempty"` // for Optimism fee suggestion
+	MinSuggestedPriorityFee *big.Int `toml:",omitempty"` // for Kroma fee suggestion
 }
 
 // OracleBackend includes all necessary background APIs for oracle.
@@ -79,7 +79,7 @@ type Oracle struct {
 
 	historyCache *lru.Cache[cacheKey, processedFees]
 
-	minSuggestedPriorityFee *big.Int // for Optimism fee suggestion
+	minSuggestedPriorityFee *big.Int // for Kroma fee suggestion
 }
 
 // NewOracle returns a new gasprice oracle which can recommend suitable
@@ -150,7 +150,7 @@ func NewOracle(backend OracleBackend, params Config) *Oracle {
 		r.minSuggestedPriorityFee = params.MinSuggestedPriorityFee
 		if r.minSuggestedPriorityFee == nil || r.minSuggestedPriorityFee.Int64() <= 0 {
 			r.minSuggestedPriorityFee = DefaultMinSuggestedPriorityFee
-			log.Warn("Sanitizing invalid optimism gasprice oracle min priority fee suggestion",
+			log.Warn("Sanitizing invalid Kroma gasprice oracle min priority fee suggestion",
 				"provided", params.MinSuggestedPriorityFee,
 				"updated", r.minSuggestedPriorityFee)
 		}
@@ -187,7 +187,7 @@ func (oracle *Oracle) SuggestTipCap(ctx context.Context) (*big.Int, error) {
 	}
 
 	if oracle.backend.ChainConfig().IsKroma() {
-		return oracle.SuggestOptimismPriorityFee(ctx, head, headHash), nil
+		return oracle.SuggestKromaPriorityFee(ctx, head, headHash), nil
 	}
 
 	var (

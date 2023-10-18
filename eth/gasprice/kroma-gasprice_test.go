@@ -74,7 +74,7 @@ func newOpTestBackend(t *testing.T, txs []testTxData) *opTestBackend {
 		key, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 		signer = types.LatestSigner(params.TestChainConfig)
 	)
-	// only the most recent block is considered for optimism priority fee suggestions, so this is
+	// only the most recent block is considered for kroma priority fee suggestions, so this is
 	// where we add the test transactions
 	ts := []*types.Transaction{}
 	rs := []*types.Receipt{}
@@ -104,7 +104,7 @@ func newOpTestBackend(t *testing.T, txs []testTxData) *opTestBackend {
 	return &opTestBackend{block: b, receipts: rs}
 }
 
-func TestSuggestOptimismPriorityFee(t *testing.T) {
+func TestSuggestKromaPriorityFee(t *testing.T) {
 	minSuggestion := new(big.Int).SetUint64(1e8 * params.Wei)
 	var cases = []struct {
 		txdata []testTxData
@@ -134,7 +134,7 @@ func TestSuggestOptimismPriorityFee(t *testing.T) {
 	for i, c := range cases {
 		backend := newOpTestBackend(t, c.txdata)
 		oracle := NewOracle(backend, Config{MinSuggestedPriorityFee: minSuggestion})
-		got := oracle.SuggestOptimismPriorityFee(context.Background(), backend.block.Header(), backend.block.Hash())
+		got := oracle.SuggestKromaPriorityFee(context.Background(), backend.block.Header(), backend.block.Hash())
 		if got.Cmp(c.want) != 0 {
 			t.Errorf("Gas price mismatch for test case %d: want %d, got %d", i, c.want, got)
 		}
