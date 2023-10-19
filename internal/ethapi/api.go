@@ -669,7 +669,7 @@ func (s *BlockChainAPI) GetProof(ctx context.Context, address common.Address, st
 	// [Scroll: START]
 	var storageHash common.Hash
 	if !s.b.ChainConfig().Zktrie {
-		storageHash = types.EmptyMPTRootHash
+		storageHash = types.EmptyRootHash
 	}
 	// [Scroll: END]
 	codeHash := state.GetCodeHash(address)

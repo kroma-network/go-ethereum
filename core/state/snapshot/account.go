@@ -42,7 +42,7 @@ func SlimAccount(nonce uint64, balance *big.Int, root common.Hash, codehash []by
 		Nonce:   nonce,
 		Balance: balance,
 	}
-	if root != types.EmptyMPTRootHash {
+	if root != types.EmptyRootHash {
 		slim.Root = root[:]
 	}
 	if !bytes.Equal(codehash, types.EmptyCodeHash[:]) {
@@ -69,7 +69,7 @@ func FullAccount(data []byte) (Account, error) {
 		return Account{}, err
 	}
 	if len(account.Root) == 0 {
-		account.Root = types.EmptyMPTRootHash[:]
+		account.Root = types.EmptyRootHash[:]
 	}
 	if len(account.CodeHash) == 0 {
 		account.CodeHash = types.EmptyCodeHash[:]

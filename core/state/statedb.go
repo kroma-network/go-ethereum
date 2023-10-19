@@ -204,7 +204,7 @@ func (s *StateDB) IsZktrie() bool {
 
 func (s *StateDB) GetEmptyRoot() common.Hash {
 	if s.db.TrieDB() == nil {
-		return types.EmptyMPTRootHash
+		return types.EmptyRootHash
 	}
 	return s.db.TrieDB().EmptyRoot()
 }

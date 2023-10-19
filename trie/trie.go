@@ -83,7 +83,7 @@ func New(id *ID, db NodeReader) (*Trie, error) {
 		reader: reader,
 		tracer: newTracer(),
 	}
-	if id.Root != (common.Hash{}) && id.Root != types.EmptyMPTRootHash {
+	if id.Root != (common.Hash{}) && id.Root != types.EmptyRootHash {
 		rootnode, err := trie.resolveAndTrack(id.Root[:], nil)
 		if err != nil {
 			return nil, err
@@ -581,7 +581,7 @@ func (t *Trie) Commit(collectLeaf bool) (common.Hash, *NodeSet) {
 	// - The trie was empty and no update happens
 	// - The trie was non-empty and all nodes are dropped
 	if t.root == nil {
-		return types.EmptyMPTRootHash, nodes
+		return types.EmptyRootHash, nodes
 	}
 	// Derive the hash for all dirty nodes first. We hold the assumption
 	// in the following procedure that all nodes are hashed.
@@ -602,7 +602,7 @@ func (t *Trie) Commit(collectLeaf bool) (common.Hash, *NodeSet) {
 // hashRoot calculates the root hash of the given trie
 func (t *Trie) hashRoot() (node, node) {
 	if t.root == nil {
-		return hashNode(types.EmptyMPTRootHash.Bytes()), nil
+		return hashNode(types.EmptyRootHash.Bytes()), nil
 	}
 	// If the number of changes is below 100, we let one thread handle it
 	h := newHasher(t.unhashed >= 100)

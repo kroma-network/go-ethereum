@@ -955,7 +955,7 @@ func (db *Database) Scheme() string {
 // [Scroll: START]
 // EmptyRoot indicate what root is for an empty trie, it depends on its underlying implement (zktrie or common trie)
 func (db *Database) EmptyRoot() common.Hash {
-	return types.EmptyRootHash(db.Zktrie)
+	return types.GetEmptyRootHash(db.Zktrie)
 }
 
 // [Scroll: END]
