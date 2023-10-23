@@ -75,13 +75,6 @@ type Database struct {
 	diskdb   ethdb.Database // Persistent storage for matured trie nodes
 	resolver ChildResolver  // The handler to resolve children of nodes
 
-	// [Scroll: START]
-	// zktrie related stuff
-	Zktrie bool
-	// TODO: It's a quick&dirty implementation. FIXME later.
-	rawDirties KvMap
-	// [Scroll: END]
-
 	cleans  *fastcache.Cache            // GC friendly memory cache of clean node RLPs
 	dirties map[common.Hash]*cachedNode // Data and references relationships of dirty trie nodes
 	oldest  common.Hash                 // Oldest tracked node, flush-list head
@@ -419,25 +412,6 @@ func (db *Database) Commit(node common.Hash, report bool) error {
 	start := time.Now()
 	batch := db.diskdb.NewBatch()
 
-	// [Scroll: START]
-	db.lock.Lock()
-	for _, v := range db.rawDirties {
-		batch.Put(v.K, v.V)
-	}
-	for k := range db.rawDirties {
-		delete(db.rawDirties, k)
-	}
-	db.lock.Unlock()
-	if err := batch.Write(); err != nil {
-		return err
-	}
-	batch.Reset()
-
-	if (node == common.Hash{}) {
-		return nil
-	}
-	// [Scroll: END]
-
 	// Move the trie itself into the batch, flushing if enough data is accumulated
 	nodes, storage := len(db.dirties), db.dirtiesSize
 
@@ -617,7 +591,7 @@ func (db *Database) Update(root common.Hash, parent common.Hash, nodes *trienode
 			if err := rlp.DecodeBytes(n.Blob, &account); err != nil {
 				return err
 			}
-			if account.Root != db.EmptyRoot() {
+			if account.Root != types.EmptyRootHash {
 				db.reference(account.Root, n.Parent)
 			}
 		}
@@ -662,11 +636,3 @@ func (reader *reader) Node(owner common.Hash, path []byte, hash common.Hash) ([]
 	blob, _ := reader.db.Node(hash)
 	return blob, nil
 }
-
-// [Scroll: START]
-// EmptyRoot indicate what root is for an empty trie, it depends on its underlying implement (zktrie or common trie)
-func (db *Database) EmptyRoot() common.Hash {
-	return types.GetEmptyRootHash(db.Zktrie)
-}
-
-// [Scroll: END]

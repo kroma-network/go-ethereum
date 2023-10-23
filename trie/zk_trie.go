@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto/poseidon"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/trie/trienode"
 )
 
 var magicHash []byte = []byte("THIS IS THE MAGIC INDEX FOR ZKTRIE")
@@ -38,7 +39,7 @@ var magicHash []byte = []byte("THIS IS THE MAGIC INDEX FOR ZKTRIE")
 // wrap zktrie for trie interface
 type ZkTrie struct {
 	*zktrie.ZkTrie
-	db *ZktrieDatabase
+	db *Database
 }
 
 func init() {
@@ -59,7 +60,7 @@ func IsMagicHash(k []byte) bool {
 // NewZkTrie creates a trie
 // NewZkTrie bypasses all the buffer mechanism in *Database, it directly uses the
 // underlying diskdb
-func NewZkTrie(root common.Hash, db *ZktrieDatabase) (*ZkTrie, error) {
+func NewZkTrie(root common.Hash, db *Database) (*ZkTrie, error) {
 	tr, err := zktrie.NewZkTrie(*zkt.NewByte32FromBytes(root.Bytes()), db)
 	if err != nil {
 		return nil, err
@@ -142,10 +143,10 @@ func (t *ZkTrie) GetKey(kHashBytes []byte) []byte {
 		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
 	}
 
-	if t.db.db.preimages == nil {
+	if t.db.preimages == nil {
 		return nil
 	}
-	return t.db.db.preimages.preimage(common.BytesToHash(k.Bytes()))
+	return t.db.preimages.preimage(common.BytesToHash(k.Bytes()))
 }
 
 // Commit writes all nodes and the secure hash pre-images to the trie's database.
@@ -153,7 +154,7 @@ func (t *ZkTrie) GetKey(kHashBytes []byte) []byte {
 //
 // Committing flushes nodes from memory. Subsequent Get calls will load nodes
 // from the database.
-func (t *ZkTrie) Commit(bool) (common.Hash, *NodeSet) {
+func (t *ZkTrie) Commit(bool) (common.Hash, *trienode.NodeSet) {
 	// in current implementation, every update of trie already writes into database
 	// so Commit does nothing
 	node, err := t.Tree().GetNode(t.Tree().Root())
@@ -161,7 +162,7 @@ func (t *ZkTrie) Commit(bool) (common.Hash, *NodeSet) {
 		panic(err)
 	}
 
-	rawdb.WriteLegacyTrieNode(t.db.db.diskdb, t.Hash(), node.Value())
+	rawdb.WriteLegacyTrieNode(t.db.diskdb, t.Hash(), node.Value())
 	return t.Hash(), nil
 }
 

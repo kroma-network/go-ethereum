@@ -18,6 +18,7 @@ package trie
 
 import (
 	"errors"
+	"math/big"
 	"runtime"
 	"time"
 
@@ -105,12 +106,16 @@ func NewDatabase(diskdb ethdb.Database) *Database {
 	return NewDatabaseWithConfig(diskdb, nil)
 }
 
+func NewZkDatabase(diskdb ethdb.Database) *Database {
+	return NewDatabaseWithConfig(diskdb, &Config{Zktrie: true})
+}
+
 // NewDatabaseWithConfig initializes the trie database with provided configs.
 // The path-based scheme is not activated yet, always initialized with legacy
 // hash-based scheme by default.
 func NewDatabaseWithConfig(diskdb ethdb.Database, config *Config) *Database {
 	db := prepare(diskdb, config)
-	db.backend = hashdb.New(diskdb, db.cleans, mptResolver{})
+	db.SetBackend(config != nil && config.Zktrie)
 	return db
 }
 
@@ -222,7 +227,7 @@ func (db *Database) SaveCachePeriodically(dir string, interval time.Duration, st
 //
 // It's only supported by hash-based database and will return an error for others.
 func (db *Database) Cap(limit common.StorageSize) error {
-	hdb, ok := db.backend.(*hashdb.Database)
+	hdb, ok := db.backend.(hashdb.NodeDatabase)
 	if !ok {
 		return errors.New("not supported")
 	}
@@ -238,7 +243,7 @@ func (db *Database) Cap(limit common.StorageSize) error {
 //
 // It's only supported by hash-based database and will return an error for others.
 func (db *Database) Reference(root common.Hash, parent common.Hash) error {
-	hdb, ok := db.backend.(*hashdb.Database)
+	hdb, ok := db.backend.(hashdb.NodeDatabase)
 	if !ok {
 		return errors.New("not supported")
 	}
@@ -249,7 +254,7 @@ func (db *Database) Reference(root common.Hash, parent common.Hash) error {
 // Dereference removes an existing reference from a root node. It's only
 // supported by hash-based database and will return an error for others.
 func (db *Database) Dereference(root common.Hash) error {
-	hdb, ok := db.backend.(*hashdb.Database)
+	hdb, ok := db.backend.(hashdb.NodeDatabase)
 	if !ok {
 		return errors.New("not supported")
 	}
@@ -261,11 +266,62 @@ func (db *Database) Dereference(root common.Hash) error {
 // only supported by hash-based database and will return an error for others.
 // Note, this function should be deprecated once ETH66 is deprecated.
 func (db *Database) Node(hash common.Hash) ([]byte, error) {
-	hdb, ok := db.backend.(*hashdb.Database)
+	hdb, ok := db.backend.(hashdb.NodeDatabase)
 	if !ok {
 		return nil, errors.New("not supported")
 	}
 	return hdb.Node(hash)
+}
+
+func (db *Database) UpdatePreimage(preimage []byte, hashField *big.Int) {
+	if _, ok := db.backend.(*hashdb.ZktrieDatabase); !ok {
+		log.Error("non zkTrie database UpdatePreimage does not support ")
+		return
+	}
+	if db.preimages != nil {
+		// we must copy the input key
+		preimages := make(map[common.Hash][]byte)
+		preimages[common.BytesToHash(hashField.Bytes())] = common.CopyBytes(preimage)
+		db.preimages.insertPreimage(preimages)
+	}
+}
+
+func (db *Database) Put(k, v []byte) error {
+	zdb, ok := db.backend.(*hashdb.ZktrieDatabase)
+	if !ok {
+		return errors.New("not supported")
+	}
+	return zdb.Put(k, v)
+}
+
+func (db *Database) Get(key []byte) ([]byte, error) {
+	zdb, ok := db.backend.(*hashdb.ZktrieDatabase)
+	if !ok {
+		return nil, errors.New("not supported")
+	}
+	return zdb.Get(key)
+}
+
+func (db *Database) IsZk() bool {
+	if db.config == nil {
+		return false
+	}
+	return db.config.Zktrie
+}
+
+func (db *Database) SetBackend(isZk bool) {
+	if db.config == nil {
+		if isZk {
+			db.config = &Config{Zktrie: isZk}
+		}
+	} else {
+		db.config.Zktrie = isZk
+	}
+	if isZk {
+		db.backend = hashdb.NewZk(db.diskdb, db.cleans)
+	} else {
+		db.backend = hashdb.New(db.diskdb, db.cleans, mptResolver{})
+	}
 }
 
 func (db *Database) EmptyRoot() common.Hash {

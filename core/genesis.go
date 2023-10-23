@@ -143,7 +143,7 @@ func (ga *GenesisAlloc) deriveHash(trieCfg *trie.Config) (common.Hash, error) {
 // all the generated states will be persisted into the given database.
 // Also, the genesis state specification will be flushed as well.
 func (ga *GenesisAlloc) flush(db ethdb.Database, triedb *trie.Database, blockhash common.Hash) error {
-	statedb, err := state.New(types.EmptyRootHash, state.NewDatabaseWithNodeDB(db, triedb), nil)
+	statedb, err := state.New(types.GetEmptyRootHash(triedb.IsZk()), state.NewDatabaseWithNodeDB(db, triedb), nil)
 	if err != nil {
 		return err
 	}
@@ -333,7 +333,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 			return genesis.Config, common.Hash{}, err
 		}
 		applyOverrides(genesis.Config)
-		triedb.Zktrie = genesis.Config.Zktrie
+		triedb.SetBackend(genesis.Config.Zktrie)
 		return genesis.Config, block.Hash(), nil
 	}
 
@@ -344,7 +344,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		foundStoredCfg = true
 	}
 	if foundStoredCfg {
-		triedb.Zktrie = storedcfg.Zktrie
+		triedb.SetBackend(storedcfg.Zktrie)
 	}
 
 	// We have the genesis block in database(perhaps in ancient database)

@@ -171,8 +171,8 @@ type cachingDB struct {
 // OpenTrie opens the main account trie at a specific root hash.
 func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
 	// [Scroll: START]
-	if db.triedb.Zktrie {
-		tr, err := trie.NewZkTrie(root, trie.NewZktrieDatabaseFromTriedb(db.triedb))
+	if db.triedb.IsZk() {
+		tr, err := trie.NewZkTrie(root, db.triedb)
 		if err != nil {
 			return nil, err
 		}
@@ -189,8 +189,8 @@ func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
 // OpenStorageTrie opens the storage trie of an account.
 func (db *cachingDB) OpenStorageTrie(stateRoot common.Hash, addrHash, root common.Hash) (Trie, error) {
 	// [Scroll: START]
-	if db.triedb.Zktrie {
-		tr, err := trie.NewZkTrie(root, trie.NewZktrieDatabaseFromTriedb(db.triedb))
+	if db.triedb.IsZk() {
+		tr, err := trie.NewZkTrie(root, db.triedb)
 		if err != nil {
 			return nil, err
 		}
@@ -273,7 +273,7 @@ func (db *cachingDB) TrieDB() *trie.Database {
 // NOTE(chokobole): This part is different from scroll
 // Returns whether it uses Zktrie.
 func (db *cachingDB) IsZktrie() bool {
-	return db.triedb.Zktrie
+	return db.triedb.IsZk()
 }
 
 // [Scroll: END]

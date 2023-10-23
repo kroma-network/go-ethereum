@@ -35,15 +35,17 @@ import (
 )
 
 func newEmptyZkTrie() *ZkTrie {
-	triedb := NewZktrieDatabaseFromTriedb(NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), &Config{Preimages: true}))
-	trie, _ := NewZkTrie(common.Hash{}, triedb)
+	trie, _ := NewZkTrie(common.Hash{}, NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), &Config{
+		Preimages: true,
+		Zktrie:    true,
+	}))
 	return trie
 }
 
 // makeTestSecureTrie creates a large enough secure trie for testing.
-func makeTestZkTrie() (*ZktrieDatabase, *ZkTrie, map[string][]byte) {
+func makeTestZkTrie() (*Database, *ZkTrie, map[string][]byte) {
 	// Create an empty trie
-	triedb := NewZktrieDatabase(rawdb.NewMemoryDatabase())
+	triedb := NewZkDatabase(rawdb.NewMemoryDatabase())
 	trie, _ := NewZkTrie(common.Hash{}, triedb)
 
 	// Fill it with some arbitrary data
@@ -172,7 +174,7 @@ const benchElemCountZk = 10000
 
 func BenchmarkZkTrieGet(b *testing.B) {
 	_, tmpdb, removeTempDB := tempDBZK(b)
-	zkTrie, _ := NewZkTrie(common.Hash{}, NewZktrieDatabaseFromTriedb(tmpdb))
+	zkTrie, _ := NewZkTrie(common.Hash{}, tmpdb)
 	defer func() {
 		zkTrie.db.Close()
 		removeTempDB()
@@ -186,7 +188,7 @@ func BenchmarkZkTrieGet(b *testing.B) {
 		assert.NoError(b, err)
 	}
 
-	zkTrie.db.db.Commit(common.Hash{}, true)
+	zkTrie.db.Commit(common.Hash{}, true)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		binary.LittleEndian.PutUint64(k, uint64(i))
@@ -198,7 +200,7 @@ func BenchmarkZkTrieGet(b *testing.B) {
 
 func BenchmarkZkTrieUpdate(b *testing.B) {
 	_, tmpdb, removeTempDB := tempDBZK(b)
-	zkTrie, _ := NewZkTrie(common.Hash{}, NewZktrieDatabaseFromTriedb(tmpdb))
+	zkTrie, _ := NewZkTrie(common.Hash{}, tmpdb)
 	defer func() {
 		zkTrie.db.Close()
 		removeTempDB()
@@ -216,7 +218,7 @@ func BenchmarkZkTrieUpdate(b *testing.B) {
 	binary.LittleEndian.PutUint64(k, benchElemCountZk/2)
 
 	// zkTrie.Commit(nil)
-	zkTrie.db.db.Commit(common.Hash{}, true)
+	zkTrie.db.Commit(common.Hash{}, true)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		binary.LittleEndian.PutUint64(k, uint64(i))

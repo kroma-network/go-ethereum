@@ -139,7 +139,7 @@ func decodeProofForMPTPath(proof proofList, path *SMTPath) {
 }
 
 type zktrieProofWriter struct {
-	db                  *trie.ZktrieDatabase
+	db                  *trie.Database
 	tracingZktrie       *trie.ZkTrie
 	tracingStorageTries map[common.Address]*trie.ZkTrie
 	tracingAccounts     map[common.Address]*types.StateAccount
@@ -151,7 +151,7 @@ func (wr *zktrieProofWriter) TracingAccounts() map[common.Address]*types.StateAc
 
 func NewZkTrieProofWriter(storage *types.StorageTrace) (*zktrieProofWriter, error) {
 	underlayerDb := rawdb.NewMemoryDatabase()
-	zkDb := trie.NewZktrieDatabase(underlayerDb)
+	zkDb := trie.NewZkDatabase(underlayerDb)
 
 	accounts := make(map[common.Address]*types.StateAccount)
 
@@ -206,7 +206,7 @@ func NewZkTrieProofWriter(storage *types.StorageTrace) (*zktrieProofWriter, erro
 
 	zktrie, err := trie.NewZkTrie(
 		storage.RootBefore,
-		trie.NewZktrieDatabase(underlayerDb),
+		trie.NewZkDatabase(underlayerDb),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("zktrie create failure: %s", err)
