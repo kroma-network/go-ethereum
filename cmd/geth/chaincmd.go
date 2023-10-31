@@ -26,8 +26,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/urfave/cli/v2"
-
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -42,6 +40,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -481,7 +480,7 @@ func dump(ctx *cli.Context) error {
 		if conf.OnlyWithAddresses {
 			fmt.Fprintf(os.Stderr, "If you want to include accounts with missing preimages, you need iterative output, since"+
 				" otherwise the accounts will overwrite each other in the resulting mapping.")
-			return fmt.Errorf("incompatible options")
+			return errors.New("incompatible options")
 		}
 		fmt.Println(string(state.Dump(conf)))
 	}

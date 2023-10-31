@@ -19,7 +19,7 @@ package vm
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"math/big"
 	"testing"
 
@@ -93,7 +93,7 @@ func TestStructLogMarshalingOmitEmpty(t *testing.T) {
 			// [Scroll: START]
 			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"opName":"STOP","error":""}`},
 		// [Scroll: END]
-		{"with err", &StructLog{Err: fmt.Errorf("this failed")},
+		{"with err", &StructLog{Err: errors.New("this failed")},
 			// [Scroll: START]
 			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"opName":"STOP","error":"this failed"}`},
 		// [Scroll: END]

@@ -45,7 +45,9 @@ var customGenesisTests = []struct {
 			"mixhash"    : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"parentHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"timestamp"  : "0x00",
-			"config"     : {}
+			"config"     : {
+				"terminalTotalDifficultyPassed": true
+			}
 		}`,
 		query:  "eth.getBlock(0).nonce",
 		result: "0x0000000000001338",
@@ -63,9 +65,10 @@ var customGenesisTests = []struct {
 			"parentHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"timestamp"  : "0x00",
 			"config"     : {
-				"homesteadBlock" : 42,
-				"daoForkBlock"   : 141,
-				"daoForkSupport" : true
+				"homesteadBlock"                : 42,
+				"daoForkBlock"                  : 141,
+				"daoForkSupport"                : true,
+				"terminalTotalDifficultyPassed" : true
 			}
 		}`,
 		query:  "eth.getBlock(0).nonce",
@@ -152,8 +155,10 @@ func TestCustomBackend(t *testing.T) {
 			"mixhash"    : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"parentHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"timestamp"  : "0x00",
-			"config"     : {}
-	}`
+			"config"     : {
+				"terminalTotalDifficultyPassed": true
+			}
+		}`
 	type backendTest struct {
 		initArgs   []string
 		initExpect string
@@ -187,8 +192,8 @@ func TestCustomBackend(t *testing.T) {
 		return nil
 	}
 	for i, tt := range []backendTest{
-		{ // When not specified, it should default to leveldb
-			execArgs:   []string{"--db.engine", "leveldb"},
+		{ // When not specified, it should default to pebble
+			execArgs:   []string{"--db.engine", "pebble"},
 			execExpect: "0x0000000000001338",
 		},
 		{ // Explicit leveldb
