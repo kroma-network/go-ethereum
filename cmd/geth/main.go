@@ -141,6 +141,8 @@ var (
 		utils.GpoPercentileFlag,
 		utils.GpoMaxGasPriceFlag,
 		utils.GpoIgnoreGasPriceFlag,
+		// kroma does not support
+		// RollupSequencerHTTPFlag, RollupHistoricalRPCFlag, RollupHistoricalRPCTimeoutFlag, RollupDisableTxPoolGossipFlag
 		utils.RollupComputePendingBlock,
 		configFileFlag,
 	}, utils.NetworkFlags, utils.DatabasePathFlags)
