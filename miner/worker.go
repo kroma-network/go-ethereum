@@ -80,9 +80,9 @@ var (
 // environment is the worker's current environment and holds all
 // information of the sealing block generation.
 type environment struct {
-	signer   types.Signer
-	state    *state.StateDB // apply state changes here
-	tcount   int            // tx count in cycle
+	signer    types.Signer
+	state     *state.StateDB // apply state changes here
+	tcount    int            // tx count in cycle
 	blockSize int
 	gasPool   *core.GasPool // available gas used to pack transactions
 	coinbase  common.Address
@@ -819,8 +819,8 @@ func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAn
 			continue
 		}
 		// [Scroll: START]
-		if !w.chainConfig.IsValidBlockSize(env.blockSize + int(tx.Size())) {
-			log.Trace("Block size limit reached", "have", w.current.blockSize, "want", w.chainConfig.MaxTxPayloadBytesPerBlock, "tx", tx.Size())
+		if !w.chainConfig.IsValidBlockSize(env.blockSize + int(tx.Tx.Size())) {
+			log.Trace("Block size limit reached", "have", w.current.blockSize, "want", w.chainConfig.MaxTxPayloadBytesPerBlock, "tx", tx.Tx.Size())
 			txs.Pop() // skip transactions from this account
 			continue
 		}
@@ -851,7 +851,7 @@ func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAn
 			// Everything ok, collect the logs and shift in the next transaction from the same account
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
-			env.blockSize += int(tx.Size())
+			env.blockSize += int(tx.Tx.Size())
 			txs.Shift()
 
 		default:
