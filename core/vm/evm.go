@@ -41,6 +41,8 @@ type (
 func (evm *EVM) precompile(addr common.Address) (PrecompiledContract, bool) {
 	var precompiles map[common.Address]PrecompiledContract
 	switch {
+	case evm.chainRules.IsCancun:
+		precompiles = PrecompiledContractsCancun
 	case evm.chainRules.IsBerlin:
 		precompiles = PrecompiledContractsBerlin
 	case evm.chainRules.IsIstanbul:
@@ -70,13 +72,14 @@ type BlockContext struct {
 	FeeDistributionFunc types.FeeDistributionFunc
 
 	// Block information
-	Coinbase    common.Address // Provides information for COINBASE
-	GasLimit    uint64         // Provides information for GASLIMIT
-	BlockNumber *big.Int       // Provides information for NUMBER
-	Time        uint64         // Provides information for TIME
-	Difficulty  *big.Int       // Provides information for DIFFICULTY
-	BaseFee     *big.Int       // Provides information for BASEFEE
-	Random      *common.Hash   // Provides information for PREVRANDAO
+	Coinbase      common.Address // Provides information for COINBASE
+	GasLimit      uint64         // Provides information for GASLIMIT
+	BlockNumber   *big.Int       // Provides information for NUMBER
+	Time          uint64         // Provides information for TIME
+	Difficulty    *big.Int       // Provides information for DIFFICULTY
+	BaseFee       *big.Int       // Provides information for BASEFEE
+	Random        *common.Hash   // Provides information for PREVRANDAO
+	ExcessBlobGas *uint64        // ExcessBlobGas field in the header, needed to compute the data
 }
 
 // TxContext provides the EVM with information about a transaction.
@@ -87,7 +90,8 @@ type TxContext struct {
 	// [Scroll: START]
 	To *common.Address // Provides information for trace
 	// [Scroll: END]
-	GasPrice *big.Int // Provides information for GASPRICE
+	GasPrice   *big.Int      // Provides information for GASPRICEBlobHashes []common.Hash  // Provides information for BLOBHASH
+	BlobHashes []common.Hash // Provides information for BLOBHASH
 }
 
 // EVM is the Ethereum Virtual Machine base object and provides

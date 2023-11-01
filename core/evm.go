@@ -67,7 +67,7 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 		BaseFee:             baseFee,
 		GasLimit:            header.GasLimit,
 		Random:              random,
-		L1CostFunc:          types.NewL1CostFunc(config, statedb),
+		ExcessBlobGas: header.ExcessBlobGas,L1CostFunc:          types.NewL1CostFunc(config, statedb),
 		FeeDistributionFunc: types.NewFeeDistributionFunc(config, statedb),
 	}
 }
@@ -79,7 +79,7 @@ func NewEVMTxContext(msg *Message) vm.TxContext {
 		// [Scroll: START]
 		To: msg.To,
 		// [Scroll: END]
-		GasPrice: new(big.Int).Set(msg.GasPrice),
+		GasPrice: new(big.Int).Set(msg.GasPrice),BlobHashes: msg.BlobHashes,
 	}
 }
 
