@@ -18,10 +18,12 @@ package trie
 
 import (
 	"errors"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
 	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
 	"github.com/ethereum/go-ethereum/trie/trienode"
@@ -33,7 +35,7 @@ type Config struct {
 	Cache     int            // Memory allowance (MB) to use for caching trie nodes in memory
 	Preimages bool           // Flag whether the preimage of trie key is recorded
 	PathDB    *pathdb.Config // Configs for experimental path-based scheme, not used yet.
-	Zktrie    bool   // use zktrie
+	Zktrie    bool           // use zktrie
 
 	// Testing hooks
 	OnCommit func(states *triestate.Set) // Hook invoked when commit is performed
@@ -112,7 +114,11 @@ func NewDatabaseWithConfig(diskdb ethdb.Database, config *Config) *Database {
 		cleans = config.Cache * 1024 * 1024
 	}
 	db := prepare(diskdb, config)
-	db.SetBackend(config != nil && config.Zktrie)
+	if config != nil && config.Zktrie {
+		db.backend = hashdb.NewZk(diskdb, cleans)
+	} else {
+		db.backend = hashdb.New(diskdb, cleans, mptResolver{})
+	}
 	return db
 }
 
@@ -284,6 +290,10 @@ func (db *Database) IsZk() bool {
 }
 
 func (db *Database) SetBackend(isZk bool) {
+	var cleans int
+	if db.config != nil && db.config.Cache != 0 {
+		cleans = db.config.Cache * 1024 * 1024
+	}
 	if db.config == nil {
 		if isZk {
 			db.config = &Config{Zktrie: isZk}
@@ -292,9 +302,9 @@ func (db *Database) SetBackend(isZk bool) {
 		db.config.Zktrie = isZk
 	}
 	if isZk {
-		db.backend = hashdb.NewZk(db.diskdb, db.cleans)
+		db.backend = hashdb.NewZk(db.diskdb, cleans)
 	} else {
-		db.backend = hashdb.New(db.diskdb, db.cleans, mptResolver{})
+		db.backend = hashdb.New(db.diskdb, cleans, mptResolver{})
 	}
 }
 

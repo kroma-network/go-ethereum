@@ -51,7 +51,7 @@ func makeSMTProvers(mt *ZkTrie) []func(key []byte) *memorydb.Database {
 			panic(err)
 		}
 		proof := memorydb.New()
-		err = mt.Prove(common.BytesToHash(k.Bytes()).Bytes(), 0, proof)
+		err = mt.Prove(common.BytesToHash(k.Bytes()).Bytes(), proof)
 		if err != nil {
 			panic(err)
 		}

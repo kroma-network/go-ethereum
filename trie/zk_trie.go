@@ -96,6 +96,10 @@ func (t *ZkTrie) UpdateAccount(address common.Address, acc *types.StateAccount) 
 
 // [Scroll: END]
 
+func (t *ZkTrie) UpdateContractCode(_ common.Address, _ common.Hash, _ []byte) error {
+	return nil
+}
+
 // Update associates key with value in the trie. Subsequent calls to
 // Get will return value. If value has length zero, any existing value
 // is deleted from the trie and calls to Get will return nil.
@@ -154,16 +158,16 @@ func (t *ZkTrie) GetKey(kHashBytes []byte) []byte {
 //
 // Committing flushes nodes from memory. Subsequent Get calls will load nodes
 // from the database.
-func (t *ZkTrie) Commit(bool) (common.Hash, *trienode.NodeSet) {
+func (t *ZkTrie) Commit(bool) (common.Hash, *trienode.NodeSet, error) {
 	// in current implementation, every update of trie already writes into database
 	// so Commit does nothing
 	node, err := t.Tree().GetNode(t.Tree().Root())
 	if err != nil {
-		panic(err)
+		return types.GetEmptyRootHash(true), nil, err
 	}
 
 	rawdb.WriteLegacyTrieNode(t.db.diskdb, t.Hash(), node.Value())
-	return t.Hash(), nil
+	return t.Hash(), nil, nil
 }
 
 // Hash returns the root hash of ZkTrie. It does not write to the
@@ -181,7 +185,7 @@ func (t *ZkTrie) Copy() *ZkTrie {
 
 // NodeIterator returns an iterator that returns nodes of the underlying trie. Iteration
 // starts at the key after the given start key.
-func (t *ZkTrie) NodeIterator(start []byte) NodeIterator {
+func (t *ZkTrie) NodeIterator(start []byte) (NodeIterator, error) {
 	/// FIXME
 	panic("not implemented")
 }
@@ -210,8 +214,8 @@ func (t *ZkTrie) NodeIterator(start []byte) NodeIterator {
 // If the trie does not contain a value for key, the returned proof contains all
 // nodes of the longest existing prefix of the key (at least the root node), ending
 // with the node that proves the absence of the key.
-func (t *ZkTrie) Prove(key []byte, fromLevel uint, proofDb ethdb.KeyValueWriter) error {
-	err := t.ZkTrie.Prove(key, fromLevel, func(n *zktrie.Node) error {
+func (t *ZkTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {
+	err := t.ZkTrie.Prove(key, 0, func(n *zktrie.Node) error {
 		nodeHash, err := n.NodeHash()
 		if err != nil {
 			return err

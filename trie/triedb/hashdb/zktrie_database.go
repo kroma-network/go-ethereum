@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie/trienode"
+	"github.com/ethereum/go-ethereum/trie/triestate"
 )
 
 type ZktrieDatabase struct {
@@ -28,7 +29,11 @@ type ZktrieDatabase struct {
 	dirtiesSize common.StorageSize // Storage size of the dirty node cache (exc. metadata)
 }
 
-func NewZk(diskdb ethdb.Database, cleans *fastcache.Cache) *ZktrieDatabase {
+func NewZk(diskdb ethdb.Database, size int) *ZktrieDatabase {
+	var cleans *fastcache.Cache
+	if size > 0 {
+		cleans = fastcache.New(size)
+	}
 	return &ZktrieDatabase{
 		diskdb:  diskdb,
 		cleans:  cleans,
@@ -53,7 +58,7 @@ func (db *ZktrieDatabase) Size() common.StorageSize {
 	return db.dirtiesSize + metadataSize
 }
 
-func (db *ZktrieDatabase) Update(_ common.Hash, _ common.Hash, _ *trienode.MergedNodeSet) error {
+func (db *ZktrieDatabase) Update(_ common.Hash, _ common.Hash, _ uint64, _ *trienode.MergedNodeSet, _ *triestate.Set) error {
 	return nil
 }
 
@@ -65,7 +70,7 @@ func (db *ZktrieDatabase) Commit(_ common.Hash, report bool) error {
 		return err
 	}
 	memcacheCommitTimeTimer.Update(time.Since(start))
-	memcacheCommitSizeMeter.Mark(int64(beforeDirtySize - db.dirtiesSize))
+	memcacheCommitBytesMeter.Mark(int64(beforeDirtySize - db.dirtiesSize))
 	memcacheCommitNodesMeter.Mark(int64(beforeDirtyCount - len(db.dirties)))
 
 	logger := log.Debug
