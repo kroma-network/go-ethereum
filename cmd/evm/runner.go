@@ -41,6 +41,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
 	"github.com/urfave/cli/v2"
 )
 
@@ -141,18 +142,24 @@ func runCmd(ctx *cli.Context) error {
 		gen := readGenesis(ctx.String(GenesisFlag.Name))
 		genesisConfig = gen
 		db := rawdb.NewMemoryDatabase()
-		genesis := gen.MustCommit(db)
-		// [Scroll: START]
-		// NOTE(chokobole): This part is different from scroll
-		sdb := state.NewDatabaseWithConfig(db, &trie.Config{
+		triedb := trie.NewDatabase(db, &trie.Config{
 			Preimages: preimages,
+			HashDB:    hashdb.Defaults,
 			Zktrie:    genesisConfig.Config.Zktrie,
 		})
+		defer triedb.Close()
+		genesis := gen.MustCommit(db, triedb)
+		sdb := state.NewDatabaseWithNodeDB(db, triedb)
 		statedb, _ = state.New(genesis.Root(), sdb, nil)
-		// [Scroll: END]
 		chainConfig = gen.Config
 	} else {
-		sdb := state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), &trie.Config{Preimages: preimages})
+		db := rawdb.NewMemoryDatabase()
+		triedb := trie.NewDatabase(db, &trie.Config{
+			Preimages: preimages,
+			HashDB:    hashdb.Defaults,
+		})
+		defer triedb.Close()
+		sdb := state.NewDatabaseWithNodeDB(db, triedb)
 		statedb, _ = state.New(types.EmptyRootHash, sdb, nil)
 		genesisConfig = new(core.Genesis)
 	}
