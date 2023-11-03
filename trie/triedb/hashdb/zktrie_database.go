@@ -29,10 +29,13 @@ type ZktrieDatabase struct {
 	dirtiesSize common.StorageSize // Storage size of the dirty node cache (exc. metadata)
 }
 
-func NewZk(diskdb ethdb.Database, size int) *ZktrieDatabase {
+func NewZk(diskdb ethdb.Database, config *Config) *ZktrieDatabase {
+	if config == nil {
+		config = Defaults
+	}
 	var cleans *fastcache.Cache
-	if size > 0 {
-		cleans = fastcache.New(size)
+	if config.CleanCacheSize > 0 {
+		cleans = fastcache.New(config.CleanCacheSize)
 	}
 	return &ZktrieDatabase{
 		diskdb:  diskdb,
@@ -47,7 +50,7 @@ func (db *ZktrieDatabase) Initialized(genesisRoot common.Hash) bool {
 	return rawdb.HasLegacyTrieNode(db.diskdb, genesisRoot)
 }
 
-func (db *ZktrieDatabase) Size() common.StorageSize {
+func (db *ZktrieDatabase) Size() (common.StorageSize, common.StorageSize) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
@@ -55,7 +58,7 @@ func (db *ZktrieDatabase) Size() common.StorageSize {
 	// the total memory consumption, the maintenance metadata is also needed to be
 	// counted.
 	var metadataSize = common.StorageSize(len(db.dirties))
-	return db.dirtiesSize + metadataSize
+	return 0, db.dirtiesSize + metadataSize
 }
 
 func (db *ZktrieDatabase) Update(_ common.Hash, _ common.Hash, _ uint64, _ *trienode.MergedNodeSet, _ *triestate.Set) error {

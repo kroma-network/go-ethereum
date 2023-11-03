@@ -340,17 +340,11 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		return nil, nil
 	}
 	// Forcibly use hash-based state scheme for retaining all nodes in disk.
-	triedb := trie.NewDatabase(db, trie.HashDefaults)
+	triedb := trie.NewDatabase(db, trie.GetHashDefaults(config.Zktrie))
 	defer triedb.Close()
 
 	for i := 0; i < n; i++ {
 		statedb, err := state.New(parent.Root(), state.NewDatabaseWithNodeDB(db, triedb), nil)
-		// [Scroll: START]
-		// NOTE(chokobole): This part is different from scroll
-		statedb, err := state.New(parent.Root(), state.NewDatabaseWithConfig(db, &trie.Config{
-			Zktrie: config.Zktrie,
-		}), nil)
-		// [Scroll: END]
 		if err != nil {
 			panic(err)
 		}
@@ -367,12 +361,9 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 // then generate chain on top.
 func GenerateChainWithGenesis(genesis *Genesis, engine consensus.Engine, n int, gen func(int, *BlockGen)) (ethdb.Database, []*types.Block, []types.Receipts) {
 	db := rawdb.NewMemoryDatabase()
-	triedb := trie.NewDatabase(db, trie.HashDefaults)
+	triedb := trie.NewDatabase(db, trie.GetHashDefaults(genesis.Config.Zktrie))
 	defer triedb.Close()
 	_, err := genesis.Commit(db, triedb)
-	_, err := genesis.Commit(db, trie.NewDatabaseWithConfig(db, &trie.Config{
-		Zktrie: genesis.Config != nil && genesis.Config.Zktrie,
-	}))
 	if err != nil {
 		panic(err)
 	}

@@ -32,10 +32,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
 )
 
 func newEmptyZkTrie() *ZkTrie {
-	trie, _ := NewZkTrie(common.Hash{}, NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), &Config{
+	trie, _ := NewZkTrie(common.Hash{}, NewDatabase(rawdb.NewMemoryDatabase(), &Config{
 		Preimages: true,
 		Zktrie:    true,
 	}))
@@ -164,8 +165,8 @@ func tempDBZK(b *testing.B) (string, *Database, func()) {
 
 	diskdb, err := rawdb.NewLevelDBDatabase(dir, 256, 0, "", false)
 	assert.NoError(b, err)
-	config := &Config{Cache: 256, Preimages: true, Zktrie: true}
-	return dir, NewDatabaseWithConfig(diskdb, config), func() {
+	config := &Config{HashDB: &hashdb.Config{CleanCacheSize: 256}, Preimages: true, Zktrie: true}
+	return dir, NewDatabase(diskdb, config), func() {
 		os.RemoveAll(dir)
 	}
 }

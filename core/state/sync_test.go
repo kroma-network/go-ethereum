@@ -133,11 +133,11 @@ func TestEmptyStateSync(t *testing.T) {
 	dbA := trie.NewDatabase(rawdb.NewMemoryDatabase(), nil)
 	dbB := trie.NewDatabase(rawdb.NewMemoryDatabase(), &trie.Config{PathDB: pathdb.Defaults})
 
-	sync := NewStateSync(types.EmptyRootHash, rawdb.NewMemoryDatabase(), nil, dbA.Scheme())
+	sync := NewStateSync(dbA.EmptyRoot(), rawdb.NewMemoryDatabase(), nil, dbA.Scheme())
 	if paths, nodes, codes := sync.Missing(1); len(paths) != 0 || len(nodes) != 0 || len(codes) != 0 {
 		t.Errorf("content requested for empty state: %v, %v, %v", nodes, paths, codes)
 	}
-	sync = NewStateSync(db.EmptyRoot(), rawdb.NewMemoryDatabase(), nil, dbB.Scheme())
+	sync = NewStateSync(dbB.EmptyRoot(), rawdb.NewMemoryDatabase(), nil, dbB.Scheme())
 	if paths, nodes, codes := sync.Missing(1); len(paths) != 0 || len(nodes) != 0 || len(codes) != 0 {
 		t.Errorf("content requested for empty state: %v, %v, %v", nodes, paths, codes)
 	}

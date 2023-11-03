@@ -18,6 +18,7 @@
 package state
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"sort"
@@ -47,6 +48,23 @@ const (
 type revision struct {
 	id           int
 	journalIndex int
+}
+
+// core/state: simplify storage trie update and commit (#28030) / 0acc0a1f863d2aa885fe9b9e55a722448e73ee79
+// A lot of code was removed by commit #28030.
+// However, zktrie is still in use and should not be deleted.
+// To facilitate future upstreams, we've added a comment (#28030) to the deleted code.
+
+// (#28030)
+type proofList [][]byte
+
+func (n *proofList) Put(key []byte, value []byte) error {
+	*n = append(*n, value)
+	return nil
+}
+
+func (n *proofList) Delete(key []byte) error {
+	panic("not supported")
 }
 
 // StateDB structs within the ethereum protocol are used to store anything
@@ -363,6 +381,24 @@ func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 	return common.Hash{}
 }
 
+// GetProof (#28030) returns the Merkle proof for a given account.
+func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
+	// [Scroll: START]
+	if s.IsZktrie() {
+		addr_s, _ := zkt.ToSecureKeyBytes(addr.Bytes())
+		return s.GetProofByHash(common.BytesToHash(addr_s.Bytes()))
+	}
+	// [Scroll: END]
+	return s.GetProofByHash(crypto.Keccak256Hash(addr.Bytes()))
+}
+
+// GetProofByHash (#28030) returns the Merkle proof for a given account.
+func (s *StateDB) GetProofByHash(addrHash common.Hash) ([][]byte, error) {
+	var proof proofList
+	err := s.trie.Prove(addrHash[:], &proof)
+	return proof, err
+}
+
 // [Scroll: START]
 func (s *StateDB) GetLiveStateAccount(addr common.Address) *types.StateAccount {
 	obj, ok := s.stateObjects[addr]
@@ -403,7 +439,32 @@ func (s *StateDB) GetStorageTrieProof(a common.Address, key common.Hash) ([][]by
 	}
 	return proof, err
 }
+
 // [Scroll: END]
+
+// GetStorageProof (#28030) returns the Merkle proof for given storage slot.
+func (s *StateDB) GetStorageProof(a common.Address, key common.Hash) ([][]byte, error) {
+	trie, err := s.StorageTrie(a)
+	if err != nil {
+		return nil, err
+	}
+	if trie == nil {
+		return nil, errors.New("storage trie for requested address does not exist")
+	}
+	var proof proofList
+	// [Scroll: START]
+	if s.IsZktrie() {
+		key_s, _ := zkt.ToSecureKeyBytes(key.Bytes())
+		err = trie.Prove(key_s.Bytes(), &proof)
+	} else {
+		err = trie.Prove(crypto.Keccak256(key.Bytes()), &proof)
+	}
+	// [Scroll: END]
+	if err != nil {
+		return nil, err
+	}
+	return proof, nil
+}
 
 // GetCommittedState retrieves a value from the given account's committed storage trie.
 func (s *StateDB) GetCommittedState(addr common.Address, hash common.Hash) common.Hash {
@@ -417,6 +478,21 @@ func (s *StateDB) GetCommittedState(addr common.Address, hash common.Hash) commo
 // Database retrieves the low level database supporting the lower level trie ops.
 func (s *StateDB) Database() Database {
 	return s.db
+}
+
+// StorageTrie (#28030) returns the storage trie of an account. The return value is a copy
+// and is nil for non-existent accounts. An error will be returned if storage trie
+// is existent but can't be loaded correctly.
+func (s *StateDB) StorageTrie(addr common.Address) (Trie, error) {
+	stateObject := s.getStateObject(addr)
+	if stateObject == nil {
+		return nil, nil
+	}
+	cpy := stateObject.deepCopy(s)
+	if _, err := cpy.updateTrie(); err != nil {
+		return nil, err
+	}
+	return cpy.getTrie()
 }
 
 func (s *StateDB) HasSelfDestructed(addr common.Address) bool {

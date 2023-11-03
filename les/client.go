@@ -105,8 +105,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 	if config.CircuitParams != nil && config.CircuitParams.MaxCalldata != nil {
 		overrides.CircuitParams.MaxCalldata = config.CircuitParams.MaxCalldata
 	}
-	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, trie.NewDatabase(chainDb), config.Genesis, &overrides)
-	triedb := trie.NewDatabase(chainDb, trie.HashDefaults)
+	triedb := trie.NewDatabase(chainDb, trie.GetHashDefaults(config.Genesis != nil && config.Genesis.Config != nil && config.Genesis.Config.Zktrie))
 	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, triedb, config.Genesis, &overrides)
 	if _, isCompat := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !isCompat {
 		return nil, genesisErr

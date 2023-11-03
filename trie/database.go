@@ -45,6 +45,19 @@ var HashDefaults = &Config{
 	HashDB:    hashdb.Defaults,
 }
 
+var ZkHashDefaults = &Config{
+	Preimages: false,
+	HashDB:    hashdb.Defaults,
+	Zktrie:    true,
+}
+
+func GetHashDefaults(isZk bool) *Config {
+	if isZk {
+		return ZkHashDefaults
+	}
+	return HashDefaults
+}
+
 // backend defines the methods needed to access/update trie nodes in different
 // state scheme.
 type backend interface {
@@ -89,7 +102,7 @@ type Database struct {
 }
 
 func NewZkDatabase(diskdb ethdb.Database) *Database {
-	return NewDatabase(diskdb, &Config{Zktrie: true})
+	return NewDatabase(diskdb, ZkHashDefaults)
 }
 
 // NewDatabase initializes the trie database with default settings, note
@@ -113,13 +126,13 @@ func NewDatabase(diskdb ethdb.Database, config *Config) *Database {
 	}
 	if config.PathDB != nil {
 		if config.Zktrie {
-			db.backend = hashdb.NewZk(diskdb, config.PathDB)
+			log.Crit("pbss does not support in zktrie")
 		} else {
 			db.backend = pathdb.New(diskdb, config.PathDB)
 		}
 	} else {
 		if config.Zktrie {
-
+			db.backend = hashdb.NewZk(diskdb, config.HashDB)
 		} else {
 			db.backend = hashdb.New(diskdb, config.HashDB, mptResolver{})
 		}
@@ -350,21 +363,19 @@ func (db *Database) IsZk() bool {
 }
 
 func (db *Database) SetBackend(isZk bool) {
-	var cleans int
-	if db.config != nil && db.config.Cache != 0 {
-		cleans = db.config.Cache * 1024 * 1024
-	}
-	if db.config == nil {
+	db.config.Zktrie = isZk
+	if db.config.PathDB != nil {
 		if isZk {
-			db.config = &Config{Zktrie: isZk}
+			log.Crit("pbss does not support in zktrie")
+		} else {
+			db.backend = pathdb.New(db.diskdb, db.config.PathDB)
 		}
 	} else {
-		db.config.Zktrie = isZk
-	}
-	if isZk {
-		db.backend = hashdb.NewZk(db.diskdb, cleans)
-	} else {
-		db.backend = hashdb.New(db.diskdb, cleans, mptResolver{})
+		if isZk {
+			db.backend = hashdb.NewZk(db.diskdb, db.config.HashDB)
+		} else {
+			db.backend = hashdb.New(db.diskdb, db.config.HashDB, mptResolver{})
+		}
 	}
 }
 

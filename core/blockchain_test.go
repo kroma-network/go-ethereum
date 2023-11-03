@@ -3101,7 +3101,7 @@ func TestSelfDestructDisabled(t *testing.T) {
 			},
 		},
 	}
-	genesis := gspec.MustCommit(db)
+	genesis := gspec.MustCommit(db, trie.NewDatabase(db, trie.GetHashDefaults(gspec.Config.Zktrie)))
 
 	_, receipts := GenerateChain(params.TestChainConfig, genesis, engine, db, 1, func(i int, b *BlockGen) {
 		b.SetCoinbase(common.Address{1})
@@ -4818,7 +4818,7 @@ func TestPoseidonCodeHash(t *testing.T) {
 		addr1         = crypto.PubkeyToAddress(key1.PublicKey)
 		db            = rawdb.NewMemoryDatabase()
 		gspec         = &Genesis{Config: &config, Alloc: GenesisAlloc{addr1: {Balance: big.NewInt(10000000000000000)}}}
-		genesis       = gspec.MustCommit(db)
+		genesis       = gspec.MustCommit(db, trie.NewDatabase(db, trie.GetHashDefaults(config.Zktrie)))
 		signer        = types.LatestSigner(gspec.Config)
 		engine        = ethash.NewFaker()
 		blockchain, _ = NewBlockChain(db, nil, gspec, nil, engine, vm.Config{}, nil, nil)
@@ -4892,7 +4892,7 @@ func TestTransactionCountLimit(t *testing.T) {
 			address = crypto.PubkeyToAddress(key.PublicKey)
 			funds   = big.NewInt(1000000000000000)
 			gspec   = &Genesis{Config: config, Alloc: GenesisAlloc{address: {Balance: funds}}}
-			genesis = gspec.MustCommit(db)
+			genesis = gspec.MustCommit(db, trie.NewDatabase(db, trie.GetHashDefaults(config.Zktrie)))
 		)
 
 		addTx := func(b *BlockGen) {
@@ -4964,7 +4964,7 @@ func TestBlockPayloadSizeLimit(t *testing.T) {
 			address = crypto.PubkeyToAddress(key.PublicKey)
 			funds   = big.NewInt(1000000000000000)
 			gspec   = &Genesis{Config: config, Alloc: GenesisAlloc{address: {Balance: funds}}}
-			genesis = gspec.MustCommit(db)
+			genesis = gspec.MustCommit(db, trie.NewDatabase(db, trie.GetHashDefaults(config.Zktrie)))
 		)
 
 		addTx := func(b *BlockGen) {

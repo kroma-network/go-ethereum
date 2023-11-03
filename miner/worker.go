@@ -33,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -859,8 +858,8 @@ func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAn
 			continue
 		}
 		// [Scroll: START]
-		if !w.chainConfig.IsValidBlockSize(env.blockSize + int(tx.Tx.Size())) {
-			log.Trace("Block size limit reached", "have", w.current.blockSize, "want", w.chainConfig.MaxTxPayloadBytesPerBlock, "tx", tx.Tx.Size())
+		if !w.chainConfig.IsValidBlockSize(env.blockSize + int(tx.Size())) {
+			log.Trace("Block size limit reached", "have", w.current.blockSize, "want", w.chainConfig.MaxTxPayloadBytesPerBlock, "tx", tx.Size())
 			txs.Pop() // skip transactions from this account
 			continue
 		}
@@ -891,7 +890,7 @@ func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAn
 			// Everything ok, collect the logs and shift in the next transaction from the same account
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
-			env.blockSize += int(tx.Tx.Size())
+			env.blockSize += int(tx.Size())
 			txs.Shift()
 
 		default:
