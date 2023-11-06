@@ -67,6 +67,11 @@ func TestExecutionSpec(t *testing.T) {
 	bt.skipLoad(`^cancun/`)
 	bt.skipLoad(`-fork=Cancun`)
 
+	// NOTE: SELFDESTRUCT is disabled in Kroma. This is not meant to disable
+	// forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
+	bt.skipLoad(`selfdestruct_balance_bug`)
+	bt.skipLoad(`self_destructing_account.json`)
+
 	bt.walk(t, executionSpecDir, func(t *testing.T, name string, test *BlockTest) {
 		execBlockTest(t, bt, test)
 	})
