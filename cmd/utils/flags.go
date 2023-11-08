@@ -2346,9 +2346,10 @@ func ParseStateScheme(ctx *cli.Context, disk ethdb.Database) (string, error) {
 }
 
 // MakeTrieDatabase constructs a trie database based on the configured scheme.
-func MakeTrieDatabase(ctx *cli.Context, disk ethdb.Database, preimage bool, readOnly bool) *trie.Database {
+func MakeTrieDatabase(ctx *cli.Context, disk ethdb.Database, preimage bool, readOnly bool, isZk bool) *trie.Database {
 	config := &trie.Config{
 		Preimages: preimage,
+		Zktrie:    isZk,
 	}
 	scheme, err := ParseStateScheme(ctx, disk)
 	if err != nil {

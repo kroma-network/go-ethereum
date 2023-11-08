@@ -204,7 +204,7 @@ func initGenesis(ctx *cli.Context) error {
 		}
 		defer chaindb.Close()
 
-		triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), false)
+		triedb := utils.MakeTrieDatabase(ctx, chaindb, ctx.Bool(utils.CachePreimagesFlag.Name), false, genesis.Config.Zktrie)
 		defer triedb.Close()
 
 		_, hash, err := core.SetupGenesisBlock(chaindb, triedb, genesis)
@@ -466,14 +466,14 @@ func parseDumpConfig(ctx *cli.Context, stack *node.Node) (*state.DumpConfig, eth
 }
 
 func dump(ctx *cli.Context) error {
-	stack, _ := makeConfigNode(ctx)
+	stack, cfg := makeConfigNode(ctx)
 	defer stack.Close()
 
 	conf, db, root, err := parseDumpConfig(ctx, stack)
 	if err != nil {
 		return err
 	}
-	triedb := utils.MakeTrieDatabase(ctx, db, true, false) // always enable preimage lookup
+	triedb := utils.MakeTrieDatabase(ctx, db, true, false, cfg.Eth.Genesis.Config.Zktrie) // always enable preimage lookup
 	defer triedb.Close()
 
 	state, err := state.New(root, state.NewDatabaseWithNodeDB(db, triedb), nil)

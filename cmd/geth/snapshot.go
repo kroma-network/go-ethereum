@@ -201,7 +201,7 @@ func pruneState(ctx *cli.Context) error {
 }
 
 func verifyState(ctx *cli.Context) error {
-	stack, _ := makeConfigNode(ctx)
+	stack, cfg := makeConfigNode(ctx)
 	defer stack.Close()
 
 	chaindb := utils.MakeChainDatabase(ctx, stack, true)
@@ -212,7 +212,7 @@ func verifyState(ctx *cli.Context) error {
 		log.Error("Failed to load head block")
 		return errors.New("no head block")
 	}
-	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true)
+	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true, cfg.Eth.Genesis.Config.Zktrie)
 	defer triedb.Close()
 
 	snapConfig := snapshot.Config{
@@ -259,13 +259,13 @@ func checkDanglingStorage(ctx *cli.Context) error {
 // Basically it just iterates the trie, ensure all nodes and associated
 // contract codes are present.
 func traverseState(ctx *cli.Context) error {
-	stack, _ := makeConfigNode(ctx)
+	stack, cfg := makeConfigNode(ctx)
 	defer stack.Close()
 
 	chaindb := utils.MakeChainDatabase(ctx, stack, true)
 	defer chaindb.Close()
 
-	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true)
+	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true, cfg.Eth.Genesis.Config.Zktrie)
 	defer triedb.Close()
 
 	headBlock := rawdb.ReadHeadBlock(chaindb)
@@ -363,13 +363,13 @@ func traverseState(ctx *cli.Context) error {
 // contract codes are present. It's basically identical to traverseState
 // but it will check each trie node.
 func traverseRawState(ctx *cli.Context) error {
-	stack, _ := makeConfigNode(ctx)
+	stack, cfg := makeConfigNode(ctx)
 	defer stack.Close()
 
 	chaindb := utils.MakeChainDatabase(ctx, stack, true)
 	defer chaindb.Close()
 
-	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true)
+	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true, cfg.Eth.Genesis.Config.Zktrie)
 	defer triedb.Close()
 
 	headBlock := rawdb.ReadHeadBlock(chaindb)
@@ -522,14 +522,14 @@ func parseRoot(input string) (common.Hash, error) {
 }
 
 func dumpState(ctx *cli.Context) error {
-	stack, _ := makeConfigNode(ctx)
+	stack, cfg := makeConfigNode(ctx)
 	defer stack.Close()
 
 	conf, db, root, err := parseDumpConfig(ctx, stack)
 	if err != nil {
 		return err
 	}
-	triedb := utils.MakeTrieDatabase(ctx, db, false, true)
+	triedb := utils.MakeTrieDatabase(ctx, db, false, true, cfg.Eth.Genesis.Config.Zktrie)
 	defer triedb.Close()
 
 	snapConfig := snapshot.Config{

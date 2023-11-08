@@ -477,13 +477,13 @@ func dbDumpTrie(ctx *cli.Context) error {
 	if ctx.NArg() < 3 {
 		return fmt.Errorf("required arguments: %v", ctx.Command.ArgsUsage)
 	}
-	stack, _ := makeConfigNode(ctx)
+	stack, cfg := makeConfigNode(ctx)
 	defer stack.Close()
 
 	db := utils.MakeChainDatabase(ctx, stack, true)
 	defer db.Close()
 
-	triedb := utils.MakeTrieDatabase(ctx, db, false, true)
+	triedb := utils.MakeTrieDatabase(ctx, db, false, true, cfg.Eth.Genesis.Config.Zktrie)
 	defer triedb.Close()
 
 	var (
