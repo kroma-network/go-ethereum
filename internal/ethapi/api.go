@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	zktrie "github.com/kroma-network/zktrie/types"
 	"github.com/tyler-smith/go-bip39"
 
 	"github.com/ethereum/go-ethereum"
@@ -695,9 +696,9 @@ func (s *BlockChainAPI) GetProof(ctx context.Context, address common.Address, st
 	if state == nil || err != nil {
 		return nil, err
 	}
-	if storageRoot := state.GetStorageRoot(address); storageRoot != types.EmptyRootHash && storageRoot != (common.Hash{}) {
+	if storageRoot := state.GetStorageRoot(address); storageRoot != types.GetEmptyRootHash(s.b.ChainConfig().Zktrie) && storageRoot != (common.Hash{}) {
 		id := trie.StorageTrieID(header.Root, crypto.Keccak256Hash(address.Bytes()), storageRoot)
-		tr, err := trie.NewStateTrie(id, state.Database().TrieDB())
+		tr, err := s.newStateTrie(id, state.Database().TrieDB())
 		if err != nil {
 			return nil, err
 		}
@@ -727,7 +728,7 @@ func (s *BlockChainAPI) GetProof(ctx context.Context, address common.Address, st
 			continue
 		}
 		var proof proofList
-		if err := storageTrie.Prove(crypto.Keccak256(key.Bytes()), &proof); err != nil {
+		if err := storageTrie.Prove(s.hash(key.Bytes()), &proof); err != nil {
 			return nil, err
 		}
 		value := (*hexutil.Big)(state.GetState(address, key).Big())
@@ -735,12 +736,12 @@ func (s *BlockChainAPI) GetProof(ctx context.Context, address common.Address, st
 	}
 
 	// Create the accountProof.
-	tr, err := trie.NewStateTrie(trie.StateTrieID(header.Root), state.Database().TrieDB())
+	tr, err := s.newStateTrie(trie.StateTrieID(header.Root), state.Database().TrieDB())
 	if err != nil {
 		return nil, err
 	}
 	var accountProof proofList
-	if err := tr.Prove(crypto.Keccak256(address.Bytes()), &accountProof); err != nil {
+	if err := tr.Prove(s.hash(address.Bytes()), &accountProof); err != nil {
 		return nil, err
 	}
 	return &AccountResult{
@@ -752,6 +753,25 @@ func (s *BlockChainAPI) GetProof(ctx context.Context, address common.Address, st
 		StorageHash:  storageHash,
 		StorageProof: storageProof,
 	}, state.Error()
+}
+
+func (s *BlockChainAPI) newStateTrie(id *trie.ID, db *trie.Database) (state.Trie, error) {
+	if s.b.ChainConfig().Zktrie {
+		return trie.NewZkTrie(id.Root, db)
+	}
+	return trie.NewStateTrie(id, db)
+}
+
+func (s *BlockChainAPI) hash(byte []byte) []byte {
+	if s.b.ChainConfig().Zktrie {
+		secureKey, err := zktrie.ToSecureKey(byte)
+		if err != nil {
+			log.Error("ToSecureKey failed.", "input bytes", byte)
+			return nil
+		}
+		return zktrie.NewHashFromBigInt(secureKey).Bytes()
+	}
+	return crypto.Keccak256(byte)
 }
 
 // decodeHash parses a hex-encoded 32-byte hash. The input may optionally
