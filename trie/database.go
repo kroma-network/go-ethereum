@@ -363,7 +363,15 @@ func (db *Database) IsZk() bool {
 }
 
 func (db *Database) SetBackend(isZk bool) {
-	db.config.Zktrie = isZk
+	if db.config.Zktrie == isZk {
+		return
+	}
+	db.config = &Config{
+		Preimages: db.config.Preimages,
+		HashDB:    db.config.HashDB,
+		PathDB:    db.config.PathDB,
+		Zktrie:    isZk,
+	}
 	if db.config.PathDB != nil {
 		if isZk {
 			log.Crit("pbss does not support in zktrie")

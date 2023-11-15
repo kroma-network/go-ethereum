@@ -590,6 +590,7 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *trie.Database) (*types.Block
 // MustCommit writes the genesis block and state to db, panicking on error.
 // The block is committed as the canonical head block.
 func (g *Genesis) MustCommit(db ethdb.Database, triedb *trie.Database) *types.Block {
+	triedb.SetBackend(g.Config.Zktrie)
 	block, err := g.Commit(db, triedb)
 	if err != nil {
 		panic(err)
