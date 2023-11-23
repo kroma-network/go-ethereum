@@ -102,6 +102,11 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
 
+	nonce := tx.Nonce()
+	if msg.IsDepositTx {
+		nonce = statedb.GetNonce(msg.From)
+	}
+
 	// Apply the transaction to the current state (included in the env).
 	result, err := ApplyMessage(evm, msg, gp)
 	if err != nil {
@@ -137,9 +142,7 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	receipt.TxHash = tx.Hash()
 	receipt.GasUsed = result.UsedGas
 
-	nonce := tx.Nonce()
 	if msg.IsDepositTx {
-		nonce = statedb.GetNonce(msg.From)
 		receipt.DepositNonce = &nonce
 	}
 
