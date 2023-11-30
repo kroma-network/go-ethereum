@@ -170,8 +170,6 @@ type Config struct {
 
 	OverrideKroma *bool
 
-	RollupHaltOnIncompatibleProtocolVersion string
-
 	// [Scroll: START]
 	// Trace option
 	MPTWitness int

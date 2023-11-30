@@ -149,10 +149,13 @@ var (
 		utils.GpoMaxGasPriceFlag,
 		utils.GpoIgnoreGasPriceFlag,
 		utils.GpoMinSuggestedPriorityFeeFlag,
-		// kroma does not support
-		// RollupSequencerHTTPFlag, RollupHistoricalRPCFlag, RollupHistoricalRPCTimeoutFlag, RollupDisableTxPoolGossipFlag
+		// [kroma unsupported]
+		// utils.RollupSequencerHTTPFlag
+		// utils.RollupHistoricalRPCFlag
+		// utils.RollupHistoricalRPCTimeoutFlag
+		// utils.RollupDisableTxPoolGossipFlag
+		// utils.RollupHaltOnIncompatibleProtocolVersionFlag,
 		utils.RollupComputePendingBlock,
-		utils.RollupHaltOnIncompatibleProtocolVersionFlag,
 		configFileFlag,
 	}, utils.NetworkFlags, utils.DatabasePathFlags)
 

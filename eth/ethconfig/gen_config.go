@@ -18,49 +18,48 @@ import (
 // MarshalTOML marshals as TOML.
 func (c Config) MarshalTOML() (interface{}, error) {
 	type Config struct {
-		Genesis                                 *core.Genesis `toml:",omitempty"`
-		NetworkId                               uint64
-		SyncMode                                downloader.SyncMode
-		EthDiscoveryURLs                        []string
-		SnapDiscoveryURLs                       []string
-		NoPruning                               bool
-		NoPrefetch                              bool
-		TxLookupLimit                           uint64                 `toml:",omitempty"`
-		TransactionHistory                      uint64                 `toml:",omitempty"`
-		StateHistory                            uint64                 `toml:",omitempty"`
-		StateScheme                             string                 `toml:",omitempty"`
-		RequiredBlocks                          map[uint64]common.Hash `toml:"-"`
-		LightServ                               int                    `toml:",omitempty"`
-		LightIngress                            int                    `toml:",omitempty"`
-		LightEgress                             int                    `toml:",omitempty"`
-		LightPeers                              int                    `toml:",omitempty"`
-		LightNoPrune                            bool                   `toml:",omitempty"`
-		LightNoSyncServe                        bool                   `toml:",omitempty"`
-		SkipBcVersionCheck                      bool                   `toml:"-"`
-		DatabaseHandles                         int                    `toml:"-"`
-		DatabaseCache                           int
-		DatabaseFreezer                         string
-		TrieCleanCache                          int
-		TrieDirtyCache                          int
-		TrieTimeout                             time.Duration
-		SnapshotCache                           int
-		Preimages                               bool
-		FilterLogCacheSize                      int
-		Miner                                   miner.Config
-		TxPool                                  legacypool.Config
-		BlobPool                                blobpool.Config
-		GPO                                     gasprice.Config
-		EnablePreimageRecording                 bool
-		DocRoot                                 string `toml:"-"`
-		RPCGasCap                               uint64
-		RPCEVMTimeout                           time.Duration
-		RPCTxFeeCap                             float64
-		OverrideCancun                          *uint64 `toml:",omitempty"`
-		OverrideVerkle                          *uint64 `toml:",omitempty"`
-		OverrideKroma                           *bool
-		RollupHaltOnIncompatibleProtocolVersion string
-		MPTWitness                              int
-		CircuitParams                           *params.CircuitParams
+		Genesis                 *core.Genesis `toml:",omitempty"`
+		NetworkId               uint64
+		SyncMode                downloader.SyncMode
+		EthDiscoveryURLs        []string
+		SnapDiscoveryURLs       []string
+		NoPruning               bool
+		NoPrefetch              bool
+		TxLookupLimit           uint64                 `toml:",omitempty"`
+		TransactionHistory      uint64                 `toml:",omitempty"`
+		StateHistory            uint64                 `toml:",omitempty"`
+		StateScheme             string                 `toml:",omitempty"`
+		RequiredBlocks          map[uint64]common.Hash `toml:"-"`
+		LightServ               int                    `toml:",omitempty"`
+		LightIngress            int                    `toml:",omitempty"`
+		LightEgress             int                    `toml:",omitempty"`
+		LightPeers              int                    `toml:",omitempty"`
+		LightNoPrune            bool                   `toml:",omitempty"`
+		LightNoSyncServe        bool                   `toml:",omitempty"`
+		SkipBcVersionCheck      bool                   `toml:"-"`
+		DatabaseHandles         int                    `toml:"-"`
+		DatabaseCache           int
+		DatabaseFreezer         string
+		TrieCleanCache          int
+		TrieDirtyCache          int
+		TrieTimeout             time.Duration
+		SnapshotCache           int
+		Preimages               bool
+		FilterLogCacheSize      int
+		Miner                   miner.Config
+		TxPool                  legacypool.Config
+		BlobPool                blobpool.Config
+		GPO                     gasprice.Config
+		EnablePreimageRecording bool
+		DocRoot                 string `toml:"-"`
+		RPCGasCap               uint64
+		RPCEVMTimeout           time.Duration
+		RPCTxFeeCap             float64
+		OverrideCancun          *uint64 `toml:",omitempty"`
+		OverrideVerkle          *uint64 `toml:",omitempty"`
+		OverrideKroma           *bool
+		MPTWitness              int
+		CircuitParams           *params.CircuitParams
 	}
 	var enc Config
 	enc.Genesis = c.Genesis
@@ -103,7 +102,6 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.OverrideCancun = c.OverrideCancun
 	enc.OverrideVerkle = c.OverrideVerkle
 	enc.OverrideKroma = c.OverrideKroma
-	enc.RollupHaltOnIncompatibleProtocolVersion = c.RollupHaltOnIncompatibleProtocolVersion
 	enc.MPTWitness = c.MPTWitness
 	enc.CircuitParams = c.CircuitParams
 	return &enc, nil
@@ -112,49 +110,48 @@ func (c Config) MarshalTOML() (interface{}, error) {
 // UnmarshalTOML unmarshals from TOML.
 func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	type Config struct {
-		Genesis                                 *core.Genesis `toml:",omitempty"`
-		NetworkId                               *uint64
-		SyncMode                                *downloader.SyncMode
-		EthDiscoveryURLs                        []string
-		SnapDiscoveryURLs                       []string
-		NoPruning                               *bool
-		NoPrefetch                              *bool
-		TxLookupLimit                           *uint64                `toml:",omitempty"`
-		TransactionHistory                      *uint64                `toml:",omitempty"`
-		StateHistory                            *uint64                `toml:",omitempty"`
-		StateScheme                             *string                `toml:",omitempty"`
-		RequiredBlocks                          map[uint64]common.Hash `toml:"-"`
-		LightServ                               *int                   `toml:",omitempty"`
-		LightIngress                            *int                   `toml:",omitempty"`
-		LightEgress                             *int                   `toml:",omitempty"`
-		LightPeers                              *int                   `toml:",omitempty"`
-		LightNoPrune                            *bool                  `toml:",omitempty"`
-		LightNoSyncServe                        *bool                  `toml:",omitempty"`
-		SkipBcVersionCheck                      *bool                  `toml:"-"`
-		DatabaseHandles                         *int                   `toml:"-"`
-		DatabaseCache                           *int
-		DatabaseFreezer                         *string
-		TrieCleanCache                          *int
-		TrieDirtyCache                          *int
-		TrieTimeout                             *time.Duration
-		SnapshotCache                           *int
-		Preimages                               *bool
-		FilterLogCacheSize                      *int
-		Miner                                   *miner.Config
-		TxPool                                  *legacypool.Config
-		BlobPool                                *blobpool.Config
-		GPO                                     *gasprice.Config
-		EnablePreimageRecording                 *bool
-		DocRoot                                 *string `toml:"-"`
-		RPCGasCap                               *uint64
-		RPCEVMTimeout                           *time.Duration
-		RPCTxFeeCap                             *float64
-		OverrideCancun                          *uint64 `toml:",omitempty"`
-		OverrideVerkle                          *uint64 `toml:",omitempty"`
-		OverrideKroma                           *bool
-		RollupHaltOnIncompatibleProtocolVersion *string
-		MPTWitness                              *int
-		CircuitParams                           *params.CircuitParams
+		Genesis                 *core.Genesis `toml:",omitempty"`
+		NetworkId               *uint64
+		SyncMode                *downloader.SyncMode
+		EthDiscoveryURLs        []string
+		SnapDiscoveryURLs       []string
+		NoPruning               *bool
+		NoPrefetch              *bool
+		TxLookupLimit           *uint64                `toml:",omitempty"`
+		TransactionHistory      *uint64                `toml:",omitempty"`
+		StateHistory            *uint64                `toml:",omitempty"`
+		StateScheme             *string                `toml:",omitempty"`
+		RequiredBlocks          map[uint64]common.Hash `toml:"-"`
+		LightServ               *int                   `toml:",omitempty"`
+		LightIngress            *int                   `toml:",omitempty"`
+		LightEgress             *int                   `toml:",omitempty"`
+		LightPeers              *int                   `toml:",omitempty"`
+		LightNoPrune            *bool                  `toml:",omitempty"`
+		LightNoSyncServe        *bool                  `toml:",omitempty"`
+		SkipBcVersionCheck      *bool                  `toml:"-"`
+		DatabaseHandles         *int                   `toml:"-"`
+		DatabaseCache           *int
+		DatabaseFreezer         *string
+		TrieCleanCache          *int
+		TrieDirtyCache          *int
+		TrieTimeout             *time.Duration
+		SnapshotCache           *int
+		Preimages               *bool
+		FilterLogCacheSize      *int
+		Miner                   *miner.Config
+		TxPool                  *legacypool.Config
+		BlobPool                *blobpool.Config
+		GPO                     *gasprice.Config
+		EnablePreimageRecording *bool
+		DocRoot                 *string `toml:"-"`
+		RPCGasCap               *uint64
+		RPCEVMTimeout           *time.Duration
+		RPCTxFeeCap             *float64
+		OverrideCancun          *uint64 `toml:",omitempty"`
+		OverrideVerkle          *uint64 `toml:",omitempty"`
+		OverrideKroma           *bool
+		MPTWitness              *int
+		CircuitParams           *params.CircuitParams
 	}
 	var dec Config
 	if err := unmarshal(&dec); err != nil {
@@ -279,9 +276,6 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.OverrideKroma != nil {
 		c.OverrideKroma = dec.OverrideKroma
-	}
-	if dec.RollupHaltOnIncompatibleProtocolVersion != nil {
-		c.RollupHaltOnIncompatibleProtocolVersion = *dec.RollupHaltOnIncompatibleProtocolVersion
 	}
 	if dec.MPTWitness != nil {
 		c.MPTWitness = *dec.MPTWitness
