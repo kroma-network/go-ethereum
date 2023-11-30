@@ -31,12 +31,6 @@ var (
 	GoerliGenesisHash  = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
 )
 
-const (
-	OPMainnetChainID  = 10
-	OPGoerliChainID   = 420
-	BaseGoerliChainID = 84531
-)
-
 func newUint64(val uint64) *uint64 { return &val }
 
 var (
