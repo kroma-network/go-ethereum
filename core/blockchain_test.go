@@ -4458,6 +4458,8 @@ func testCreateThenDelete(t *testing.T, config *params.ChainConfig) {
 }
 
 func TestDeleteThenCreate(t *testing.T) {
+	// [kroma unsupported]
+	t.Skip("selfdestruct unsupported")
 	var (
 		engine      = ethash.NewFaker()
 		key, _      = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
