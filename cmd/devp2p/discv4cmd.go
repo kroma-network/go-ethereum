@@ -17,13 +17,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum/go-ethereum/cmd/devp2p/internal/v4test"
 	"github.com/ethereum/go-ethereum/common"
@@ -32,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -178,7 +178,7 @@ func discv4Resolve(ctx *cli.Context) error {
 
 func discv4ResolveJSON(ctx *cli.Context) error {
 	if ctx.NArg() < 1 {
-		return fmt.Errorf("need nodes file as argument")
+		return errors.New("need nodes file as argument")
 	}
 	nodesFile := ctx.Args().Get(0)
 	inputSet := make(nodeSet)
@@ -208,7 +208,7 @@ func discv4ResolveJSON(ctx *cli.Context) error {
 
 func discv4Crawl(ctx *cli.Context) error {
 	if ctx.NArg() < 1 {
-		return fmt.Errorf("need nodes file as argument")
+		return errors.New("need nodes file as argument")
 	}
 	nodesFile := ctx.Args().First()
 	var inputSet nodeSet
@@ -337,7 +337,7 @@ func listen(ctx *cli.Context, ln *enode.LocalNode) *net.UDPConn {
 }
 
 func parseBootnodes(ctx *cli.Context) ([]*enode.Node, error) {
-	s := params.RinkebyBootnodes
+	s := params.MainnetBootnodes
 	if ctx.IsSet(bootnodesFlag.Name) {
 		input := ctx.String(bootnodesFlag.Name)
 		if input == "" {

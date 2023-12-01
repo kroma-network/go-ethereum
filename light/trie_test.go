@@ -19,12 +19,12 @@ package light
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -50,7 +50,7 @@ func TestNodeIterator(t *testing.T) {
 		panic(err)
 	}
 
-	gspec.MustCommit(lightdb)
+	gspec.MustCommit(lightdb, trie.NewDatabase(lightdb, trie.HashDefaults))
 	ctx := context.Background()
 	odr := &testOdr{sdb: fulldb, ldb: lightdb, serverState: blockchain.StateCache(), indexerConfig: TestClientIndexerConfig}
 	head := blockchain.CurrentHeader()
@@ -65,8 +65,16 @@ func TestNodeIterator(t *testing.T) {
 }
 
 func diffTries(t1, t2 state.Trie) error {
-	i1 := trie.NewIterator(t1.NodeIterator(nil))
-	i2 := trie.NewIterator(t2.NodeIterator(nil))
+	trieIt1, err := t1.NodeIterator(nil)
+	if err != nil {
+		return err
+	}
+	trieIt2, err := t2.NodeIterator(nil)
+	if err != nil {
+		return err
+	}
+	i1 := trie.NewIterator(trieIt1)
+	i2 := trie.NewIterator(trieIt2)
 	for i1.Next() && i2.Next() {
 		if !bytes.Equal(i1.Key, i2.Key) {
 			spew.Dump(i2)
@@ -82,9 +90,9 @@ func diffTries(t1, t2 state.Trie) error {
 	case i2.Err != nil:
 		return fmt.Errorf("light trie iterator error: %v", i2.Err)
 	case i1.Next():
-		return fmt.Errorf("full trie iterator has more k/v pairs")
+		return errors.New("full trie iterator has more k/v pairs")
 	case i2.Next():
-		return fmt.Errorf("light trie iterator has more k/v pairs")
+		return errors.New("light trie iterator has more k/v pairs")
 	}
 	return nil
 }

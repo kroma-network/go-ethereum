@@ -151,6 +151,7 @@ WARNING: This is a low-level operation which may cause database corruption!`,
 		ArgsUsage: "<hex-encoded state root> <hex-encoded account hash> <hex-encoded storage trie root> <hex-encoded start (optional)> <int max elements (optional)>",
 		Flags: flags.Merge([]cli.Flag{
 			utils.SyncModeFlag,
+			utils.StateSchemeFlag,
 		}, utils.NetworkFlags, utils.DatabasePathFlags),
 		Description: "This command looks up the specified database key from the database.",
 	}
@@ -476,11 +477,14 @@ func dbDumpTrie(ctx *cli.Context) error {
 	if ctx.NArg() < 3 {
 		return fmt.Errorf("required arguments: %v", ctx.Command.ArgsUsage)
 	}
-	stack, _ := makeConfigNode(ctx)
+	stack, cfg := makeConfigNode(ctx)
 	defer stack.Close()
 
 	db := utils.MakeChainDatabase(ctx, stack, true)
 	defer db.Close()
+
+	triedb := utils.MakeTrieDatabase(ctx, db, false, true, cfg.Eth.Genesis.Config.Zktrie)
+	defer triedb.Close()
 
 	var (
 		state   []byte
@@ -515,12 +519,16 @@ func dbDumpTrie(ctx *cli.Context) error {
 		}
 	}
 	id := trie.StorageTrieID(common.BytesToHash(state), common.BytesToHash(account), common.BytesToHash(storage))
-	theTrie, err := trie.New(id, trie.NewDatabase(db))
+	theTrie, err := trie.New(id, triedb)
+	if err != nil {
+		return err
+	}
+	trieIt, err := theTrie.NodeIterator(start)
 	if err != nil {
 		return err
 	}
 	var count int64
-	it := trie.NewIterator(theTrie.NodeIterator(start))
+	it := trie.NewIterator(trieIt)
 	for it.Next() {
 		if max > 0 && count == max {
 			fmt.Printf("Exiting after %d values\n", count)

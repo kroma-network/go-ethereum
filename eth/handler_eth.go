@@ -19,7 +19,6 @@ package eth
 import (
 	"fmt"
 	"math/big"
-	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -34,6 +33,13 @@ import (
 type ethHandler handler
 
 func (h *ethHandler) Chain() *core.BlockChain { return h.chain }
+
+// NilPool satisfies the TxPool interface but does not return any tx in the
+// pool. It is used to disable transaction gossip.
+type NilPool struct{}
+
+// NilPool Get always returns nil
+func (n NilPool) Get(hash common.Hash) *types.Transaction { return nil }
 
 func (h *ethHandler) TxPool() eth.TxPool {
 	return h.txpool
@@ -55,7 +61,7 @@ func (h *ethHandler) PeerInfo(id enode.ID) interface{} {
 // AcceptTxs retrieves whether transaction processing is enabled on the node
 // or if inbound transactions should simply be dropped.
 func (h *ethHandler) AcceptTxs() bool {
-	return atomic.LoadUint32(&h.acceptTxs) == 1
+	return h.acceptTxs.Load()
 }
 
 // Handle is invoked from a peer's message handler when it receives a new remote
@@ -138,7 +144,7 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 	// Update the peer's total difficulty if better than the previous
 	if _, td := peer.Head(); trueTD.Cmp(td) > 0 {
 		peer.SetHead(trueHead, trueTD)
-		h.chainSync.handlePeerEvent(peer)
+		h.chainSync.handlePeerEvent()
 	}
 	return nil
 }
