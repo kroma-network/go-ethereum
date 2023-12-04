@@ -91,7 +91,8 @@ func (z *ZkMerkleStateTrie) Commit(_ bool) (common.Hash, *trienode.NodeSet, erro
 }
 
 func (z *ZkMerkleStateTrie) NodeIterator(startKey []byte) (NodeIterator, error) {
-	panic("not implemented")
+	nodeBlobFromTree, nodeBlobToIteratorNode := zkMerkleTreeNodeBlobFunctions(z.db.Get)
+	return newMerkleTreeIterator(z.Hash(), nodeBlobFromTree, nodeBlobToIteratorNode, startKey), nil
 }
 
 func (z *ZkMerkleStateTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {

@@ -21,8 +21,12 @@ import (
 	"container/heap"
 	"errors"
 
+	zktrie "github.com/kroma-network/zktrie/trie"
+	zkt "github.com/kroma-network/zktrie/types"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/trie/zk"
 )
 
 // NodeResolver is used for looking up trie nodes before reaching into the real
@@ -769,4 +773,321 @@ func (it *unionIterator) Error() error {
 		}
 	}
 	return nil
+}
+
+// merkleTreeIterator is a preorder iterator based on the merkle tree data structure.
+// Since it does not depend on any other data structure,
+// it is necessary to provide a function to convert to a merkleTreeIteratorNode for use in the merkleTreeIterator.
+type merkleTreeIterator struct {
+	// stack The 0 index is always the root merkleTreeIteratorNode.
+	stack []merkleTreeIteratorNode
+	// path is the visited path of the nodes in the stack.
+	// The 0 index in the stack is always the root merkleTreeIteratorNode,
+	// and since root nodes have no visited paths, there is always len(stack)-1 difference.
+	// only two value available. 0 : left, 1 : right
+	path []byte
+	err  error
+	// nodeBlob browse for the BLOB in a non-storage layer. This is not a required component.
+	nodeBlob NodeResolver
+	// findNodeBlobByHash finds a tree blob in the real persistent layer. This is a required component.
+	findNodeBlobByHash     func(hash common.Hash) ([]byte, error)
+	nodeBlobToIteratorNode func(hash common.Hash, blob []byte) (merkleTreeIteratorNode, error)
+}
+
+type (
+	merkleTreeIteratorNode interface {
+		Hash() common.Hash
+		Blob() []byte
+	}
+
+	// A merkleTreeIteratorParentNode represents a tree middle with children.
+	// A child is one of null, merkleTreeIteratorParentNode, or merkleTreeIteratorLeafNode.
+	// And there must be at least one merkleTreeIteratorLeafNode among the children.
+	merkleTreeIteratorParentNode struct {
+		hash     common.Hash
+		blob     []byte
+		children *[2]common.Hash
+	}
+
+	merkleTreeIteratorLeafNode struct {
+		hash common.Hash
+		blob []byte
+		key  []byte
+	}
+)
+
+const (
+	left  = byte(0)
+	right = byte(1)
+)
+
+func (n *merkleTreeIteratorParentNode) Hash() common.Hash { return n.hash }
+func (n *merkleTreeIteratorParentNode) Blob() []byte      { return n.blob }
+
+func (n *merkleTreeIteratorLeafNode) Hash() common.Hash { return n.hash }
+func (n *merkleTreeIteratorLeafNode) Blob() []byte      { return n.blob }
+
+// zkMerkleTreeNodeBlobFunctions generates the merkleTreeIterator.findNodeBlobByHash
+// and merkleTreeIterator.nodeBlobToIteratorNode functions of a merkleTreeIterator to traverse the [zk.MerkleTree].
+// To create a merkleTreeIterator, see newMerkleTreeIterator.
+func zkMerkleTreeNodeBlobFunctions(findBlobByHash func(key []byte) ([]byte, error)) (
+	func(hash common.Hash) ([]byte, error),
+	func(hash common.Hash, blob []byte) (merkleTreeIteratorNode, error),
+) {
+	return func(hash common.Hash) ([]byte, error) {
+			if bytes.Equal(hash.Bytes(), zkt.HashZero[:]) {
+				return nil, nil
+			}
+			return findBlobByHash(zkt.ReverseByteOrder(hash.Bytes()))
+		},
+		func(hash common.Hash, blob []byte) (merkleTreeIteratorNode, error) {
+			node, err := zk.NewTreeNodeFromBlob(blob)
+			if err != nil {
+				return nil, err
+			}
+			switch n := node.(type) {
+			case *zk.ParentNode:
+				return &merkleTreeIteratorParentNode{
+					hash: hash,
+					blob: blob,
+					children: &[2]common.Hash{
+						left:  common.BytesToHash(n.ChildL().Hash().Bytes()),
+						right: common.BytesToHash(n.ChildR().Hash().Bytes()),
+					},
+				}, nil
+			case *zk.LeafNode:
+				return &merkleTreeIteratorLeafNode{
+					hash: hash,
+					blob: n.Data(),
+					key:  n.KeyHash.Bytes(),
+				}, nil
+			}
+			return nil, nil
+		}
+}
+
+// zktrieNodeBlobFunctions generates the merkleTreeIterator.findNodeBlobByHash
+// and merkleTreeIterator.nodeBlobToIteratorNode functions of a merkleTreeIterator to traverse the [zktrie.ZkTrie].
+// To create a merkleTreeIterator, see newMerkleTreeIterator.
+func zktrieNodeBlobFunctions(t *zktrie.ZkTrie) (
+	func(hash common.Hash) ([]byte, error),
+	func(hash common.Hash, blob []byte) (merkleTreeIteratorNode, error),
+) {
+	return func(hash common.Hash) ([]byte, error) {
+			node, err := t.Tree().GetNode(zkt.NewHashFromBytes(hash.Bytes()))
+			if err != nil {
+				return nil, err
+			}
+			return node.CanonicalValue(), nil
+		},
+		func(hash common.Hash, blob []byte) (merkleTreeIteratorNode, error) {
+			node, err := zktrie.NewNodeFromBytes(blob)
+			if err != nil {
+				return nil, err
+			}
+			switch node.Type {
+			case zktrie.NodeTypeParent:
+				return &merkleTreeIteratorParentNode{
+					hash: hash,
+					blob: blob,
+					children: &[2]common.Hash{
+						left:  common.BytesToHash(node.ChildL.Bytes()),
+						right: common.BytesToHash(node.ChildR.Bytes()),
+					},
+				}, nil
+			case zktrie.NodeTypeLeaf:
+				return &merkleTreeIteratorLeafNode{
+					hash: hash,
+					blob: node.Data(),
+					key:  node.NodeKey.Bytes(),
+				}, nil
+			}
+			return nil, nil
+		}
+}
+
+// newMerkleTreeIterator creates an iterator for merkle tree starting at start position.
+// start parameter is nil, start from the beginning.
+// bytes in the start parameter can only be 0 or 1.
+func newMerkleTreeIterator(
+	root common.Hash,
+	findNodeBlobByHash func(hash common.Hash) ([]byte, error),
+	nodeBlobToIteratorNode func(hash common.Hash, blob []byte) (merkleTreeIteratorNode, error),
+	start []byte,
+) *merkleTreeIterator {
+	it := &merkleTreeIterator{findNodeBlobByHash: findNodeBlobByHash, nodeBlobToIteratorNode: nodeBlobToIteratorNode}
+	var rootNode merkleTreeIteratorNode
+	var blob []byte
+	blob, it.err = findNodeBlobByHash(root)
+	if it.err == nil {
+		rootNode, it.err = nodeBlobToIteratorNode(root, blob)
+	}
+	if it.err == nil && rootNode != nil {
+		it.stack = []merkleTreeIteratorNode{rootNode}
+		it.seek(start)
+	}
+	return it
+}
+
+func (it *merkleTreeIterator) seek(path []byte) {
+	if len(path) == 0 {
+		return
+	}
+
+	for _, p := range path {
+		if parent, ok := it.stack[len(it.stack)-1].(*merkleTreeIteratorParentNode); ok {
+			if child := it.resolveNode(parent.children[p]); child != nil {
+				it.stack = append(it.stack, child)
+				it.path = append(it.path, p)
+				continue
+			}
+			if it.err != nil {
+				return
+			}
+		} else {
+			break
+		}
+	}
+
+	if len(it.path) == 0 {
+		return // root node is not parent node
+	}
+
+	// When using the Next function, it always moves to the next node.
+	// Therefore, it sets the previous node of the node retrieved by seek to the last visited node.
+	lastIdx := len(it.path) - 1
+	if it.path[lastIdx] == right {
+		it.path[lastIdx] = left
+		it.stack[len(it.stack)-1] = it.resolveNode(it.parentOfLastNode().children[left])
+		for {
+			if parent, ok := it.stack[len(it.stack)-1].(*merkleTreeIteratorParentNode); ok {
+				for _, path := range []byte{right, left} {
+					if child := it.resolveNode(parent.children[path]); child != nil {
+						it.stack = append(it.stack, child)
+						it.path = append(it.path, path)
+						break
+					}
+					if it.err != nil {
+						return
+					}
+				}
+			} else {
+				break
+			}
+		}
+	} else {
+		it.path = it.path[:lastIdx]
+		it.stack = it.stack[:len(it.stack)-1]
+	}
+}
+
+func (it *merkleTreeIterator) Next(bool) bool {
+	if it.err != nil {
+		return false
+	}
+	if len(it.stack) == 0 {
+		return false
+	}
+	if it.stack == nil { // end of iterator traversal
+		return false
+	}
+	if it.path == nil { // first visit. Starting from the root
+		it.path = []byte{}
+		return true
+	}
+	switch last := it.stack[len(it.stack)-1].(type) {
+	case *merkleTreeIteratorParentNode:
+		// find the next node by preorder traversal. The children must have at least one not null.
+		for p, hash := range last.children {
+			if child := it.resolveNode(hash); child != nil {
+				it.path = append(it.path, byte(p))
+				it.stack = append(it.stack, child)
+				return true
+			}
+			if it.err != nil {
+				return false
+			}
+		}
+		it.err = errors.New("not all child nodes exist")
+		return false
+	case *merkleTreeIteratorLeafNode:
+		for len(it.path) != 0 { // Infinite loop if there are still paths left to visit
+			switch lastPathIndex := len(it.path) - 1; it.path[lastPathIndex] {
+			case left: // left visited. go right
+				if rightNode := it.resolveNode(it.parentOfLastNode().children[right]); rightNode != nil {
+					it.path[lastPathIndex] = right
+					it.stack[len(it.stack)-1] = rightNode
+					return true
+				}
+				if it.err != nil {
+					return false
+				}
+				fallthrough // right does not exist. go up (processing in the bottom case code)
+			case right: // right visited. go up
+				it.path = it.path[:len(it.path)-1]
+				it.stack = it.stack[:len(it.stack)-1]
+			}
+		}
+	}
+	return false
+}
+
+func (it *merkleTreeIterator) Error() error      { return it.err }
+func (it *merkleTreeIterator) Hash() common.Hash { return it.stack[len(it.stack)-1].Hash() }
+
+func (it *merkleTreeIterator) Parent() common.Hash {
+	switch len(it.stack) {
+	case 0:
+		return common.Hash{}
+	case 1:
+		return it.stack[0].Hash()
+	default:
+		return it.parentOfLastNode().Hash()
+	}
+}
+
+func (it *merkleTreeIterator) Path() []byte     { return it.path }
+func (it *merkleTreeIterator) NodeBlob() []byte { return it.stack[len(it.stack)-1].Blob() }
+
+func (it *merkleTreeIterator) Leaf() bool {
+	_, ok := it.stack[len(it.stack)-1].(*merkleTreeIteratorLeafNode)
+	return ok
+}
+
+func (it *merkleTreeIterator) LeafKey() []byte  { return it.lastNodeAsLeaf().key }
+func (it *merkleTreeIterator) LeafBlob() []byte { return it.lastNodeAsLeaf().blob }
+
+func (it *merkleTreeIterator) LeafProof() [][]byte {
+	proofs := make([][]byte, 0, len(it.stack))
+	for _, stack := range it.stack {
+		proofs = append(proofs, stack.Hash().Bytes())
+	}
+	return proofs
+}
+
+func (it *merkleTreeIterator) AddResolver(resolver NodeResolver) { it.nodeBlob = resolver }
+
+func (it *merkleTreeIterator) resolveNode(hash common.Hash) (node merkleTreeIteratorNode) {
+	var blob []byte
+	if it.nodeBlob != nil {
+		blob = it.nodeBlob(common.Hash{}, it.path, hash)
+		if len(blob) > 0 {
+			node, it.err = it.nodeBlobToIteratorNode(hash, blob)
+			return node
+		}
+	}
+	blob, it.err = it.findNodeBlobByHash(hash)
+	if len(blob) == 0 || it.err != nil {
+		return nil
+	}
+	node, it.err = it.nodeBlobToIteratorNode(hash, blob)
+	return node
+}
+
+func (it *merkleTreeIterator) parentOfLastNode() *merkleTreeIteratorParentNode {
+	return it.stack[len(it.stack)-2].(*merkleTreeIteratorParentNode)
+}
+
+func (it *merkleTreeIterator) lastNodeAsLeaf() *merkleTreeIteratorLeafNode {
+	return it.stack[len(it.stack)-1].(*merkleTreeIteratorLeafNode)
 }

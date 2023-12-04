@@ -22,11 +22,16 @@ import (
 	"math/rand"
 	"testing"
 
+	zkt "github.com/kroma-network/zktrie/types"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/trie/trienode"
+	"github.com/ethereum/go-ethereum/trie/zk"
+	"golang.org/x/exp/slices"
 )
 
 func TestEmptyIterator(t *testing.T) {
@@ -615,4 +620,94 @@ func isTrieNode(scheme string, key, val []byte) (bool, []byte, common.Hash) {
 		hash = crypto.Keccak256Hash(val)
 	}
 	return true, path, hash
+}
+
+func TestMerkleTreeIterator(t *testing.T) {
+	testIterator := func(t *testing.T, db *memorydb.Database, it NodeIterator) (count int, leafCount int) {
+		for ; it.Next(false); count++ {
+			db.Delete(zkt.ReverseByteOrder(it.Hash().Bytes()))
+			if it.Leaf() {
+				leafCount++
+				leafPath := zk.NewTreePathFromHash(common.BytesToHash(it.LeafKey()))
+				if !bytes.Equal(it.Path(), leafPath[:len(it.Path())]) {
+					t.Errorf("incorrect tree path. iterator path : %v, leaf path %v", it.Path(), leafPath)
+				}
+			}
+		}
+		return
+	}
+
+	makeMerkleTreeWithData := func(input []kvs) (*ZkMerkleStateTrie, *memorydb.Database) {
+		db := memorydb.New()
+		zdb := NewZkDatabase(rawdb.NewDatabase(db))
+		tree := NewZkMerkleStateTrie(zk.NewEmptyMerkleTree(), zdb)
+		for _, val := range input {
+			tree.Update(common.LeftPadBytes([]byte(val.k), 32), common.LeftPadBytes([]byte(val.v), 32))
+		}
+		rootHash, _, _ := tree.Commit(false)
+		zdb.Commit(rootHash, true)
+		return tree, db
+	}
+
+	t.Run("zk merkle tree", func(t *testing.T) {
+		tree, db := makeMerkleTreeWithData(testdata1)
+		expected := db.Len() - 1
+		it, _ := tree.NodeIterator(nil)
+		count, leafCount := testIterator(t, db, it)
+		if db.Len()-1 != 0 {
+			t.Errorf("db is not empty. remain size %d", db.Len())
+		}
+		if expected != count {
+			t.Errorf("iterated node count invalid. expected %d, but got %d", db.Len(), count)
+		}
+		if leafCount != len(testdata1) {
+			t.Errorf("iterated leaf count invalid. expected %d, but got %d", len(testdata1), leafCount)
+		}
+	})
+
+	t.Run("zk merkle tree with start", func(t *testing.T) {
+		tree, _ := makeMerkleTreeWithData(testdata1)
+		var inputs []*kvs
+		for _, data := range testdata1 {
+			hash := zk.MustNewSecureHash(common.LeftPadBytes([]byte(data.k), 32))
+			inputs = append(inputs, &kvs{k: string(zk.NewTreePathFromZkHash(*hash)), v: data.v})
+		}
+		slices.SortFunc(inputs, func(a, b *kvs) int { return bytes.Compare([]byte(a.k), []byte(b.k)) })
+		for idx := 0; idx < len(inputs); idx++ {
+			start := idx
+			t.Run(fmt.Sprintf("test with start index %d", start), func(t *testing.T) {
+				it, _ := tree.NodeIterator([]byte(inputs[start].k))
+				count := 0
+				for it.Next(true) {
+					if it.Leaf() {
+						count++
+					}
+				}
+				if start+count != len(inputs) {
+					t.Fatalf("incorrect leaf node count, start %d, find %d, total %d", start, count, len(inputs))
+				}
+			})
+		}
+	})
+
+	t.Run("zktrie", func(t *testing.T) {
+		db := memorydb.New()
+		zkdb := NewZkDatabase(rawdb.NewDatabase(db))
+		trie, _ := NewZkTrie(common.Hash{}, zkdb)
+		for _, val := range testdata1 {
+			trie.TryUpdate(common.LeftPadBytes([]byte(val.k), 32), []byte(val.v))
+		}
+		root, _, _ := trie.Commit(false)
+		zkdb.Commit(root, true)
+
+		nodeCount := db.Len()
+		it, _ := trie.NodeIterator(nil)
+		count, leafCount := testIterator(t, db, it)
+		if nodeCount-db.Len() != count {
+			t.Errorf("iterated node count invalid. expected %d, but got %d", nodeCount-db.Len(), count)
+		}
+		if leafCount != len(testdata1) {
+			t.Errorf("iterated leaf count invalid. expected %d, but got %d", len(testdata1), leafCount)
+		}
+	})
 }

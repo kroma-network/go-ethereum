@@ -186,8 +186,8 @@ func (t *ZkTrie) Copy() *ZkTrie {
 // NodeIterator returns an iterator that returns nodes of the underlying trie. Iteration
 // starts at the key after the given start key.
 func (t *ZkTrie) NodeIterator(start []byte) (NodeIterator, error) {
-	/// FIXME
-	panic("not implemented")
+	nodeBlobFromTree, nodeBlobToIteratorNode := zktrieNodeBlobFunctions(t.ZkTrie)
+	return newMerkleTreeIterator(t.Hash(), nodeBlobFromTree, nodeBlobToIteratorNode, start), nil
 }
 
 // hashKey returns the hash of key as an ephemeral buffer.
