@@ -35,40 +35,63 @@ func (z *ZkMerkleStateTrie) GetKey(kHashBytes []byte) []byte {
 }
 
 func (z *ZkMerkleStateTrie) GetStorage(_ common.Address, key []byte) ([]byte, error) {
-	sanityCheckByte32Key(key)
-	return z.Get(key)
+	return z.get(key)
 }
 
 func (z *ZkMerkleStateTrie) GetAccount(address common.Address) (*types.StateAccount, error) {
-	blob, err := z.Get(address.Bytes())
-	if blob == nil || err != nil {
+	if blob, err := z.get(address[:]); blob == nil || err != nil {
 		return nil, err
+	} else {
+		return types.UnmarshalStateAccount(blob)
 	}
-	return types.UnmarshalStateAccount(blob)
+}
+
+func (z *ZkMerkleStateTrie) get(key []byte) ([]byte, error) {
+	if hash, err := z.hash(key); err != nil {
+		return nil, err
+	} else {
+		return z.MerkleTree.Get(hash[:])
+	}
 }
 
 func (z *ZkMerkleStateTrie) UpdateStorage(_ common.Address, key, value []byte) error {
-	sanityCheckByte32Key(key)
-	return z.MerkleTree.UpdateUnsafe(key, 1, []zkt.Byte32{*zkt.NewByte32FromBytes(value)})
+	return z.update(key, value)
 }
 
 func (z *ZkMerkleStateTrie) UpdateAccount(address common.Address, account *types.StateAccount) error {
-	sanityCheckByte32Key(address.Bytes())
-	value, flag := account.MarshalFields()
-	return z.MerkleTree.UpdateUnsafe(address.Bytes(), flag, value)
+	values, _ := account.MarshalFields()
+	var v []byte
+	for _, value := range values {
+		v = append(v, value.Bytes()...)
+	}
+	return z.update(address[:], v)
 }
 
 func (z *ZkMerkleStateTrie) UpdateContractCode(_ common.Address, _ common.Hash, _ []byte) error {
 	return nil
 }
 
-func (z *ZkMerkleStateTrie) DeleteStorage(_ common.Address, key []byte) error {
-	sanityCheckByte32Key(key)
-	return z.MerkleTree.Delete(key)
+// Update does not hash the key.
+func (z *ZkMerkleStateTrie) Update(key, value []byte) error {
+	return z.MerkleTree.Update(key, value)
 }
 
-func (z *ZkMerkleStateTrie) DeleteAccount(address common.Address) error {
-	return z.MerkleTree.Delete(address.Bytes())
+func (z *ZkMerkleStateTrie) update(key, value []byte) error {
+	if hash, err := z.hash(key); err != nil {
+		return err
+	} else {
+		return z.MerkleTree.Update(hash[:], value)
+	}
+}
+
+func (z *ZkMerkleStateTrie) DeleteStorage(_ common.Address, key []byte) error { return z.delete(key) }
+func (z *ZkMerkleStateTrie) DeleteAccount(address common.Address) error       { return z.delete(address[:]) }
+func (z *ZkMerkleStateTrie) delete(key []byte) error {
+	if hash, err := z.hash(key); err != nil {
+		return err
+	} else {
+		return z.MerkleTree.Delete(hash[:])
+	}
 }
 
 func (z *ZkMerkleStateTrie) Hash() common.Hash {
@@ -81,13 +104,15 @@ func (z *ZkMerkleStateTrie) Commit(_ bool) (common.Hash, *trienode.NodeSet, erro
 	if err != nil {
 		log.Error("Failed to commit zk merkle trie", "err", err)
 	}
-	rawdb.WriteLegacyTrieNode(z.db.diskdb, common.BytesToHash(z.RootNode().Hash().Bytes()), z.RootNode().Value())
+	// There is a bug where root node is saved twice.
+	// It is because of the bottom rawdb.WriteLegacyTrieNode, and we will remove it after checking if it can be removed.
+	rawdb.WriteLegacyTrieNode(z.db.diskdb, common.BytesToHash(z.RootNode().Hash().Bytes()), z.RootNode().CanonicalValue())
 	// Since NodeSet relies directly on mpt, we can't create a NodeSet.
 	// Of course, we might be able to force-fit it by implementing the node interface.
 	// However, NodeSet has been improved in geth, it could be improved to return a NodeSet when a commit is applied.
 	// So let's not do that for the time being.
 	// related geth commit : https://github.com/ethereum/go-ethereum/commit/bbcb5ea37b31c48a59f9aa5fad3fd22233c8a2ae
-	return common.BytesToHash(z.MerkleTree.Hash()), nil, nil
+	return common.BytesToHash(z.RootNode().Hash().Bytes()), nil, nil
 }
 
 func (z *ZkMerkleStateTrie) NodeIterator(startKey []byte) (NodeIterator, error) {
@@ -97,14 +122,14 @@ func (z *ZkMerkleStateTrie) NodeIterator(startKey []byte) (NodeIterator, error) 
 
 func (z *ZkMerkleStateTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {
 	err := z.MerkleTree.Prove(key, func(node zk.TreeNode) error {
+		value := node.CanonicalValue()
 		if leaf, ok := node.(*zk.LeafNode); ok {
-			preImage := z.GetKey(leaf.KeyHash.Bytes())
-			if len(preImage) > 0 {
-				leaf.KeyPreimage = &zkt.Byte32{}
-				copy(leaf.KeyPreimage[:], preImage)
+			if preImage := z.GetKey(zkt.ReverseByteOrder(leaf.Key)); len(preImage) > 0 {
+				value[len(value)-1] = byte(len(preImage))
+				value = append(value, preImage[:]...)
 			}
 		}
-		return proofDb.Put(node.Hash()[:], node.Value())
+		return proofDb.Put(node.Hash()[:], value)
 	})
 	if err != nil {
 		return err
@@ -115,10 +140,11 @@ func (z *ZkMerkleStateTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) erro
 
 func (z *ZkMerkleStateTrie) GetNode(path []byte) ([]byte, int, error) { panic("implement me") }
 
-func (z *ZkMerkleStateTrie) Update(key, value []byte) error {
-	return z.MerkleTree.Update(key, value)
-}
-
 func (z *ZkMerkleStateTrie) Copy() *ZkMerkleStateTrie {
 	return &ZkMerkleStateTrie{z.MerkleTree.Copy(), z.db}
+}
+
+func (z *ZkMerkleStateTrie) hash(key []byte) (*zkt.Hash, error) {
+	sanityCheckByte32Key(key)
+	return zk.NewSecureHash(key)
 }

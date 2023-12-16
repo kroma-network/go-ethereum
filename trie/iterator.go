@@ -859,7 +859,7 @@ func zkMerkleTreeNodeBlobFunctions(findBlobByHash func(key []byte) ([]byte, erro
 				return &merkleTreeIteratorLeafNode{
 					hash: hash,
 					blob: n.Data(),
-					key:  n.KeyHash.Bytes(),
+					key:  zkt.ReverseByteOrder(n.Key),
 				}, nil
 			}
 			return nil, nil

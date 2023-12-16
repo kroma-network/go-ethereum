@@ -14,9 +14,6 @@ const NodeTypeHash trie.NodeType = 9
 type TreeNode interface {
 	Hash() *zkt.Hash
 
-	// Value returns the encoded bytes of a node, include all information of it
-	Value() []byte
-
 	// CanonicalValue returns the byte form of a node required to be persisted, and strip unnecessary fields
 	// from the encoding (current only KeyPreimage for Leaf node) to keep a minimum size for content being
 	// stored in backend storage
@@ -24,20 +21,26 @@ type TreeNode interface {
 }
 
 func NewTreeNodeFromBlob(b []byte) (TreeNode, error) {
+	node, _, err := NewTreeNodeWithKeyPreimageFromBlob(b)
+	return node, err
+}
+
+func NewTreeNodeWithKeyPreimageFromBlob(b []byte) (node TreeNode, keyPreimage *zkt.Byte32, err error) {
 	if len(b) == 0 {
-		return nil, trie.ErrNodeBytesBadSize
+		return nil, nil, trie.ErrNodeBytesBadSize
 	}
 	switch trie.NodeType(b[0]) {
 	case trie.NodeTypeParent:
-		return newParentNodeFromBlob(b[1:])
+		node, err = newParentNodeFromBlob(b[1:])
+		return node, nil, err
 	case trie.NodeTypeLeaf:
 		return newLeafNodeFromBlob(b[1:])
 	case trie.NodeTypeEmpty:
-		return EmptyNodeValue, nil
+		return EmptyNodeValue, nil, nil
 	case NodeTypeHash:
-		return NewHashNode(zkt.NewHashFromBytes(b[1:])), nil
+		return NewHashNode(zkt.NewHashFromBytes(b[1:])), nil, nil
 	default:
-		return nil, trie.ErrInvalidNodeFound
+		return nil, nil, trie.ErrInvalidNodeFound
 	}
 }
 
@@ -66,8 +69,6 @@ func newParentNodeFromBlob(blob []byte) (*ParentNode, error) {
 }
 
 func (n *ParentNode) Hash() *zkt.Hash { return n.hash }
-
-func (n *ParentNode) Value() []byte { return n.CanonicalValue() }
 
 func (n *ParentNode) CanonicalValue() []byte {
 	values := []byte{byte(trie.NodeTypeParent)}
@@ -103,10 +104,7 @@ func (n *ParentNode) ChildR() TreeNode      { return n.childR }
 func (n *ParentNode) Children() [2]TreeNode { return [2]TreeNode{n.childL, n.childR} }
 
 type LeafNode struct {
-	KeyHash *zkt.Hash
-
-	// KeyPreimage is the original key value that derives the NodeKey, kept here only for proof
-	KeyPreimage *zkt.Byte32
+	Key []byte
 
 	// valueHash is the cache of the hash of valuePreimage to avoid recalculating, only valid for leaf node
 	ValueHash *zkt.Hash
@@ -122,25 +120,29 @@ type LeafNode struct {
 	hash *zkt.Hash
 }
 
-func NewLeafNode(nodeKey *zkt.Hash, flags uint32, valuePreimage []zkt.Byte32) *LeafNode {
-	return &LeafNode{KeyHash: nodeKey, CompressedFlags: flags, ValuePreimage: valuePreimage}
+func NewLeafNode(key []byte, value []byte) (*LeafNode, error) {
+	if flag, values, err := MarshalBytes(value); err == nil {
+		return &LeafNode{Key: key, CompressedFlags: flag, ValuePreimage: values}, nil
+	} else {
+		return nil, err
+	}
 }
 
 // blob format is described in LeafNode.CanonicalValue
-func newLeafNodeFromBlob(blob []byte) (*LeafNode, error) {
+func newLeafNodeFromBlob(blob []byte) (*LeafNode, *zkt.Byte32, error) {
 	if len(blob) < zkt.HashByteLen+4 {
-		return nil, trie.ErrNodeBytesBadSize
+		return nil, nil, trie.ErrNodeBytesBadSize
 	}
 	hashBlob := blob[:zkt.HashByteLen]
 	mark := binary.LittleEndian.Uint32(blob[zkt.HashByteLen : zkt.HashByteLen+4])
 	blob = blob[zkt.HashByteLen+4:]
 	node := &LeafNode{
-		KeyHash:         zkt.NewHashFromBytes(hashBlob),
+		Key:             zkt.ReverseByteOrder(hashBlob),
 		CompressedFlags: mark >> 8,
 		ValuePreimage:   make([]zkt.Byte32, int(mark&255)),
 	}
 	if len(blob) < len(node.ValuePreimage)*32+1 {
-		return nil, trie.ErrNodeBytesBadSize
+		return nil, nil, trie.ErrNodeBytesBadSize
 	}
 	for i := 0; i < len(node.ValuePreimage); i++ {
 		copy(node.ValuePreimage[i][:], blob[i*32:(i+1)*32])
@@ -148,33 +150,26 @@ func newLeafNodeFromBlob(blob []byte) (*LeafNode, error) {
 	blob = blob[len(node.ValuePreimage)*32:]
 	if preImageSize := int(blob[0]); preImageSize != 0 {
 		if len(blob) < 1+preImageSize {
-			return nil, trie.ErrNodeBytesBadSize
+			return nil, nil, trie.ErrNodeBytesBadSize
 		}
-		node.KeyPreimage = new(zkt.Byte32)
-		copy(node.KeyPreimage[:], blob[1:1+preImageSize])
+		keyPreimage := new(zkt.Byte32)
+		copy(keyPreimage[:], blob[1:1+preImageSize])
+		return node, keyPreimage, nil
 	}
-	return node, nil
+	return node, nil, nil
 }
 
 func (n *LeafNode) Hash() *zkt.Hash { return n.hash }
-
-// Value returns the encoded bytes of a node, include all information of it
-func (n *LeafNode) Value() []byte {
-	value := n.CanonicalValue()
-	if n.KeyPreimage != nil {
-		value[len(value)-1] = byte(len(n.KeyPreimage))
-		value = append(value, n.KeyPreimage[:]...)
-	}
-	return value
-}
 
 // CanonicalValue [type, Key[0], ..., Key[31], mark[0], ..., mark[3], Data[0], ..., Data[32*len(ValuePreimage)], key preimage len]
 // Leaf node does not provide key preimage, so set the length to 0.
 // If you can provide the key preimage, change the last 0 and add the key preimage afterwards. See ZkMerkleStateTrie.Prove
 func (n *LeafNode) CanonicalValue() []byte {
+	key := make([]byte, 32)
+	copy(key[:], zkt.ReverseByteOrder(n.Key))
 	var buf bytes.Buffer
 	buf.WriteByte(byte(trie.NodeTypeLeaf))
-	buf.Write(n.KeyHash.Bytes())
+	buf.Write(key)
 	binary.Write(&buf, binary.LittleEndian, (n.CompressedFlags<<8)+uint32(len(n.ValuePreimage)))
 	buf.Write(n.Data())
 	buf.WriteByte(0) // key preimage len
@@ -201,7 +196,6 @@ func (n *HashNode) Hash() *zkt.Hash {
 	return &hash
 }
 
-func (n *HashNode) Value() []byte { return n.CanonicalValue() }
 func (n *HashNode) CanonicalValue() []byte {
 	return append([]byte{byte(NodeTypeHash)}, n.Hash().Bytes()...)
 }
@@ -209,7 +203,6 @@ func (n *HashNode) CanonicalValue() []byte {
 type EmptyNode struct{}
 
 func (EmptyNode) Hash() *zkt.Hash        { return &zkt.HashZero }
-func (EmptyNode) Value() []byte          { return []byte{byte(trie.NodeTypeEmpty)} }
 func (EmptyNode) CanonicalValue() []byte { return []byte{byte(trie.NodeTypeEmpty)} }
 
 var EmptyNodeValue = &EmptyNode{}

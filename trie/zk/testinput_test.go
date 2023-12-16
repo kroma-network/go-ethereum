@@ -31,7 +31,7 @@ func (t *testInput) applyZkTrie(trie *zktrie.ZkTrie) *testInput {
 func (t *testInput) applyZkTrees(trees ...*MerkleTree) *testInput {
 	t.forEach(func(k, v []byte) {
 		for _, tree := range trees {
-			tree.UpdateUnsafe(k, 1, []Byte32{*NewByte32FromBytes(v)})
+			tree.Update(MustNewSecureHash(k)[:], v)
 		}
 	})
 	return t

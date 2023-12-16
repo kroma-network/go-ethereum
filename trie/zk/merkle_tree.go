@@ -77,17 +77,7 @@ func (t *MerkleTree) ComputeAllNodeHash(handleDirtyNode func(dirtyNode TreeNode)
 // Get returns the value for key stored in the tree.
 // The value bytes must not be modified by the caller.
 func (t *MerkleTree) Get(key []byte) ([]byte, error) {
-	k, err := zkt.ToSecureKey(key)
-	if err != nil {
-		return nil, err
-	}
-	return t.GetByNodeKey(zkt.NewHashFromBigInt(k))
-}
-
-// GetByNodeKey returns the value for key stored in the tree.
-// The value bytes must not be modified by the caller.
-func (t *MerkleTree) GetByNodeKey(nodeKey *zkt.Hash) ([]byte, error) {
-	node, err := t.GetLeafNode(nodeKey)
+	node, err := t.GetLeafNode(key)
 	if err != nil {
 		if errors.Is(err, trie.ErrKeyNotFound) {
 			return nil, nil // according to https://github.com/ethereum/go-ethereum/blob/37f9d25ba027356457953eab5f181c98b46e9988/trie/trie.go#L135
@@ -98,14 +88,14 @@ func (t *MerkleTree) GetByNodeKey(nodeKey *zkt.Hash) ([]byte, error) {
 }
 
 // GetLeafNode is more underlying method than Get, which obtain a leaf node or nil if not exist.
-func (t *MerkleTree) GetLeafNode(nodeKey *zkt.Hash) (*LeafNode, error) {
-	node, path := t.rootNode, t.newTreePath(nodeKey)
-	for lvl := 0; lvl < t.maxLevels; lvl++ {
+func (t *MerkleTree) GetLeafNode(key []byte) (*LeafNode, error) {
+	node, path := t.rootNode, t.newTreePath(key)
+	for lvl, p := range path {
 		switch n := node.(type) {
 		case *ParentNode:
-			node = t.getChild(n, path.Get(lvl))
+			node = t.getChild(n, p)
 		case *LeafNode:
-			if !bytes.Equal(nodeKey[:], n.KeyHash[:]) {
+			if !bytes.Equal(key[:], n.Key[:]) {
 				return nil, trie.ErrKeyNotFound
 			}
 			return n, nil
@@ -137,58 +127,22 @@ func (t *MerkleTree) GetNodeByPath(path TreePath) TreeNode {
 //
 // The value bytes must not be modified by the caller while they are stored in the tree.
 func (t *MerkleTree) Update(key []byte, value []byte) error {
-	// https://github.com/kroma-network/zktrie/blob/b0f3ee937287a115ea44f0c188df27e4cd29dfa0/lib.go#L224
-	var vFlag uint32
-	var vPreimage []zkt.Byte32
-	switch len(value) {
-	case 32:
-		vFlag, vPreimage = 1, []zkt.Byte32{*zkt.NewByte32FromBytes(value)}
-	case 128:
-		vFlag, vPreimage = 4, []zkt.Byte32{
-			*zkt.NewByte32FromBytes(value[0:32]),
-			*zkt.NewByte32FromBytes(value[32:64]),
-			*zkt.NewByte32FromBytes(value[64:96]),
-			*zkt.NewByte32FromBytes(value[96:128]),
-		}
-	case 160:
-		vFlag, vPreimage = 8, []zkt.Byte32{
-			*zkt.NewByte32FromBytes(value[0:32]),
-			*zkt.NewByte32FromBytes(value[32:64]),
-			*zkt.NewByte32FromBytes(value[64:96]),
-			*zkt.NewByte32FromBytes(value[96:128]),
-			*zkt.NewByte32FromBytes(value[128:160]),
-		}
-	default:
-		return errors.New("unexpected buffer type")
-	}
-	return t.UpdateUnsafe(key, vFlag, vPreimage)
-}
-
-// UpdateUnsafe associates key with value in the tree. Subsequent calls to Get will return value.
-//
-// The value bytes must not be modified by the caller while they are stored in the tree.
-func (t *MerkleTree) UpdateUnsafe(key []byte, vFlag uint32, vPreimage []zkt.Byte32) error {
-	k, err := zkt.ToSecureKey(key)
-	if err != nil {
+	if leaf, err := NewLeafNode(key, value); err != nil {
 		return err
+	} else {
+		return t.AddLeaf(leaf)
 	}
-	return t.UpdateByNodeKey(zkt.NewHashFromBigInt(k), vFlag, vPreimage)
 }
 
-// UpdateByNodeKey updates a nodeKey & value into the MerkleTree.
+// AddLeaf updates a nodeKey & value into the MerkleTree.
 // Here the `nodeKey` determines the path from the Root to the Leaf.
-func (t *MerkleTree) UpdateByNodeKey(nodeKey *zkt.Hash, vFlag uint32, vPreimage []zkt.Byte32) error {
-	// verify that nodeKey is valid and fit inside the Finite Field.
-	if !zkt.CheckBigIntInField(nodeKey.BigInt()) {
-		return trie.ErrInvalidField
-	}
-
-	newLeafNode, path := NewLeafNode(nodeKey, vFlag, vPreimage), t.newTreePath(nodeKey)
-	newRoot, err := t.addLeaf(newLeafNode, t.rootNode, 0, path, true)
+func (t *MerkleTree) AddLeaf(leaf *LeafNode) error {
+	newRoot, err := t.addLeaf(leaf, t.rootNode, 0, t.newTreePath(leaf.Key), true)
 	// sanity check
-	if errors.Is(err, trie.ErrEntryIndexAlreadyExists) {
-		panic("Encounter unexpected errortype: ErrEntryIndexAlreadyExists")
-	} else if err != nil {
+	if err != nil {
+		if errors.Is(err, trie.ErrEntryIndexAlreadyExists) {
+			panic("Encounter unexpected errortype: ErrEntryIndexAlreadyExists")
+		}
 		return err
 	}
 	t.rootNode = newRoot
@@ -216,8 +170,8 @@ func (t *MerkleTree) addLeaf(
 		n.SetChild(path.Get(lvl), newNode) // Update the node to reflect the modified child
 		return n, nil
 	case *LeafNode:
-		if !bytes.Equal(newLeaf.KeyHash[:], n.KeyHash[:]) {
-			pathOldLeaf := t.newTreePath(n.KeyHash)
+		if !bytes.Equal(newLeaf.Key, n.Key) {
+			pathOldLeaf := t.newTreePath(n.Key)
 			// We need to push newLeaf down until its path diverges from n's path
 			return t.pushLeaf(newLeaf, n, path, pathOldLeaf, lvl)
 		}
@@ -247,10 +201,11 @@ func (t *MerkleTree) pushLeaf(
 	oldLeafPath TreePath,
 	oldLeafLvl int,
 ) (*ParentNode, error) {
+	maxLevel := min(len(newLeafPath), len(oldLeafPath), t.maxLevels)
 	forkLvl := oldLeafLvl
-	for ; newLeafPath[forkLvl] == oldLeafPath[forkLvl] && forkLvl < t.maxLevels-1; forkLvl++ {
+	for ; newLeafPath[forkLvl] == oldLeafPath[forkLvl] && forkLvl < maxLevel-1; forkLvl++ {
 	}
-	if forkLvl == t.maxLevels-1 && newLeafPath[forkLvl] == oldLeafPath[forkLvl] {
+	if forkLvl == maxLevel-1 && newLeafPath[forkLvl] == oldLeafPath[forkLvl] {
 		return nil, trie.ErrReachedMaxLevel
 	}
 	parentNode := newParentNode(newLeafPath.Get(forkLvl), newLeaf, oldLeafPath.Get(forkLvl), oldLeaf)
@@ -260,15 +215,7 @@ func (t *MerkleTree) pushLeaf(
 	return parentNode, nil
 }
 
-func (t *MerkleTree) Delete(key []byte) error {
-	k, err := zkt.ToSecureKey(key)
-	if err != nil {
-		return err
-	}
-	return t.DeleteByNodeKey(zkt.NewHashFromBigInt(k))
-}
-
-// DeleteByNodeKey removes the specified Key from the MerkleTree and updates the path
+// Delete removes the specified Key from the MerkleTree and updates the path
 // from the deleted key to the Root with the new values. This method removes
 // the key from the MerkleTree, but does not remove the old nodes from the
 // key-value database; this means that if the tree is accessed by an old Root
@@ -277,19 +224,15 @@ func (t *MerkleTree) Delete(key []byte) error {
 // Root, an option could be to dump all the leafs (using mt.DumpLeafs) and
 // import them in a new MerkleTree in a new database (using
 // mt.ImportDumpedLeafs), but this will lose all the Root history of the MerkleTree
-func (t *MerkleTree) DeleteByNodeKey(nodeKey *zkt.Hash) error {
-	if !zkt.CheckBigIntInField(nodeKey.BigInt()) { // verify that k is valid and fit inside the Finite Field.
-		return trie.ErrInvalidField
-	}
-	node, path, pathNodes := t.rootNode, t.newTreePath(nodeKey), *new([]*ParentNode)
-	for i := 0; i < t.maxLevels; i++ {
+func (t *MerkleTree) Delete(key []byte) error {
+	node, path, pathNodes := t.rootNode, t.newTreePath(key), *new([]*ParentNode)
+	for _, p := range path {
 		switch n := node.(type) {
 		case *ParentNode:
 			pathNodes = append(pathNodes, n)
-			node = t.getChild(n, path.Get(i))
-			continue
+			node = t.getChild(n, p)
 		case *LeafNode:
-			if bytes.Equal(nodeKey[:], n.KeyHash[:]) {
+			if bytes.Equal(key, n.Key) {
 				t.rmAndUpload(path, pathNodes)
 				return nil
 			}
@@ -368,25 +311,11 @@ func (t *MerkleTree) rmAndUpload(path TreePath, pathNodes []*ParentNode) {
 func (t *MerkleTree) Prove(key []byte, writeNode func(TreeNode) error) error {
 	// notice Prove in secure tree "pass through" the key instead of secure it
 	// this keep consistent behavior with geth's secure trie
-	k, err := zkt.NewHashFromCheckedBytes(key)
-	if err == nil {
-		err = t.ComputeAllNodeHash(nil)
+	if err := t.ComputeAllNodeHash(nil); err != nil {
+		return err
 	}
-	if err == nil {
-		err = t.ProveByPath(t.newTreePath(k), func(n TreeNode) error {
-			if leaf, ok := n.(*LeafNode); ok {
-				leaf.KeyPreimage = zkt.NewByte32FromBytesPaddingZero(key)
-			}
-			return writeNode(n)
-		})
-	}
-	return err
-}
-
-// ProveByPath constructs a merkle proof for SMT, it respects the protocol used by the ethereum-trie
-// but save the node data with a compact form.
-func (t *MerkleTree) ProveByPath(path TreePath, writeNode func(TreeNode) error) error {
-	for i, node := 0, t.rootNode; i < t.maxLevels; i++ {
+	node := t.rootNode
+	for _, p := range t.newTreePath(key) {
 		// TODO: notice here we may have broken some implicit on the proofDb:
 		// the key is not keccak(value) and it even can not be derived from the value by any means without an actual decoding
 		if err := writeNode(node); err != nil {
@@ -394,15 +323,16 @@ func (t *MerkleTree) ProveByPath(path TreePath, writeNode func(TreeNode) error) 
 		}
 		switch n := node.(type) {
 		case *ParentNode:
-			node = t.getChild(n, path.Get(i))
-			continue
+			node = t.getChild(n, p)
 		case *LeafNode:
+			return nil
 		case *EmptyNode:
+			return nil
 		case *HashNode:
+			return nil
 		default:
 			return trie.ErrInvalidNodeFound
 		}
-		return nil
 	}
 	return nil
 }
@@ -446,6 +376,6 @@ func (t *MerkleTree) findNodeByHash(hash *zkt.Hash) TreeNode {
 	return node
 }
 
-func (t *MerkleTree) newTreePath(nodeKey *zkt.Hash) TreePath {
-	return NewTreePathFromBytesAndMaxLevel(nodeKey[:], t.maxLevels)
+func (t *MerkleTree) newTreePath(key []byte) TreePath {
+	return NewTreePathFromBytesAndMaxLevel(key, t.maxLevels)
 }

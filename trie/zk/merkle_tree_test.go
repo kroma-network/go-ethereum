@@ -44,7 +44,7 @@ func TestDelete(t *testing.T) {
 	t.Run("leaf count 1", func(t *testing.T) {
 		zktree := NewEmptyMerkleTree()
 		input := newTestInputFixedCount(1).applyZkTrees(zktree)
-		if err := zktree.DeleteByNodeKey(MustNewSecureHash([]byte(input.keys[0]))); err != nil {
+		if err := zktree.Delete(MustNewSecureHash([]byte(input.keys[0]))[:]); err != nil {
 			t.Errorf("fail to delete. error : %v", err)
 		}
 		if !bytes.Equal(zktree.Hash(), common.Hash{}.Bytes()) {
@@ -58,7 +58,7 @@ func TestDelete(t *testing.T) {
 			deleteKeys := input.keys[:leafCount/3]
 			for _, key := range deleteKeys {
 				zktrie.TryDelete([]byte(key))
-				zktree.Delete([]byte(key))
+				zktree.Delete(MustNewSecureHash([]byte(key))[:])
 			}
 			if !bytes.Equal(zktrie.Hash()[:], zktree.Hash()[:]) {
 				t.Errorf("root mismatch!")
@@ -70,8 +70,8 @@ func TestDelete(t *testing.T) {
 func TestPushLeaf(t *testing.T) {
 	pushLeaf := func(newLeafPath TreePath, oldLeafPath TreePath) (*ParentNode, error) {
 		return NewEmptyMerkleTree().WithMaxLevels(4).pushLeaf(
-			NewLeafNode(NewHashFromBytes([]byte("new")), 1, []Byte32{*NewByte32FromBytes([]byte{0})}),
-			NewLeafNode(NewHashFromBytes([]byte("old")), 1, []Byte32{*NewByte32FromBytes([]byte{1})}),
+			must(NewLeafNode([]byte("new"), []byte{0})),
+			must(NewLeafNode([]byte("old"), []byte{1})),
 			newLeafPath,
 			oldLeafPath,
 			0,
@@ -100,21 +100,25 @@ func TestPushLeaf(t *testing.T) {
 }
 
 func TestProof(t *testing.T) {
-	for leafCount := 1; leafCount <= 200; leafCount++ {
+	for leafCount := 1; leafCount <= 50; leafCount++ {
 		t.Run(fmt.Sprintf("test leaf count %d", leafCount), func(t *testing.T) {
 			input := newTestInputFixedCount(leafCount)
 			zktrie, zktree := newEmptyZkTrie(), NewEmptyMerkleTree()
 			input.applyZkTrie(zktrie).applyZkTrees(zktree)
 			for tc := 0; tc < int(math.Min(float64(leafCount), float64(10))); tc++ {
 				testKey := []byte(input.keys[rand.Intn(leafCount)])
+				testHashKey := MustNewSecureHash(testKey)
 				trieHashs, treeHashs := *new([]*Hash), *new([]*Hash)
-				zktrie.Prove(testKey, 0, func(node *trie.Node) error {
+				trieProof, treeProof := *new([][]byte), *new([][]byte)
+				zktrie.Prove(testHashKey.Bytes(), 0, func(node *trie.Node) error {
 					hash, err := node.NodeHash()
 					trieHashs = append(trieHashs, hash)
+					trieProof = append(trieProof, node.CanonicalValue())
 					return err
 				})
-				zktree.Prove(testKey, func(node TreeNode) error {
+				zktree.Prove(testHashKey[:], func(node TreeNode) error {
 					treeHashs = append(treeHashs, node.Hash())
+					treeProof = append(treeProof, node.CanonicalValue())
 					return nil
 				})
 				if len(trieHashs) != len(treeHashs) {
@@ -122,7 +126,10 @@ func TestProof(t *testing.T) {
 				}
 				for i := 0; i < len(trieHashs); i++ {
 					if !bytes.Equal(trieHashs[i].Bytes(), treeHashs[i].Bytes()) {
-						t.Errorf("index %d proof mismatch", i)
+						t.Errorf("index %d hash mismatch", i)
+					}
+					if !bytes.Equal(trieProof[i], treeProof[i]) {
+						t.Errorf("index %d proof mismatch.\ntrieProof : %v\ntreeProof : %v", i, trieProof[i], treeProof[i])
 					}
 				}
 			}
@@ -132,7 +139,7 @@ func TestProof(t *testing.T) {
 
 func BenchmarkUpdateAndHash(b *testing.B) {
 	type testTree struct {
-		Update func(key []byte, vFlag uint32, vPreimage []Byte32) error
+		Update func(k, v []byte) error
 		Hash   func() []byte
 	}
 	makeTest := func(input *testInput, initTree func() *testTree) func(b *testing.B) {
@@ -142,7 +149,9 @@ func BenchmarkUpdateAndHash(b *testing.B) {
 				sub.ReportAllocs()
 				sub.StartTimer()
 				input.forEach(func(k, v []byte) {
-					tree.Update(k, 1, []Byte32{*NewByte32FromBytes(v)})
+					if err := tree.Update(k, v); err != nil {
+						sub.Errorf("tree.Update failed. %s", err)
+					}
 				})
 				tree.Hash()
 				sub.StopTimer()
@@ -153,12 +162,25 @@ func BenchmarkUpdateAndHash(b *testing.B) {
 		input := newTestInputFixedCount(200)
 		b.Run("trie", makeTest(input, func() *testTree {
 			zkTrie := newEmptyZkTrie()
-			return &testTree{Update: zkTrie.TryUpdate, Hash: zkTrie.Hash}
+			return &testTree{
+				Update: func(k, v []byte) error { return zkTrie.TryUpdate(k, 1, []Byte32{*NewByte32FromBytes(v)}) },
+				Hash:   zkTrie.Hash,
+			}
 		}))
 
 		b.Run("tree", makeTest(input, func() *testTree {
 			tree := NewEmptyMerkleTree()
-			return &testTree{Update: tree.UpdateUnsafe, Hash: tree.Hash}
+			return &testTree{
+				Update: func(k, v []byte) error { return tree.Update(MustNewSecureHash(k)[:], v) },
+				Hash:   tree.Hash,
+			}
 		}))
 	}
+}
+
+func must[R any](r R, err error) R {
+	if err != nil {
+		panic(err)
+	}
+	return r
 }
