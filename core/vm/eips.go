@@ -147,12 +147,8 @@ func enable2929(jt *JumpTable) {
 	jt[DELEGATECALL].constantGas = params.WarmStorageReadCostEIP2929
 	jt[DELEGATECALL].dynamicGas = gasDelegateCallEIP2929
 
-	// [Scroll: START]
-	// NOTE: SELFDESTRUCT is disabled in Kroma. This is not meant to disable
-	// forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
-	// jt[SELFDESTRUCT].constantGas = params.SelfdestructGasEIP150
-	// jt[SELFDESTRUCT].dynamicGas = gasSelfdestructEIP2929
-	// [Scroll: END]
+	jt[SELFDESTRUCT].constantGas = params.SelfdestructGasEIP150
+	jt[SELFDESTRUCT].dynamicGas = gasSelfdestructEIP2929
 }
 
 // enable3529 enabled "EIP-3529: Reduction in refunds":
@@ -161,12 +157,7 @@ func enable2929(jt *JumpTable) {
 // - Reduces max refunds to 20% gas
 func enable3529(jt *JumpTable) {
 	jt[SSTORE].dynamicGas = gasSStoreEIP3529
-
-	// [Scroll: START]
-	// NOTE: SELFDESTRUCT is disabled in Kroma. This is not meant to disable
-	// forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
-	// jt[SELFDESTRUCT].dynamicGas = gasSelfdestructEIP3529
-	// [Scroll: END]
+	jt[SELFDESTRUCT].dynamicGas = gasSelfdestructEIP3529
 }
 
 // enable3198 applies EIP-3198 (BASEFEE Opcode)
@@ -318,11 +309,11 @@ func enable7516(jt *JumpTable) {
 
 // enable6780 applies EIP-6780 (deactivate SELFDESTRUCT)
 func enable6780(jt *JumpTable) {
-	//jt[SELFDESTRUCT] = &operation{
-	//	execute:     opSelfdestruct6780,
-	//	dynamicGas:  gasSelfdestructEIP3529,
-	//	constantGas: params.SelfdestructGasEIP150,
-	//	minStack:    minStack(1, 0),
-	//	maxStack:    maxStack(1, 0),
-	//}
+	jt[SELFDESTRUCT] = &operation{
+		execute:     opSelfdestruct6780,
+		dynamicGas:  gasSelfdestructEIP3529,
+		constantGas: params.SelfdestructGasEIP150,
+		minStack:    minStack(1, 0),
+		maxStack:    maxStack(1, 0),
+	}
 }

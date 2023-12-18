@@ -3088,7 +3088,7 @@ func TestSelfDestructDisabled(t *testing.T) {
 	)
 
 	gspec := &Genesis{
-		Config: params.TestChainConfig,
+		Config: params.KromaTestConfig,
 		Alloc: GenesisAlloc{
 			address: {Balance: funds},
 			// The address 0xAAAAA selfdestructs if called
@@ -3103,7 +3103,7 @@ func TestSelfDestructDisabled(t *testing.T) {
 	}
 	genesis := gspec.MustCommit(db, trie.NewDatabase(db, trie.GetHashDefaults(gspec.Config.Zktrie)))
 
-	_, receipts := GenerateChain(params.TestChainConfig, genesis, engine, db, 1, func(i int, b *BlockGen) {
+	_, receipts := GenerateChain(params.KromaTestConfig, genesis, engine, db, 1, func(i int, b *BlockGen) {
 		b.SetCoinbase(common.Address{1})
 		// One transaction to AA, to kill it
 		tx, _ := types.SignTx(types.NewTransaction(0, aa,

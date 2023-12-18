@@ -81,6 +81,16 @@ func NewEVMInterpreter(evm *EVM) *EVMInterpreter {
 	default:
 		table = &frontierInstructionSet
 	}
+	// [Scroll: START]
+	// NOTE: SELFDESTRUCT is disabled in Kroma. This is not meant to disable
+	// forever this opcode. Once zkEVM spec can cover it, we need to re-enable it.
+	if evm.chainConfig.Zktrie {
+		table[SELFDESTRUCT] = &operation{
+			execute:  opUndefined,
+			maxStack: maxStack(0, 0),
+		}
+	}
+	// [Scroll: END]
 	var extraEips []int
 	if len(evm.Config.ExtraEips) > 0 {
 		// Deep-copy jumptable to prevent modification of opcodes in other tables

@@ -286,6 +286,7 @@ var (
 		conf.TerminalTotalDifficultyPassed = true
 		conf.BedrockBlock = big.NewInt(5)
 		conf.Kroma = &KromaConfig{EIP1559Elasticity: 50, EIP1559Denominator: 10}
+		conf.Zktrie = true
 		return &conf
 	}()
 )

@@ -1046,19 +1046,12 @@ func newFrontierInstructionSet() JumpTable {
 			maxStack:   maxStack(2, 0),
 			memorySize: memoryReturn,
 		},
-		// [Scroll: START]
-		/*
-			NOTE: SELFDESTRUCT is disabled in Kroma. This is not meant to disable
-			forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
-			SELFDESTRUCT: {
-				execute:    opSelfdestruct,
-				dynamicGas: gasSelfdestruct,
-				minStack:   minStack(1, 0),
-				maxStack:   maxStack(1, 0),
-			},
-		*/
-		SELFDESTRUCT: nil,
-		// [Scroll: END]
+		SELFDESTRUCT: {
+			execute:    opSelfdestruct,
+			dynamicGas: gasSelfdestruct,
+			minStack:   minStack(1, 0),
+			maxStack:   maxStack(1, 0),
+		},
 	}
 
 	// Fill all unassigned slots with opUndefined.
