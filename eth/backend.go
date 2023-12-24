@@ -139,7 +139,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
-	scheme, err := rawdb.ParseStateScheme(config.StateScheme, chainDb)
+	scheme, err := rawdb.ParseStateScheme(config.StateScheme, chainDb, config.Genesis != nil && config.Genesis.Config != nil && config.Genesis.Config.Zktrie)
 	if err != nil {
 		return nil, err
 	}

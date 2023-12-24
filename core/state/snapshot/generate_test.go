@@ -55,7 +55,7 @@ func TestGeneration(t *testing.T) {
 	testGeneration(t, rawdb.PathScheme)
 }
 
-func TestGenerationZk(t *testing.T) { testGeneration(t, rawdb.HashScheme) }
+func TestGenerationZk(t *testing.T) { testGeneration(t, rawdb.ZkHashScheme) }
 
 func testGeneration(t *testing.T, scheme string) {
 	// We can't use statedb to make a test trie (circular dependency), so make
@@ -101,7 +101,7 @@ func TestGenerateExistentState(t *testing.T) {
 	testGenerateExistentState(t, rawdb.PathScheme)
 }
 
-func TestGenerateExistentStateZk(t *testing.T) { testGenerateExistentState(t, rawdb.HashScheme) }
+func TestGenerateExistentStateZk(t *testing.T) { testGenerateExistentState(t, rawdb.ZkHashScheme) }
 
 func testGenerateExistentState(t *testing.T, scheme string) {
 	// We can't use statedb to make a test trie (circular dependency), so make
@@ -292,7 +292,7 @@ func TestGenerateExistentStateWithWrongStorage(t *testing.T) {
 }
 
 func TestGenerateExistentStateWithWrongStorageZk(t *testing.T) {
-	testGenerateExistentStateWithWrongStorage(t, rawdb.HashScheme)
+	testGenerateExistentStateWithWrongStorage(t, rawdb.ZkHashScheme)
 }
 
 func testGenerateExistentStateWithWrongStorage(t *testing.T, scheme string) {
@@ -394,7 +394,7 @@ func TestGenerateExistentStateWithWrongAccounts(t *testing.T) {
 }
 
 func TestGenerateExistentStateWithWrongAccountsZk(t *testing.T) {
-	testGenerateExistentStateWithWrongAccounts(t, rawdb.HashScheme)
+	testGenerateExistentStateWithWrongAccounts(t, rawdb.ZkHashScheme)
 }
 
 func testGenerateExistentStateWithWrongAccounts(t *testing.T, scheme string) {
@@ -459,7 +459,7 @@ func TestGenerateCorruptAccountTrie(t *testing.T) {
 }
 
 func TestGenerateCorruptAccountTrieZk(t *testing.T) {
-	testGenerateCorruptAccountTrie(t, rawdb.HashScheme)
+	testGenerateCorruptAccountTrie(t, rawdb.ZkHashScheme)
 }
 
 func testGenerateCorruptAccountTrie(t *testing.T, scheme string) {
@@ -478,7 +478,7 @@ func testGenerateCorruptAccountTrie(t *testing.T, scheme string) {
 	targetPath := []byte{0xc}
 	targetHash := common.HexToHash("0x65145f923027566669a1ae5ccac66f945b55ff6eaeb17d2ea8e048b7d381f2d7")
 	if testingx.IsZk(t) {
-		targetHash = common.HexToHash("0x886208f22d3107b728ee3c66045038e7d5f564a1ea55f87938976658442cbd0c")
+		targetHash = common.HexToHash("0x0cbd2c445866973879f855eaa164f5d5e7385004663cee28b707312df2086288")
 	}
 	rawdb.DeleteTrieNode(helper.diskdb, common.Hash{}, targetPath, targetHash, scheme)
 
@@ -506,7 +506,7 @@ func TestGenerateMissingStorageTrie(t *testing.T) {
 }
 
 func TestGenerateMissingStorageTrieZk(t *testing.T) {
-	testGenerateMissingStorageTrie(t, rawdb.HashScheme)
+	testGenerateMissingStorageTrie(t, rawdb.ZkHashScheme)
 }
 
 func testGenerateMissingStorageTrie(t *testing.T, scheme string) {
@@ -527,9 +527,6 @@ func testGenerateMissingStorageTrie(t *testing.T, scheme string) {
 
 	root := helper.Commit()
 
-	if helper.triedb.IsZk() {
-		stRoot = common.BytesToHash(common.ReverseBytes(stRoot[:]))
-	}
 	// Delete storage trie root of account one and three.
 	rawdb.DeleteTrieNode(helper.diskdb, acc1, nil, stRoot, scheme)
 	rawdb.DeleteTrieNode(helper.diskdb, acc3, nil, stRoot, scheme)
@@ -557,7 +554,7 @@ func TestGenerateCorruptStorageTrie(t *testing.T) {
 }
 
 func TestGenerateCorruptStorageTrieZk(t *testing.T) {
-	testGenerateCorruptStorageTrie(t, rawdb.HashScheme)
+	testGenerateCorruptStorageTrie(t, rawdb.ZkHashScheme)
 }
 
 func testGenerateCorruptStorageTrie(t *testing.T, scheme string) {
@@ -579,7 +576,7 @@ func testGenerateCorruptStorageTrie(t *testing.T, scheme string) {
 	targetPath := []byte{0x4}
 	targetHash := common.HexToHash("0x18a0f4d79cff4459642dd7604f303886ad9d77c30cf3d7d7cedb3a693ab6d371")
 	if testingx.IsZk(t) {
-		targetHash = common.HexToHash("0xbcbe648693016f467dd1b9c384e5c2e89e4df240fca3b0cb5c23c7226aff0229")
+		targetHash = common.HexToHash("0x2902ff6a22c7235ccbb0a3fc40f24d9ee8c2e584c3b9d17d466f01938664bebc")
 	}
 	rawdb.DeleteTrieNode(helper.diskdb, hashData([]byte("acc-1")), targetPath, targetHash, scheme)
 	rawdb.DeleteTrieNode(helper.diskdb, hashData([]byte("acc-3")), targetPath, targetHash, scheme)
@@ -606,7 +603,7 @@ func TestGenerateWithExtraAccounts(t *testing.T) {
 }
 
 func TestGenerateWithExtraAccountsZk(t *testing.T) {
-	testGenerateWithExtraAccounts(t, rawdb.HashScheme)
+	testGenerateWithExtraAccounts(t, rawdb.ZkHashScheme)
 }
 
 func testGenerateWithExtraAccounts(t *testing.T, scheme string) {
@@ -684,7 +681,7 @@ func TestGenerateWithManyExtraAccounts(t *testing.T) {
 }
 
 func TestGenerateWithManyExtraAccountsZk(t *testing.T) {
-	testGenerateWithManyExtraAccounts(t, rawdb.HashScheme)
+	testGenerateWithManyExtraAccounts(t, rawdb.ZkHashScheme)
 }
 
 func testGenerateWithManyExtraAccounts(t *testing.T, scheme string) {
@@ -750,7 +747,7 @@ func TestGenerateWithExtraBeforeAndAfter(t *testing.T) {
 }
 
 func TestGenerateWithExtraBeforeAndAfterZk(t *testing.T) {
-	testGenerateWithExtraBeforeAndAfter(t, rawdb.HashScheme)
+	testGenerateWithExtraBeforeAndAfter(t, rawdb.ZkHashScheme)
 }
 
 func testGenerateWithExtraBeforeAndAfter(t *testing.T, scheme string) {
@@ -797,7 +794,7 @@ func TestGenerateWithMalformedSnapdata(t *testing.T) {
 }
 
 func TestGenerateWithMalformedSnapdataZk(t *testing.T) {
-	testGenerateWithMalformedSnapdata(t, rawdb.HashScheme)
+	testGenerateWithMalformedSnapdata(t, rawdb.ZkHashScheme)
 }
 
 func testGenerateWithMalformedSnapdata(t *testing.T, scheme string) {
@@ -843,7 +840,7 @@ func TestGenerateFromEmptySnap(t *testing.T) {
 	testGenerateFromEmptySnap(t, rawdb.PathScheme)
 }
 
-func TestGenerateFromEmptySnapZk(t *testing.T) { testGenerateFromEmptySnap(t, rawdb.HashScheme) }
+func TestGenerateFromEmptySnapZk(t *testing.T) { testGenerateFromEmptySnap(t, rawdb.ZkHashScheme) }
 
 func testGenerateFromEmptySnap(t *testing.T, scheme string) {
 	hashData := initHashDataFunc(testingx.IsZk(t))
@@ -887,7 +884,7 @@ func TestGenerateWithIncompleteStorage(t *testing.T) {
 }
 
 func TestGenerateWithIncompleteStorageZk(t *testing.T) {
-	testGenerateWithIncompleteStorage(t, rawdb.HashScheme)
+	testGenerateWithIncompleteStorage(t, rawdb.ZkHashScheme)
 }
 
 func testGenerateWithIncompleteStorage(t *testing.T, scheme string) {
@@ -1003,7 +1000,7 @@ func TestGenerateCompleteSnapshotWithDanglingStorage(t *testing.T) {
 }
 
 func TestGenerateCompleteSnapshotWithDanglingStorageZk(t *testing.T) {
-	testGenerateCompleteSnapshotWithDanglingStorage(t, rawdb.HashScheme)
+	testGenerateCompleteSnapshotWithDanglingStorage(t, rawdb.ZkHashScheme)
 }
 
 func testGenerateCompleteSnapshotWithDanglingStorage(t *testing.T, scheme string) {
@@ -1048,7 +1045,7 @@ func TestGenerateBrokenSnapshotWithDanglingStorage(t *testing.T) {
 }
 
 func TestGenerateBrokenSnapshotWithDanglingStorageZk(t *testing.T) {
-	testGenerateBrokenSnapshotWithDanglingStorage(t, rawdb.HashScheme)
+	testGenerateBrokenSnapshotWithDanglingStorage(t, rawdb.ZkHashScheme)
 }
 
 func testGenerateBrokenSnapshotWithDanglingStorage(t *testing.T, scheme string) {

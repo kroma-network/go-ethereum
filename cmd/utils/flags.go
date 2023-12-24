@@ -2297,7 +2297,7 @@ func MakeChain(ctx *cli.Context, stack *node.Node, readonly bool) (*core.BlockCh
 	if gcmode := ctx.String(GCModeFlag.Name); gcmode != "full" && gcmode != "archive" {
 		Fatalf("--%s must be either 'full' or 'archive'", GCModeFlag.Name)
 	}
-	scheme, err := rawdb.ParseStateScheme(ctx.String(StateSchemeFlag.Name), chainDb)
+	scheme, err := rawdb.ParseStateScheme(ctx.String(StateSchemeFlag.Name), chainDb, config.Zktrie)
 	if err != nil {
 		Fatalf("%v", err)
 	}
@@ -2362,7 +2362,7 @@ func MakeTrieDatabase(ctx *cli.Context, disk ethdb.Database, preimage bool, read
 		Preimages: preimage,
 		Zktrie:    isZk,
 	}
-	scheme, err := rawdb.ParseStateScheme(ctx.String(StateSchemeFlag.Name), disk)
+	scheme, err := rawdb.ParseStateScheme(ctx.String(StateSchemeFlag.Name), disk, isZk)
 	if err != nil {
 		Fatalf("%v", err)
 	}

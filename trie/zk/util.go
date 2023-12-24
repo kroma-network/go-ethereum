@@ -70,6 +70,16 @@ func setNodeHash(n TreeNode, hash *zkt.Hash) {
 	}
 }
 
+func ComputeProofHash(hasher Hasher, proof []byte) (*zkt.Hash, error) {
+	if node, err := NewTreeNodeFromBlob(proof); err != nil {
+		return nil, err
+	} else if err := ComputeNodeHash(hasher, node, nil); err != nil {
+		return nil, err
+	} else {
+		return node.Hash(), nil
+	}
+}
+
 func ComputeNodeHash(hasher Hasher, n TreeNode, handleDirtyNode func(dirtyNode TreeNode) error) (err error) {
 	if n.Hash() != nil {
 		return nil

@@ -246,7 +246,7 @@ func testIterativeStateSync(t *testing.T, count int, commit bool, bypath bool, s
 					nodeResults[i] = trie.NodeSyncResult{Path: node.path, Data: data}
 				}
 			} else {
-				owner, inner := trie.ResolvePath([]byte(node.path))
+				owner, inner := trie.ResolvePath([]byte(node.path), false)
 				data, err := reader.Node(owner, inner, node.hash)
 				if err != nil {
 					t.Fatalf("failed to retrieve node data for key %v", []byte(node.path))
@@ -351,7 +351,7 @@ func testIterativeDelayedStateSync(t *testing.T, scheme string) {
 		if len(nodeElements) > 0 {
 			nodeResults := make([]trie.NodeSyncResult, len(nodeElements)/2+1)
 			for i, element := range nodeElements[:len(nodeResults)] {
-				owner, inner := trie.ResolvePath([]byte(element.path))
+				owner, inner := trie.ResolvePath([]byte(element.path), false)
 				data, err := reader.Node(owner, inner, element.hash)
 				if err != nil {
 					t.Fatalf("failed to retrieve contract bytecode for %x", element.code)
@@ -452,7 +452,7 @@ func testIterativeRandomStateSync(t *testing.T, count int, scheme string) {
 		if len(nodeQueue) > 0 {
 			results := make([]trie.NodeSyncResult, 0, len(nodeQueue))
 			for path, element := range nodeQueue {
-				owner, inner := trie.ResolvePath([]byte(element.path))
+				owner, inner := trie.ResolvePath([]byte(element.path), false)
 				data, err := reader.Node(owner, inner, element.hash)
 				if err != nil {
 					t.Fatalf("failed to retrieve node data for %x %v %v", element.hash, []byte(element.path), element.path)
@@ -553,7 +553,7 @@ func testIterativeRandomDelayedStateSync(t *testing.T, scheme string) {
 			for path, element := range nodeQueue {
 				delete(nodeQueue, path)
 
-				owner, inner := trie.ResolvePath([]byte(element.path))
+				owner, inner := trie.ResolvePath([]byte(element.path), false)
 				data, err := reader.Node(owner, inner, element.hash)
 				if err != nil {
 					t.Fatalf("failed to retrieve node data for %x", element.hash)
@@ -665,7 +665,7 @@ func testIncompleteStateSync(t *testing.T, scheme string) {
 		if len(nodeQueue) > 0 {
 			results := make([]trie.NodeSyncResult, 0, len(nodeQueue))
 			for path, element := range nodeQueue {
-				owner, inner := trie.ResolvePath([]byte(element.path))
+				owner, inner := trie.ResolvePath([]byte(element.path), false)
 				data, err := reader.Node(owner, inner, element.hash)
 				if err != nil {
 					t.Fatalf("failed to retrieve node data for %x", element.hash)
@@ -719,7 +719,7 @@ func testIncompleteStateSync(t *testing.T, scheme string) {
 		rawdb.WriteCode(dstDb, node, val)
 	}
 	for i, path := range addedPaths {
-		owner, inner := trie.ResolvePath([]byte(path))
+		owner, inner := trie.ResolvePath([]byte(path), false)
 		hash := addedHashes[i]
 		val := rawdb.ReadTrieNode(dstDb, owner, inner, hash, scheme)
 		if val == nil {

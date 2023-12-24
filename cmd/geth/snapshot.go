@@ -156,13 +156,13 @@ block is used.
 // Deprecation: this command should be deprecated once the hash-based
 // scheme is deprecated.
 func pruneState(ctx *cli.Context) error {
-	stack, _ := makeConfigNode(ctx)
+	stack, cfg := makeConfigNode(ctx)
 	defer stack.Close()
 
 	chaindb := utils.MakeChainDatabase(ctx, stack, false)
 	defer chaindb.Close()
 
-	if rawdb.ReadStateScheme(chaindb) != rawdb.HashScheme {
+	if rawdb.ReadStateScheme(chaindb, cfg.Eth.Genesis.Config.Zktrie) != rawdb.HashScheme {
 		log.Crit("Offline pruning is not required for path scheme")
 	}
 	prunerconfig := pruner.Config{

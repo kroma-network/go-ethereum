@@ -28,6 +28,11 @@ func NewZkMerkleTrie(merkleTree *zk.MerkleTree, db *Database) *ZkMerkleTrie {
 	}
 }
 
+func (z *ZkMerkleTrie) GetNode(compactPath []byte) ([]byte, int, error) {
+	node := z.MerkleTree.GetNodeByPath(compactToHex(compactPath))
+	return node.CanonicalValue(), 0, nil
+}
+
 func (z *ZkMerkleTrie) MustGet(key []byte) []byte {
 	if data, err := z.Get(key); err != nil {
 		z.logger.Error("failed to MustGet", "error", err, "key", key)

@@ -74,12 +74,10 @@ func makeProvers(trie MerkleTrie) []func(key []byte) *memorydb.Database {
 			path := common.BigToHash(zk.NewTreePathFromBytes(toByte32(key)).ToBigInt()).Bytes()
 			if it := NewIterator(trie.MustNodeIterator(path)); it.Next() && bytes.Equal(path, it.Key) {
 				for _, p := range it.Prove() {
-					if node, err := zk.NewTreeNodeFromBlob(p); err != nil {
-						panic(err)
-					} else if err := zk.ComputeNodeHash(zk.NewKeccakHasher(), node, nil); err != nil {
+					if hash, err := zk.ComputeProofHash(zk.NewKeccakHasher(), p); err != nil {
 						panic(err)
 					} else {
-						proof.Put(node.Hash()[:], p)
+						proof.Put(hash[:], p)
 					}
 				}
 			}

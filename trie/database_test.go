@@ -17,6 +17,8 @@
 package trie
 
 import (
+	"strings"
+
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
@@ -25,12 +27,15 @@ import (
 
 // newTestDatabase initializes the trie database with specified scheme.
 func newTestDatabase(diskdb ethdb.Database, scheme string) *Database {
-	config := &Config{Preimages: false}
-	if scheme == rawdb.HashScheme {
+	config := &Config{Preimages: false, Zktrie: strings.HasSuffix(scheme, "Zk")}
+	if scheme == rawdb.HashScheme || scheme == rawdb.ZkHashScheme {
 		config.HashDB = &hashdb.Config{
 			CleanCacheSize: 0,
 		} // disable clean cache
 	} else {
+		if config.Zktrie {
+			panic("path-based state scheme does not support in zktrie")
+		}
 		config.PathDB = &pathdb.Config{
 			CleanCacheSize: 0,
 			DirtyCacheSize: 0,

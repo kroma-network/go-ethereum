@@ -277,13 +277,13 @@ func inspect(ctx *cli.Context) error {
 			start = d
 		}
 	}
-	stack, _ := makeConfigNode(ctx)
+	stack, cfg := makeConfigNode(ctx)
 	defer stack.Close()
 
 	db := utils.MakeChainDatabase(ctx, stack, true)
 	defer db.Close()
 
-	return rawdb.InspectDatabase(db, prefix, start)
+	return rawdb.InspectDatabase(db, prefix, start, cfg.Eth.Genesis.Config.Zktrie)
 }
 
 func checkStateContent(ctx *cli.Context) error {

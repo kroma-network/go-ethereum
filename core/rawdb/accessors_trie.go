@@ -38,6 +38,8 @@ import (
 // for archive node and some other tries(e.g. light trie).
 const HashScheme = "hash"
 
+const ZkHashScheme = "hashZk"
+
 // PathScheme is the new path-based state scheme with which trie nodes are stored
 // in the disk with node path as the database key. This scheme will only store one
 // version of state data in the disk, which means that the state pruning operation
@@ -195,6 +197,8 @@ func DeleteLegacyTrieNode(db ethdb.KeyValueWriter, hash common.Hash) {
 // the associated node hash.
 func HasTrieNode(db ethdb.KeyValueReader, owner common.Hash, path []byte, hash common.Hash, scheme string) bool {
 	switch scheme {
+	case ZkHashScheme:
+		return HasLegacyTrieNode(db, common.BytesToHash(common.ReverseBytes(hash[:])))
 	case HashScheme:
 		return HasLegacyTrieNode(db, hash)
 	case PathScheme:
@@ -217,6 +221,8 @@ func HasTrieNode(db ethdb.KeyValueReader, owner common.Hash, path []byte, hash c
 //   - path
 func ReadTrieNode(db ethdb.KeyValueReader, owner common.Hash, path []byte, hash common.Hash, scheme string) []byte {
 	switch scheme {
+	case ZkHashScheme:
+		return ReadLegacyTrieNode(db, common.BytesToHash(common.ReverseBytes(hash[:])))
 	case HashScheme:
 		return ReadLegacyTrieNode(db, hash)
 	case PathScheme:
@@ -248,6 +254,8 @@ func ReadTrieNode(db ethdb.KeyValueReader, owner common.Hash, path []byte, hash 
 //   - path
 func WriteTrieNode(db ethdb.KeyValueWriter, owner common.Hash, path []byte, hash common.Hash, node []byte, scheme string) {
 	switch scheme {
+	case ZkHashScheme:
+		WriteLegacyTrieNode(db, common.BytesToHash(common.ReverseBytes(hash[:])), node)
 	case HashScheme:
 		WriteLegacyTrieNode(db, hash, node)
 	case PathScheme:
@@ -271,6 +279,8 @@ func WriteTrieNode(db ethdb.KeyValueWriter, owner common.Hash, path []byte, hash
 //   - path
 func DeleteTrieNode(db ethdb.KeyValueWriter, owner common.Hash, path []byte, hash common.Hash, scheme string) {
 	switch scheme {
+	case ZkHashScheme:
+		DeleteLegacyTrieNode(db, common.BytesToHash(common.ReverseBytes(hash[:])))
 	case HashScheme:
 		DeleteLegacyTrieNode(db, hash)
 	case PathScheme:
@@ -286,7 +296,7 @@ func DeleteTrieNode(db ethdb.KeyValueWriter, owner common.Hash, path []byte, has
 
 // ReadStateScheme reads the state scheme of persistent state, or none
 // if the state is not present in database.
-func ReadStateScheme(db ethdb.Reader) string {
+func ReadStateScheme(db ethdb.Reader, isZk bool) string {
 	// Check if state in path-based scheme is present
 	blob, _ := ReadAccountTrieNode(db, nil)
 	if len(blob) != 0 {
@@ -303,6 +313,9 @@ func ReadStateScheme(db ethdb.Reader) string {
 	if len(blob) == 0 {
 		return "" // no state in disk
 	}
+	if isZk {
+		return ZkHashScheme
+	}
 	return HashScheme
 }
 
@@ -317,11 +330,11 @@ func ReadStateScheme(db ethdb.Reader) string {
 //
 //   - If the provided scheme is path: use path-based scheme or error out if not
 //     compatible with persistent state scheme.
-func ParseStateScheme(provided string, disk ethdb.Database) (string, error) {
+func ParseStateScheme(provided string, disk ethdb.Database, isZk bool) (string, error) {
 	// If state scheme is not specified, use the scheme consistent
 	// with persistent state, or fallback to hash mode if database
 	// is empty.
-	stored := ReadStateScheme(disk)
+	stored := ReadStateScheme(disk, isZk)
 	if provided == "" {
 		if stored == "" {
 			// use default scheme for empty database, flip it when
