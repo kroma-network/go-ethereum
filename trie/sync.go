@@ -76,12 +76,18 @@ type SyncPath [][]byte
 
 // NewSyncPath converts an expanded trie path from nibble form into a compact
 // version that can be sent over the network.
-func NewSyncPath(path []byte) SyncPath {
+func NewSyncPath(path []byte, isZk bool) SyncPath {
 	// If the hash is from the account trie, append a single item, if it
 	// is from a storage trie, append a tuple. Note, the length 64 is
 	// clashing between account leaf and storage root. It's fine though
 	// because having a trie node at 64 depth means a hash collision was
 	// found and we're long dead.
+	if isZk {
+		if len(path) < 256 {
+			return SyncPath{hexToCompact(path)}
+		}
+		return SyncPath{path[:256], hexToCompact(path[256:])}
+	}
 	if len(path) < 64 {
 		return SyncPath{hexToCompact(path)}
 	}
@@ -663,7 +669,12 @@ func (s *Sync) ProcessZkNode(result NodeSyncResult) error {
 			if req.callback == nil {
 				break
 			}
-			err = req.callback([][]byte{n.Hash().Bytes()}, []byte{}, n.Data(), req.hash, zk.NewTreePathFromZkHash(*n.Hash()))
+			var paths [][]byte
+			if len(result.Path) >= 256 {
+				paths = append(paths, common.BigToHash(zk.NewTreePath([]byte(result.Path)[:256]).ToBigInt()).Bytes())
+			}
+			paths = append(paths, common.BigToHash(zk.NewTreePathFromBytes(n.Key).ToBigInt()).Bytes())
+			err = req.callback(paths, zk.NewTreePathFromBytes(n.Key), n.Data(), req.hash, req.path)
 			if err != nil {
 				return err
 			}

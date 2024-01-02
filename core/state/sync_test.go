@@ -19,6 +19,7 @@ package state
 import (
 	"bytes"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -26,10 +27,11 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/testingx"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
 	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
+	"github.com/ethereum/go-ethereum/trie/zk"
 )
 
 // testAccount is the data associated with an account used by the state tests.
@@ -43,8 +45,11 @@ type testAccount struct {
 // makeTestState create a sample test state to test node-wise reconstruction.
 func makeTestState(scheme string) (ethdb.Database, Database, *trie.Database, common.Hash, []*testAccount) {
 	// Create an empty state
-	config := &trie.Config{Preimages: true}
+	config := &trie.Config{Preimages: true, Zktrie: strings.HasSuffix(scheme, "Zk")}
 	if scheme == rawdb.PathScheme {
+		if config.Zktrie {
+			panic("path-based state scheme does not support in zktrie")
+		}
 		config.PathDB = pathdb.Defaults
 	} else {
 		config.HashDB = hashdb.Defaults
@@ -52,7 +57,7 @@ func makeTestState(scheme string) (ethdb.Database, Database, *trie.Database, com
 	db := rawdb.NewMemoryDatabase()
 	nodeDb := trie.NewDatabase(db, config)
 	sdb := NewDatabaseWithNodeDB(db, nodeDb)
-	state, _ := New(types.EmptyRootHash, sdb, nil)
+	state, _ := New(types.GetEmptyRootHash(config.Zktrie), sdb, nil)
 
 	// Fill it with some arbitrary data
 	var accounts []*testAccount
@@ -88,6 +93,7 @@ func makeTestState(scheme string) (ethdb.Database, Database, *trie.Database, com
 // account array.
 func checkStateAccounts(t *testing.T, db ethdb.Database, scheme string, root common.Hash, accounts []*testAccount) {
 	var config trie.Config
+	config.Zktrie = strings.HasSuffix(scheme, "Zk")
 	if scheme == rawdb.PathScheme {
 		config.PathDB = pathdb.Defaults
 	}
@@ -114,7 +120,7 @@ func checkStateAccounts(t *testing.T, db ethdb.Database, scheme string, root com
 
 // checkStateConsistency checks that all data of a state root is present.
 func checkStateConsistency(db ethdb.Database, scheme string, root common.Hash) error {
-	config := &trie.Config{Preimages: true}
+	config := &trie.Config{Preimages: true, Zktrie: strings.HasSuffix(scheme, "Zk")}
 	if scheme == rawdb.PathScheme {
 		config.PathDB = pathdb.Defaults
 	}
@@ -170,6 +176,25 @@ func TestIterativeStateSyncBatchedByPath(t *testing.T) {
 	testIterativeStateSync(t, 100, false, true, rawdb.PathScheme)
 }
 
+func TestIterativeStateSyncIndividualZk(t *testing.T) {
+	testIterativeStateSync(t, 1, false, false, rawdb.ZkHashScheme)
+}
+func TestIterativeStateSyncBatchedZk(t *testing.T) {
+	testIterativeStateSync(t, 100, false, false, rawdb.ZkHashScheme)
+}
+func TestIterativeStateSyncIndividualFromDiskZk(t *testing.T) {
+	testIterativeStateSync(t, 1, true, false, rawdb.ZkHashScheme)
+}
+func TestIterativeStateSyncBatchedFromDiskZk(t *testing.T) {
+	testIterativeStateSync(t, 100, true, false, rawdb.ZkHashScheme)
+}
+func TestIterativeStateSyncIndividualByPathZk(t *testing.T) {
+	testIterativeStateSync(t, 1, false, true, rawdb.ZkHashScheme)
+}
+func TestIterativeStateSyncBatchedByPathZk(t *testing.T) {
+	testIterativeStateSync(t, 100, false, true, rawdb.ZkHashScheme)
+}
+
 // stateElement represents the element in the state trie(bytecode or trie node).
 type stateElement struct {
 	path     string
@@ -184,7 +209,7 @@ func testIterativeStateSync(t *testing.T, count int, commit bool, bypath bool, s
 	if commit {
 		ndb.Commit(srcRoot, false)
 	}
-	srcTrie, _ := trie.New(trie.StateTrieID(srcRoot), ndb)
+	srcTrie, _ := trie.NewMerkleTrie(trie.StateTrieID(srcRoot), ndb)
 
 	// Create a destination state and sync with the scheduler
 	dstDb := rawdb.NewMemoryDatabase()
@@ -199,7 +224,7 @@ func testIterativeStateSync(t *testing.T, count int, commit bool, bypath bool, s
 		nodeElements = append(nodeElements, stateElement{
 			path:     paths[i],
 			hash:     nodes[i],
-			syncPath: trie.NewSyncPath([]byte(paths[i])),
+			syncPath: trie.NewSyncPath([]byte(paths[i]), testingx.IsZk(t)),
 		})
 	}
 	for i := 0; i < len(codes); i++ {
@@ -230,12 +255,16 @@ func testIterativeStateSync(t *testing.T, count int, commit bool, bypath bool, s
 					}
 					nodeResults[i] = trie.NodeSyncResult{Path: node.path, Data: data}
 				} else {
-					var acc types.StateAccount
-					if err := rlp.DecodeBytes(srcTrie.MustGet(node.syncPath[0]), &acc); err != nil {
+					key := node.syncPath[0]
+					if testingx.IsZk(t) {
+						key = zk.NewTreePath(node.syncPath[0]).ToHash()[:]
+					}
+					acc, err := types.NewStateAccount(srcTrie.MustGet(key), testingx.IsZk(t))
+					if err != nil {
 						t.Fatalf("failed to decode account on path %x: %v", node.syncPath[0], err)
 					}
 					id := trie.StorageTrieID(srcRoot, common.BytesToHash(node.syncPath[0]), acc.Root)
-					stTrie, err := trie.New(id, ndb)
+					stTrie, err := trie.NewMerkleTrie(id, srcDb.TrieDB())
 					if err != nil {
 						t.Fatalf("failed to retriev storage trie for path %x: %v", node.syncPath[1], err)
 					}
@@ -246,7 +275,7 @@ func testIterativeStateSync(t *testing.T, count int, commit bool, bypath bool, s
 					nodeResults[i] = trie.NodeSyncResult{Path: node.path, Data: data}
 				}
 			} else {
-				owner, inner := trie.ResolvePath([]byte(node.path), false)
+				owner, inner := trie.ResolvePath([]byte(node.path), testingx.IsZk(t))
 				data, err := reader.Node(owner, inner, node.hash)
 				if err != nil {
 					t.Fatalf("failed to retrieve node data for key %v", []byte(node.path))
@@ -276,7 +305,7 @@ func testIterativeStateSync(t *testing.T, count int, commit bool, bypath bool, s
 			nodeElements = append(nodeElements, stateElement{
 				path:     paths[i],
 				hash:     nodes[i],
-				syncPath: trie.NewSyncPath([]byte(paths[i])),
+				syncPath: trie.NewSyncPath([]byte(paths[i]), testingx.IsZk(t)),
 			})
 		}
 		codeElements = codeElements[:0]
@@ -301,6 +330,10 @@ func TestIterativeDelayedStateSync(t *testing.T) {
 	testIterativeDelayedStateSync(t, rawdb.PathScheme)
 }
 
+func TestIterativeDelayedStateSyncZk(t *testing.T) {
+	testIterativeDelayedStateSync(t, rawdb.ZkHashScheme)
+}
+
 func testIterativeDelayedStateSync(t *testing.T, scheme string) {
 	// Create a random state to copy
 	srcDisk, srcDb, ndb, srcRoot, srcAccounts := makeTestState(scheme)
@@ -318,7 +351,7 @@ func testIterativeDelayedStateSync(t *testing.T, scheme string) {
 		nodeElements = append(nodeElements, stateElement{
 			path:     paths[i],
 			hash:     nodes[i],
-			syncPath: trie.NewSyncPath([]byte(paths[i])),
+			syncPath: trie.NewSyncPath([]byte(paths[i]), testingx.IsZk(t)),
 		})
 	}
 	for i := 0; i < len(codes); i++ {
@@ -351,7 +384,7 @@ func testIterativeDelayedStateSync(t *testing.T, scheme string) {
 		if len(nodeElements) > 0 {
 			nodeResults := make([]trie.NodeSyncResult, len(nodeElements)/2+1)
 			for i, element := range nodeElements[:len(nodeResults)] {
-				owner, inner := trie.ResolvePath([]byte(element.path), false)
+				owner, inner := trie.ResolvePath([]byte(element.path), testingx.IsZk(t))
 				data, err := reader.Node(owner, inner, element.hash)
 				if err != nil {
 					t.Fatalf("failed to retrieve contract bytecode for %x", element.code)
@@ -377,7 +410,7 @@ func testIterativeDelayedStateSync(t *testing.T, scheme string) {
 			nodeElements = append(nodeElements, stateElement{
 				path:     paths[i],
 				hash:     nodes[i],
-				syncPath: trie.NewSyncPath([]byte(paths[i])),
+				syncPath: trie.NewSyncPath([]byte(paths[i]), testingx.IsZk(t)),
 			})
 		}
 		codeElements = codeElements[codeProcessed:]
@@ -407,6 +440,13 @@ func TestIterativeRandomStateSyncBatched(t *testing.T) {
 	testIterativeRandomStateSync(t, 100, rawdb.PathScheme)
 }
 
+func TestIterativeRandomStateSyncIndividualZk(t *testing.T) {
+	testIterativeRandomStateSync(t, 1, rawdb.ZkHashScheme)
+}
+func TestIterativeRandomStateSyncBatchedZk(t *testing.T) {
+	testIterativeRandomStateSync(t, 100, rawdb.ZkHashScheme)
+}
+
 func testIterativeRandomStateSync(t *testing.T, count int, scheme string) {
 	// Create a random state to copy
 	srcDisk, srcDb, ndb, srcRoot, srcAccounts := makeTestState(scheme)
@@ -422,7 +462,7 @@ func testIterativeRandomStateSync(t *testing.T, count int, scheme string) {
 		nodeQueue[path] = stateElement{
 			path:     path,
 			hash:     nodes[i],
-			syncPath: trie.NewSyncPath([]byte(path)),
+			syncPath: trie.NewSyncPath([]byte(path), testingx.IsZk(t)),
 		}
 	}
 	for _, hash := range codes {
@@ -452,7 +492,7 @@ func testIterativeRandomStateSync(t *testing.T, count int, scheme string) {
 		if len(nodeQueue) > 0 {
 			results := make([]trie.NodeSyncResult, 0, len(nodeQueue))
 			for path, element := range nodeQueue {
-				owner, inner := trie.ResolvePath([]byte(element.path), false)
+				owner, inner := trie.ResolvePath([]byte(element.path), testingx.IsZk(t))
 				data, err := reader.Node(owner, inner, element.hash)
 				if err != nil {
 					t.Fatalf("failed to retrieve node data for %x %v %v", element.hash, []byte(element.path), element.path)
@@ -478,7 +518,7 @@ func testIterativeRandomStateSync(t *testing.T, count int, scheme string) {
 			nodeQueue[path] = stateElement{
 				path:     path,
 				hash:     nodes[i],
-				syncPath: trie.NewSyncPath([]byte(path)),
+				syncPath: trie.NewSyncPath([]byte(path), testingx.IsZk(t)),
 			}
 		}
 		for _, hash := range codes {
@@ -499,6 +539,9 @@ func TestIterativeRandomDelayedStateSync(t *testing.T) {
 	testIterativeRandomDelayedStateSync(t, rawdb.HashScheme)
 	testIterativeRandomDelayedStateSync(t, rawdb.PathScheme)
 }
+func TestIterativeRandomDelayedStateSyncZk(t *testing.T) {
+	testIterativeRandomDelayedStateSync(t, rawdb.ZkHashScheme)
+}
 
 func testIterativeRandomDelayedStateSync(t *testing.T, scheme string) {
 	// Create a random state to copy
@@ -515,7 +558,7 @@ func testIterativeRandomDelayedStateSync(t *testing.T, scheme string) {
 		nodeQueue[path] = stateElement{
 			path:     path,
 			hash:     nodes[i],
-			syncPath: trie.NewSyncPath([]byte(path)),
+			syncPath: trie.NewSyncPath([]byte(path), testingx.IsZk(t)),
 		}
 	}
 	for _, hash := range codes {
@@ -553,7 +596,7 @@ func testIterativeRandomDelayedStateSync(t *testing.T, scheme string) {
 			for path, element := range nodeQueue {
 				delete(nodeQueue, path)
 
-				owner, inner := trie.ResolvePath([]byte(element.path), false)
+				owner, inner := trie.ResolvePath([]byte(element.path), testingx.IsZk(t))
 				data, err := reader.Node(owner, inner, element.hash)
 				if err != nil {
 					t.Fatalf("failed to retrieve node data for %x", element.hash)
@@ -582,7 +625,7 @@ func testIterativeRandomDelayedStateSync(t *testing.T, scheme string) {
 			nodeQueue[path] = stateElement{
 				path:     path,
 				hash:     nodes[i],
-				syncPath: trie.NewSyncPath([]byte(path)),
+				syncPath: trie.NewSyncPath([]byte(path), testingx.IsZk(t)),
 			}
 		}
 		for _, hash := range codes {
@@ -603,6 +646,8 @@ func TestIncompleteStateSync(t *testing.T) {
 	testIncompleteStateSync(t, rawdb.HashScheme)
 	testIncompleteStateSync(t, rawdb.PathScheme)
 }
+
+func TestIncompleteStateSyncZk(t *testing.T) { testIncompleteStateSync(t, rawdb.ZkHashScheme) }
 
 func testIncompleteStateSync(t *testing.T, scheme string) {
 	// Create a random state to copy
@@ -637,7 +682,7 @@ func testIncompleteStateSync(t *testing.T, scheme string) {
 		nodeQueue[path] = stateElement{
 			path:     path,
 			hash:     nodes[i],
-			syncPath: trie.NewSyncPath([]byte(path)),
+			syncPath: trie.NewSyncPath([]byte(path), testingx.IsZk(t)),
 		}
 	}
 	for _, hash := range codes {
@@ -698,7 +743,7 @@ func testIncompleteStateSync(t *testing.T, scheme string) {
 			nodeQueue[path] = stateElement{
 				path:     path,
 				hash:     nodes[i],
-				syncPath: trie.NewSyncPath([]byte(path)),
+				syncPath: trie.NewSyncPath([]byte(path), testingx.IsZk(t)),
 			}
 		}
 		for _, hash := range codes {
@@ -719,7 +764,7 @@ func testIncompleteStateSync(t *testing.T, scheme string) {
 		rawdb.WriteCode(dstDb, node, val)
 	}
 	for i, path := range addedPaths {
-		owner, inner := trie.ResolvePath([]byte(path), false)
+		owner, inner := trie.ResolvePath([]byte(path), testingx.IsZk(t))
 		hash := addedHashes[i]
 		val := rawdb.ReadTrieNode(dstDb, owner, inner, hash, scheme)
 		if val == nil {

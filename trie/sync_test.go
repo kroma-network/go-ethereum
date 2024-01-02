@@ -39,6 +39,10 @@ func resolvePathFunc(isZk bool) func(path []byte) (common.Hash, []byte) {
 	return func(path []byte) (common.Hash, []byte) { return ResolvePath(path, isZk) }
 }
 
+func newSyncPathFunc(isZk bool) func(path []byte) (NewSyncPath SyncPath) {
+	return func(path []byte) SyncPath { return NewSyncPath(path, isZk) }
+}
+
 // makeTestTrie create a sample test trie to test node-wise reconstruction.
 func makeTestTrie(scheme string) (ethdb.Database, *Database, MerkleStateTrie, map[string][]byte) {
 	// Create an empty trie
@@ -199,6 +203,7 @@ func TestIterativeSyncZk(t *testing.T) {
 
 func testIterativeSync(t *testing.T, count int, bypath bool, scheme string) {
 	ResolvePath := resolvePathFunc(testingx.IsZk(t))
+	NewSyncPath := newSyncPathFunc(testingx.IsZk(t))
 
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
@@ -278,6 +283,7 @@ func TestIterativeDelayedSyncZk(t *testing.T) { testIterativeDelayedSync(t, rawd
 
 func testIterativeDelayedSync(t *testing.T, scheme string) {
 	ResolvePath := resolvePathFunc(testingx.IsZk(t))
+	NewSyncPath := newSyncPathFunc(testingx.IsZk(t))
 
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
@@ -354,6 +360,7 @@ func TestIterativeRandomSyncIndividualZk(t *testing.T) {
 
 func testIterativeRandomSync(t *testing.T, count int, scheme string) {
 	ResolvePath := resolvePathFunc(testingx.IsZk(t))
+	NewSyncPath := newSyncPathFunc(testingx.IsZk(t))
 
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
@@ -427,6 +434,7 @@ func TestIterativeRandomDelayedSyncZk(t *testing.T) {
 
 func testIterativeRandomDelayedSync(t *testing.T, scheme string) {
 	ResolvePath := resolvePathFunc(testingx.IsZk(t))
+	NewSyncPath := newSyncPathFunc(testingx.IsZk(t))
 
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
@@ -503,6 +511,7 @@ func TestDuplicateAvoidanceSyncZk(t *testing.T) { testDuplicateAvoidanceSync(t, 
 
 func testDuplicateAvoidanceSync(t *testing.T, scheme string) {
 	ResolvePath := resolvePathFunc(testingx.IsZk(t))
+	NewSyncPath := newSyncPathFunc(testingx.IsZk(t))
 
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
@@ -578,6 +587,7 @@ func TestIncompleteSyncHashZk(t *testing.T) { testIncompleteSync(t, rawdb.ZkHash
 
 func testIncompleteSync(t *testing.T, scheme string) {
 	ResolvePath := resolvePathFunc(testingx.IsZk(t))
+	NewSyncPath := newSyncPathFunc(testingx.IsZk(t))
 
 	// Create a random trie to copy
 	_, srcDb, srcTrie, _ := makeTestTrie(scheme)
@@ -677,6 +687,7 @@ func TestSyncOrderingZk(t *testing.T) { testSyncOrdering(t, rawdb.ZkHashScheme) 
 
 func testSyncOrdering(t *testing.T, scheme string) {
 	ResolvePath := resolvePathFunc(testingx.IsZk(t))
+	NewSyncPath := newSyncPathFunc(testingx.IsZk(t))
 
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
@@ -754,6 +765,7 @@ func testSyncOrdering(t *testing.T, scheme string) {
 
 func syncWith(t *testing.T, root common.Hash, db ethdb.Database, srcDb *Database) {
 	ResolvePath := resolvePathFunc(testingx.IsZk(t))
+	NewSyncPath := newSyncPathFunc(testingx.IsZk(t))
 
 	// Create a destination trie and sync with the scheduler
 	sched := NewSync(root, db, nil, srcDb.Scheme())

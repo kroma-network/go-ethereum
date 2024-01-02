@@ -44,6 +44,6 @@ func ZkIteratorKeyToHash(key common.Hash) common.Hash {
 	return *zk.NewTreePathFromHashBig(key).ToHash()
 }
 
-func ZkIteratorKeyToZkHash(key common.Hash) zkt.Hash {
-	return *zk.NewTreePathFromHashBig(key).ToZkHash()
+func ZkIteratorKeyToZkHash(key common.Hash) *zkt.Hash {
+	return zk.NewTreePathFromHashBig(key).ToZkHash()
 }

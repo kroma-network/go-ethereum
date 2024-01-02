@@ -27,6 +27,7 @@ They are compatible as follows
 // ZkTrie is not compatible with MerkleTrie because it always hashes keys.
 type MerkleTrie interface {
 	Hash() common.Hash
+	GetNode(path []byte) ([]byte, int, error)
 	MustGet(key []byte) []byte
 	Get(key []byte) ([]byte, error)
 	MustUpdate(key, value []byte)
