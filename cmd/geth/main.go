@@ -156,6 +156,7 @@ var (
 		// utils.RollupDisableTxPoolGossipFlag
 		// utils.RollupHaltOnIncompatibleProtocolVersionFlag,
 		utils.RollupComputePendingBlock,
+		utils.ExperimentalZkTrie,
 		configFileFlag,
 	}, utils.NetworkFlags, utils.DatabasePathFlags)
 

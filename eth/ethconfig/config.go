@@ -175,6 +175,8 @@ type Config struct {
 	MPTWitness int
 	// [Scroll: END]
 	CircuitParams *params.CircuitParams
+
+	ExperimentalZkTree bool
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain config.

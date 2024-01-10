@@ -36,6 +36,8 @@ type Config struct {
 	HashDB    *hashdb.Config // Configs for hash-based scheme
 	PathDB    *pathdb.Config // Configs for experimental path-based scheme
 	Zktrie    bool           // use zktrie
+
+	ExperimentalZkTrie bool // use zktree
 }
 
 // HashDefaults represents a config for using hash-based scheme with
@@ -355,22 +357,19 @@ func (db *Database) Get(key []byte) ([]byte, error) {
 	return zdb.Get(key)
 }
 
-func (db *Database) IsZk() bool {
-	if db.config == nil {
-		return false
-	}
-	return db.config.Zktrie
-}
+func (db *Database) IsZk() bool          { return db.config.Zktrie }
+func (db *Database) IsZkStateTrie() bool { return db.config.Zktrie && db.config.ExperimentalZkTrie }
 
 func (db *Database) SetBackend(isZk bool) {
 	if db.config.Zktrie == isZk {
 		return
 	}
 	db.config = &Config{
-		Preimages: db.config.Preimages,
-		HashDB:    db.config.HashDB,
-		PathDB:    db.config.PathDB,
-		Zktrie:    isZk,
+		Preimages:          db.config.Preimages,
+		HashDB:             db.config.HashDB,
+		PathDB:             db.config.PathDB,
+		Zktrie:             isZk,
+		ExperimentalZkTrie: db.config.ExperimentalZkTrie,
 	}
 	if db.config.PathDB != nil {
 		if isZk {
