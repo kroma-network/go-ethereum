@@ -74,6 +74,15 @@ func (t *MerkleTree) ComputeAllNodeHash(handleDirtyNode func(dirtyNode TreeNode)
 	return computeNodeHash(t.rootNode, handleDirtyNode)
 }
 
+func (t *MerkleTree) MustGet(key []byte) []byte {
+	if blob, err := t.Get(key); err != nil {
+		log.Error("MerkleTree.MustGet", "error", err)
+		return nil
+	} else {
+		return blob
+	}
+}
+
 // Get returns the value for key stored in the tree.
 // The value bytes must not be modified by the caller.
 func (t *MerkleTree) Get(key []byte) ([]byte, error) {
@@ -113,14 +122,20 @@ func (t *MerkleTree) GetLeafNode(key []byte) (*LeafNode, error) {
 // GetNodeByPath returns the tree node at the end of the path
 func (t *MerkleTree) GetNodeByPath(path TreePath) TreeNode {
 	node := t.rootNode
-	for i := 0; i < t.maxLevels; i++ {
-		parent, ok := node.(*ParentNode)
-		if !ok {
+	for _, p := range path {
+		if parent, ok := node.(*ParentNode); ok {
+			node = t.getChild(parent, p)
+		} else {
 			break
 		}
-		node = t.getChild(parent, path.Get(i))
 	}
 	return node
+}
+
+func (t *MerkleTree) MustUpdate(key, value []byte) {
+	if err := t.Update(key, value); err != nil {
+		log.Error("MerkleTree.MustUpdate", "error", err)
+	}
 }
 
 // Update associates key with value in the tree. Subsequent calls to Get will return value.
@@ -213,6 +228,12 @@ func (t *MerkleTree) pushLeaf(
 		parentNode = newParentNode(newLeafPath.Get(lvl), parentNode, newLeafPath.GetOther(lvl), EmptyNodeValue)
 	}
 	return parentNode, nil
+}
+
+func (t *MerkleTree) MustDelete(key []byte) {
+	if err := t.Delete(key); err != nil {
+		log.Error("MerkleTree.MustDelete", "error", err)
+	}
 }
 
 // Delete removes the specified Key from the MerkleTree and updates the path

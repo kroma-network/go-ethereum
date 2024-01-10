@@ -442,7 +442,7 @@ func (w *zktrieProofWriter) traceStorageUpdate(addr common.Address, key, value [
 	stateUpdate := [2]*StateStorage{}
 
 	storeKey := zkt.NewByte32FromBytesPaddingZero(common.BytesToHash(key).Bytes())
-	storeValueBefore := trie.Get(storeKey[:])
+	storeValueBefore := trie.MustGet(storeKey[:])
 	storeValue := zkt.NewByte32FromBytes(value)
 	valZero := zkt.Byte32{}
 
