@@ -112,7 +112,7 @@ func TestZktrieGetKey(t *testing.T) {
 	kHash, err := kPreimage.Hash()
 	assert.Nil(t, err)
 
-	if !bytes.Equal(trie.Get(key), value) {
+	if !bytes.Equal(trie.MustGet(key), value) {
 		t.Errorf("Get did not return bar")
 	}
 	if k := trie.GetKey(kHash.Bytes()); !bytes.Equal(k, key) {

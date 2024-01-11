@@ -997,6 +997,12 @@ Please note that --` + MetricsHTTPFlag.Name + ` must be set to start the server.
 		Value:    metrics.DefaultConfig.InfluxDBOrganization,
 		Category: flags.MetricsCategory,
 	}
+
+	ExperimentalZkTrie = &cli.BoolFlag{
+		Name:     "zkstatetrie",
+		Usage:    "use ZkMerkleStateTrie instead of ZkTrie in state. This is an experimental flag.",
+		Category: flags.EthCategory,
+	}
 )
 
 var (

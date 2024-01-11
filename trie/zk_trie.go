@@ -68,15 +68,19 @@ func NewZkTrie(root common.Hash, db *Database) (*ZkTrie, error) {
 	return &ZkTrie{tr, db}, nil
 }
 
-// Get returns the value for key stored in the trie.
-// The value bytes must not be modified by the caller.
-func (t *ZkTrie) Get(key []byte) []byte {
-	sanityCheckByte32Key(key)
-	res, err := t.TryGet(key)
+func (t *ZkTrie) MustGet(key []byte) []byte {
+	b, err := t.Get(key)
 	if err != nil {
 		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
 	}
-	return res
+	return b
+}
+
+// Get returns the value for key stored in the trie.
+// The value bytes must not be modified by the caller.
+func (t *ZkTrie) Get(key []byte) ([]byte, error) {
+	sanityCheckByte32Key(key)
+	return t.TryGet(key)
 }
 
 func (t *ZkTrie) GetStorage(_ common.Address, key []byte) ([]byte, error) {
@@ -106,8 +110,12 @@ func (t *ZkTrie) UpdateContractCode(_ common.Address, _ common.Hash, _ []byte) e
 //
 // The value bytes must not be modified by the caller while they are
 // stored in the trie.
-func (t *ZkTrie) Update(key, value []byte) {
-	if err := t.TryUpdate(key, value); err != nil {
+func (t *ZkTrie) Update(key, value []byte) error {
+	return t.TryUpdate(key, value)
+}
+
+func (t *ZkTrie) MustUpdate(k, v []byte) {
+	if err := t.TryUpdate(k, v); err != nil {
 		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
 	}
 }
@@ -131,6 +139,8 @@ func (t *ZkTrie) Delete(key []byte) {
 		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
 	}
 }
+
+func (t *ZkTrie) MustDelete(key []byte) { t.Delete(key) }
 
 // Delete removes any existing value for key from the trie.
 func (t *ZkTrie) DeleteStorage(_ common.Address, key []byte) error {
@@ -186,8 +196,16 @@ func (t *ZkTrie) Copy() *ZkTrie {
 // NodeIterator returns an iterator that returns nodes of the underlying trie. Iteration
 // starts at the key after the given start key.
 func (t *ZkTrie) NodeIterator(start []byte) (NodeIterator, error) {
-	/// FIXME
-	panic("not implemented")
+	nodeBlobFromTree, nodeBlobToIteratorNode := zktrieNodeBlobFunctions(t.ZkTrie)
+	return newMerkleTreeIterator(t.Hash(), nodeBlobFromTree, nodeBlobToIteratorNode, start), nil
+}
+
+func (t *ZkTrie) MustNodeIterator(start []byte) NodeIterator {
+	it, err := t.NodeIterator(start)
+	if err != nil {
+		panic(err)
+	}
+	return it
 }
 
 // hashKey returns the hash of key as an ephemeral buffer.
