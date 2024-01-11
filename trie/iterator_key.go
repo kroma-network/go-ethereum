@@ -28,6 +28,13 @@ func HashToZkIteratorKey(hash common.Hash) common.Hash {
 	return common.BigToHash(zk.NewTreePathFromHash(hash).ToBigInt())
 }
 
+func BytesToIteratorKey(data []byte, isZk bool) common.Hash {
+	if isZk {
+		return BytesToZkIteratorKey(data)
+	}
+	return common.BytesToHash(data)
+}
+
 func BytesToZkIteratorKey(data []byte) common.Hash {
 	return common.BigToHash(zk.NewTreePathFromBytes(data).ToBigInt())
 }

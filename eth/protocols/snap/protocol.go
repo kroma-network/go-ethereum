@@ -114,6 +114,11 @@ func (p *AccountRangePacket) Unpack() ([]common.Hash, [][]byte, error) {
 		accounts = make([][]byte, len(p.Accounts))
 	)
 	for i, acc := range p.Accounts {
+		if isZk && len(acc.Body) > 128 {
+			accountBlob := new([]byte)
+			rlp.DecodeBytes(acc.Body, accountBlob)
+			acc.Body = *accountBlob
+		}
 		val, err := types.FullAccountBytes(acc.Body, isZk)
 		if err != nil {
 			return nil, nil, fmt.Errorf("invalid account %x: %v", acc.Body, err)

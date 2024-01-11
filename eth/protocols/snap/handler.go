@@ -29,8 +29,10 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/trienode"
+	"github.com/ethereum/go-ethereum/trie/zk"
 )
 
 const (
@@ -284,7 +286,7 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 		req.Bytes = softResponseLimit
 	}
 	// Retrieve the requested state and bail out if non existent
-	tr, err := trie.New(trie.StateTrieID(req.Root), chain.TrieDB())
+	tr, err := trie.NewMerkleTrie(trie.StateTrieID(req.Root), chain.TrieDB())
 	if err != nil {
 		return nil, nil
 	}
@@ -300,7 +302,9 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 	)
 	for it.Next() {
 		hash, account := it.Hash(), common.CopyBytes(it.Account())
-
+		if chain.Config().Zktrie {
+			account, _ = rlp.EncodeToBytes(account)
+		}
 		// Track the returned interval for the Merkle proofs
 		last = hash
 
@@ -322,12 +326,12 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 
 	// Generate the Merkle proofs for the first and last account
 	proof := trienode.NewProofSet()
-	if err := tr.Prove(req.Origin[:], proof); err != nil {
+	if err := tr.Prove(trie.IteratorKeyToHash(req.Origin[:], chain.Config().Zktrie)[:], proof); err != nil {
 		log.Warn("Failed to prove account range", "origin", req.Origin, "err", err)
 		return nil, nil
 	}
 	if last != (common.Hash{}) {
-		if err := tr.Prove(last[:], proof); err != nil {
+		if err := tr.Prove(trie.IteratorKeyToHash(last[:], chain.Config().Zktrie)[:], proof); err != nil {
 			log.Warn("Failed to prove account range", "last", last, "err", err)
 			return nil, nil
 		}
@@ -414,26 +418,26 @@ func ServiceGetStorageRangesQuery(chain *core.BlockChain, req *GetStorageRangesP
 		if origin != (common.Hash{}) || (abort && len(storage) > 0) {
 			// Request started at a non-zero hash or was capped prematurely, add
 			// the endpoint Merkle proofs
-			accTrie, err := trie.NewStateTrie(trie.StateTrieID(req.Root), chain.TrieDB())
+			accTrie, err := trie.NewMerkleStateTrie(trie.StateTrieID(req.Root), chain.TrieDB())
 			if err != nil {
 				return nil, nil
 			}
-			acc, err := accTrie.GetAccountByHash(account)
+			acc, err := accTrie.GetAccountByHash(*trie.IteratorKeyToHash(account[:], chain.Config().Zktrie))
 			if err != nil || acc == nil {
 				return nil, nil
 			}
 			id := trie.StorageTrieID(req.Root, account, acc.Root)
-			stTrie, err := trie.NewStateTrie(id, chain.TrieDB())
+			stTrie, err := trie.NewMerkleStateTrie(id, chain.TrieDB())
 			if err != nil {
 				return nil, nil
 			}
 			proof := trienode.NewProofSet()
-			if err := stTrie.Prove(origin[:], proof); err != nil {
+			if err := stTrie.Prove(trie.IteratorKeyToHash(origin[:], chain.Config().Zktrie)[:], proof); err != nil {
 				log.Warn("Failed to prove storage range", "origin", req.Origin, "err", err)
 				return nil, nil
 			}
 			if last != (common.Hash{}) {
-				if err := stTrie.Prove(last[:], proof); err != nil {
+				if err := stTrie.Prove(trie.IteratorKeyToHash(last[:], chain.Config().Zktrie)[:], proof); err != nil {
 					log.Warn("Failed to prove storage range", "last", last, "err", err)
 					return nil, nil
 				}
@@ -489,7 +493,7 @@ func ServiceGetTrieNodesQuery(chain *core.BlockChain, req *GetTrieNodesPacket, s
 	// Make sure we have the state associated with the request
 	triedb := chain.TrieDB()
 
-	accTrie, err := trie.NewStateTrie(trie.StateTrieID(req.Root), triedb)
+	accTrie, err := trie.NewMerkleStateTrie(trie.StateTrieID(req.Root), triedb)
 	if err != nil {
 		// We don't have the requested state available, bail out
 		return nil, nil
@@ -520,26 +524,32 @@ func ServiceGetTrieNodesQuery(chain *core.BlockChain, req *GetTrieNodesPacket, s
 
 		default:
 			var stRoot common.Hash
+			var accHash common.Hash
+			if chain.Config().Zktrie {
+				accHash = *zk.NewTreePath(pathset[0]).ToHash()
+			} else {
+				accHash = common.BytesToHash(pathset[0])
+			}
 			// Storage slots requested, open the storage trie and retrieve from there
 			if snap == nil {
 				// We don't have the requested state snapshotted yet (or it is stale),
 				// but can look up the account via the trie instead.
-				account, err := accTrie.GetAccountByHash(common.BytesToHash(pathset[0]))
+				account, err := accTrie.GetAccountByHash(accHash)
 				loads += 8 // We don't know the exact cost of lookup, this is an estimate
 				if err != nil || account == nil {
 					break
 				}
 				stRoot = account.Root
 			} else {
-				account, err := snap.Account(common.BytesToHash(pathset[0]))
+				account, err := snap.Account(*trie.IteratorKeyToHash(accHash[:], chain.Config().Zktrie))
 				loads++ // always account database reads, even for failures
 				if err != nil || account == nil {
 					break
 				}
 				stRoot = common.BytesToHash(account.Root)
 			}
-			id := trie.StorageTrieID(req.Root, common.BytesToHash(pathset[0]), stRoot)
-			stTrie, err := trie.NewStateTrie(id, triedb)
+			id := trie.StorageTrieID(req.Root, accHash, stRoot)
+			stTrie, err := trie.NewMerkleStateTrie(id, triedb)
 			loads++ // always account database reads, even for failures
 			if err != nil {
 				break

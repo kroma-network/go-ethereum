@@ -10,8 +10,14 @@ type ZkMerkleStackTrie struct {
 	writeFn NodeWriteFunc
 }
 
-func NewZkStackTrie(writeFn NodeWriteFunc) *ZkMerkleStackTrie {
-	return &ZkMerkleStackTrie{MerkleTree: zk.NewEmptyMerkleTree(), writeFn: writeFn}
+func NewZkStackTrie(writeFn NodeWriteFunc, nodeHasher zk.Hasher) *ZkMerkleStackTrie {
+	if nodeHasher == nil {
+		nodeHasher = zk.NewHasher()
+	}
+	return &ZkMerkleStackTrie{
+		MerkleTree: zk.NewEmptyMerkleTree().WithMaxLevels(256).WithHasher(nodeHasher),
+		writeFn:    writeFn,
+	}
 }
 
 func (z *ZkMerkleStackTrie) Update(hash []byte, value []byte) error {

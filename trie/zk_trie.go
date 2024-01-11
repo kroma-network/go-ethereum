@@ -322,3 +322,11 @@ func (t *ZkTrie) GetAccount(address common.Address) (*types.StateAccount, error)
 }
 
 // [Scroll: END]
+
+func (t *ZkTrie) GetAccountByHash(addrHash common.Hash) (*types.StateAccount, error) {
+	res, err := t.Tree().TryGet(zkt.NewHashFromBytes(addrHash[:]))
+	if res == nil || err != nil {
+		return nil, err
+	}
+	return types.UnmarshalStateAccount(res)
+}

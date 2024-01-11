@@ -54,6 +54,14 @@ func (z *ZkMerkleStateTrie) GetKey(kHashBytes []byte) []byte {
 	return z.db.preimages.preimage(common.BytesToHash(k.Bytes()))
 }
 
+func (z *ZkMerkleStateTrie) GetAccountByHash(addrHash common.Hash) (*types.StateAccount, error) {
+	if blob, err := z.MerkleTree.Get(common.ReverseBytes(addrHash[:])); blob == nil || err != nil {
+		return nil, err
+	} else {
+		return types.UnmarshalStateAccount(blob)
+	}
+}
+
 func (z *ZkMerkleStateTrie) GetStorage(_ common.Address, key []byte) ([]byte, error) {
 	return z.Get(key)
 }

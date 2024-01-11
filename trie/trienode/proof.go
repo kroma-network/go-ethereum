@@ -17,13 +17,19 @@
 package trienode
 
 import (
+	"bytes"
 	"errors"
 	"sync"
+
+	zktrie "github.com/kroma-network/zktrie/trie"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie/zk"
+	"golang.org/x/exp/slices"
 )
 
 // ProofSet stores a set of trie nodes. It implements trie.Database and can also
@@ -127,6 +133,29 @@ func (db *ProofSet) Store(target ethdb.KeyValueWriter) {
 // ProofList stores an ordered list of trie nodes. It implements ethdb.KeyValueWriter.
 type ProofList []rlp.RawValue
 
+func (n ProofList) findLastIndex(data []byte) int {
+	for i := len(n) - 1; i != 0; i-- {
+		if bytes.Equal(n[i], data) {
+			return i
+		}
+	}
+	return -1
+}
+
+func (n ProofList) storeZk(db ethdb.KeyValueWriter, magicIdx int) {
+	data, hasher := slices.Delete(n, magicIdx, magicIdx+1), zk.NewHasher()
+	if idx := data.findLastIndex([]byte("zk-KeccakHasher")); idx >= 0 {
+		data, hasher = slices.Delete(data, idx, idx+1), zk.NewKeccakHasher()
+	}
+	for _, data := range data {
+		if hash, err := zk.ComputeProofHash(hasher, data); err != nil {
+			log.Error("ComputeProofHash failed in the NodeList.storeZk", err)
+		} else {
+			db.Put(hash[:], data)
+		}
+	}
+}
+
 // Store writes the contents of the list to the given database
 func (n ProofList) Store(db ethdb.KeyValueWriter) {
 	for _, node := range n {
@@ -136,6 +165,11 @@ func (n ProofList) Store(db ethdb.KeyValueWriter) {
 
 // Set converts the node list to a ProofSet
 func (n ProofList) Set() *ProofSet {
+	if idx := n.findLastIndex(zktrie.ProofMagicBytes()); idx >= 0 {
+		db := NewProofSet()
+		n.storeZk(db, idx)
+		return db
+	}
 	db := NewProofSet()
 	n.Store(db)
 	return db

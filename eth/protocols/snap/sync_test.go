@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math/big"
 	mrand "math/rand"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,10 +35,12 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/testingx"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/testutil"
 	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
 	"github.com/ethereum/go-ethereum/trie/trienode"
+	"github.com/ethereum/go-ethereum/trie/zk"
 	"golang.org/x/crypto/sha3"
 	"golang.org/x/exp/slices"
 )
@@ -128,9 +131,9 @@ type testPeer struct {
 	test          *testing.T
 	remote        *Syncer
 	logger        log.Logger
-	accountTrie   *trie.Trie
+	accountTrie   *testTrie
 	accountValues []*kv
-	storageTries  map[common.Hash]*trie.Trie
+	storageTries  map[common.Hash]*testTrie
 	storageValues map[common.Hash][]*kv
 
 	accountRequestHandler accountHandlerFunc
@@ -144,6 +147,8 @@ type testPeer struct {
 	nStorageRequests  int
 	nBytecodeRequests int
 	nTrienodeRequests int
+
+	zk bool
 }
 
 func newTestPeer(id string, t *testing.T, term func()) *testPeer {
@@ -156,14 +161,15 @@ func newTestPeer(id string, t *testing.T, term func()) *testPeer {
 		storageRequestHandler: defaultStorageRequestHandler,
 		codeRequestHandler:    defaultCodeRequestHandler,
 		term:                  term,
+		zk:                    testingx.IsZk(t),
 	}
 	//stderrHandler := log.StreamHandler(os.Stderr, log.TerminalFormat(true))
 	//peer.logger.SetHandler(stderrHandler)
 	return peer
 }
 
-func (t *testPeer) setStorageTries(tries map[common.Hash]*trie.Trie) {
-	t.storageTries = make(map[common.Hash]*trie.Trie)
+func (t *testPeer) setStorageTries(tries map[common.Hash]*testTrie) {
+	t.storageTries = make(map[common.Hash]*testTrie)
 	for root, trie := range tries {
 		t.storageTries[root] = trie.Copy()
 	}
@@ -226,7 +232,11 @@ func defaultTrieRequestHandler(t *testPeer, requestId uint64, root common.Hash, 
 			}
 			nodes = append(nodes, blob)
 		default:
-			account := t.storageTries[(common.BytesToHash(pathset[0]))]
+			hash := common.BytesToHash(pathset[0])
+			if testingx.IsZk(t.test) {
+				hash = common.BigToHash(zk.NewTreePath(pathset[0]).ToBigInt())
+			}
+			account := t.storageTries[hash]
 			for _, path := range pathset[1:] {
 				blob, _, err := account.GetNode(path)
 				if err != nil {
@@ -567,6 +577,8 @@ func TestSyncBloatedProof(t *testing.T) {
 	testSyncBloatedProof(t, rawdb.PathScheme)
 }
 
+func TestSyncBloatedProofZk(t *testing.T) { testSyncBloatedProof(t, rawdb.ZkHashScheme) }
+
 func testSyncBloatedProof(t *testing.T, scheme string) {
 	var (
 		once   sync.Once
@@ -635,6 +647,9 @@ func testSyncBloatedProof(t *testing.T, scheme string) {
 func setupSyncer(scheme string, peers ...*testPeer) *Syncer {
 	stateDb := rawdb.NewMemoryDatabase()
 	syncer := NewSyncer(stateDb, scheme)
+	if strings.HasSuffix(scheme, "Zk") {
+		syncer.zkNodeHasher = zk.NewKeccakHasher()
+	}
 	for _, peer := range peers {
 		syncer.Register(peer)
 		peer.remote = syncer
@@ -649,6 +664,8 @@ func TestSync(t *testing.T) {
 	testSync(t, rawdb.HashScheme)
 	testSync(t, rawdb.PathScheme)
 }
+
+func TestSyncZk(t *testing.T) { testSync(t, rawdb.ZkHashScheme) }
 
 func testSync(t *testing.T, scheme string) {
 	var (
@@ -683,6 +700,8 @@ func TestSyncTinyTriePanic(t *testing.T) {
 	testSyncTinyTriePanic(t, rawdb.HashScheme)
 	testSyncTinyTriePanic(t, rawdb.PathScheme)
 }
+
+func TestSyncTinyTriePanicZk(t *testing.T) { testSyncTinyTriePanic(t, rawdb.ZkHashScheme) }
 
 func testSyncTinyTriePanic(t *testing.T, scheme string) {
 	var (
@@ -719,6 +738,8 @@ func TestMultiSync(t *testing.T) {
 	testMultiSync(t, rawdb.PathScheme)
 }
 
+func TestMultiSyncZk(t *testing.T) { testMultiSync(t, rawdb.ZkHashScheme) }
+
 func testMultiSync(t *testing.T, scheme string) {
 	var (
 		once   sync.Once
@@ -753,6 +774,8 @@ func TestSyncWithStorage(t *testing.T) {
 	testSyncWithStorage(t, rawdb.HashScheme)
 	testSyncWithStorage(t, rawdb.PathScheme)
 }
+
+func TestSyncWithStorageZk(t *testing.T) { testSyncWithStorage(t, rawdb.ZkHashScheme) }
 
 func testSyncWithStorage(t *testing.T, scheme string) {
 	var (
@@ -790,6 +813,8 @@ func TestMultiSyncManyUseless(t *testing.T) {
 	testMultiSyncManyUseless(t, rawdb.HashScheme)
 	testMultiSyncManyUseless(t, rawdb.PathScheme)
 }
+
+func TestMultiSyncManyUselessZk(t *testing.T) { testMultiSyncManyUseless(t, rawdb.ZkHashScheme) }
 
 func testMultiSyncManyUseless(t *testing.T, scheme string) {
 	var (
@@ -843,6 +868,10 @@ func TestMultiSyncManyUselessWithLowTimeout(t *testing.T) {
 
 	testMultiSyncManyUselessWithLowTimeout(t, rawdb.HashScheme)
 	testMultiSyncManyUselessWithLowTimeout(t, rawdb.PathScheme)
+}
+
+func TestMultiSyncManyUselessWithLowTimeoutZk(t *testing.T) {
+	testMultiSyncManyUselessWithLowTimeout(t, rawdb.ZkHashScheme)
 }
 
 func testMultiSyncManyUselessWithLowTimeout(t *testing.T, scheme string) {
@@ -904,6 +933,10 @@ func TestMultiSyncManyUnresponsive(t *testing.T) {
 	testMultiSyncManyUnresponsive(t, rawdb.PathScheme)
 }
 
+func TestMultiSyncManyUnresponsiveZk(t *testing.T) {
+	testMultiSyncManyUnresponsive(t, rawdb.ZkHashScheme)
+}
+
 func testMultiSyncManyUnresponsive(t *testing.T, scheme string) {
 	var (
 		once   sync.Once
@@ -957,7 +990,7 @@ func checkStall(t *testing.T, term func()) chan struct{} {
 	testDone := make(chan struct{})
 	go func() {
 		select {
-		case <-time.After(time.Minute): // TODO(karalabe): Make tests smaller, this is too much
+		case <-time.After(time.Minute * 3): // TODO(karalabe): Make tests smaller, this is too much
 			t.Log("Sync stalled")
 			term()
 		case <-testDone:
@@ -974,6 +1007,10 @@ func TestSyncBoundaryAccountTrie(t *testing.T) {
 
 	testSyncBoundaryAccountTrie(t, rawdb.HashScheme)
 	testSyncBoundaryAccountTrie(t, rawdb.PathScheme)
+}
+
+func TestSyncBoundaryAccountTrieZk(t *testing.T) {
+	testSyncBoundaryAccountTrie(t, rawdb.ZkHashScheme)
 }
 
 func testSyncBoundaryAccountTrie(t *testing.T, scheme string) {
@@ -1014,6 +1051,10 @@ func TestSyncNoStorageAndOneCappedPeer(t *testing.T) {
 
 	testSyncNoStorageAndOneCappedPeer(t, rawdb.HashScheme)
 	testSyncNoStorageAndOneCappedPeer(t, rawdb.PathScheme)
+}
+
+func TestSyncNoStorageAndOneCappedPeerZk(t *testing.T) {
+	testSyncNoStorageAndOneCappedPeer(t, rawdb.ZkHashScheme)
 }
 
 func testSyncNoStorageAndOneCappedPeer(t *testing.T, scheme string) {
@@ -1063,6 +1104,10 @@ func TestSyncNoStorageAndOneCodeCorruptPeer(t *testing.T) {
 	testSyncNoStorageAndOneCodeCorruptPeer(t, rawdb.PathScheme)
 }
 
+func TestSyncNoStorageAndOneCodeCorruptPeerZk(t *testing.T) {
+	testSyncNoStorageAndOneCodeCorruptPeer(t, rawdb.ZkHashScheme)
+}
+
 func testSyncNoStorageAndOneCodeCorruptPeer(t *testing.T, scheme string) {
 	var (
 		once   sync.Once
@@ -1104,6 +1149,10 @@ func TestSyncNoStorageAndOneAccountCorruptPeer(t *testing.T) {
 
 	testSyncNoStorageAndOneAccountCorruptPeer(t, rawdb.HashScheme)
 	testSyncNoStorageAndOneAccountCorruptPeer(t, rawdb.PathScheme)
+}
+
+func TestSyncNoStorageAndOneAccountCorruptPeerZk(t *testing.T) {
+	testSyncNoStorageAndOneAccountCorruptPeer(t, rawdb.ZkHashScheme)
 }
 
 func testSyncNoStorageAndOneAccountCorruptPeer(t *testing.T, scheme string) {
@@ -1149,6 +1198,10 @@ func TestSyncNoStorageAndOneCodeCappedPeer(t *testing.T) {
 
 	testSyncNoStorageAndOneCodeCappedPeer(t, rawdb.HashScheme)
 	testSyncNoStorageAndOneCodeCappedPeer(t, rawdb.PathScheme)
+}
+
+func TestSyncNoStorageAndOneCodeCappedPeerZk(t *testing.T) {
+	testSyncNoStorageAndOneCodeCappedPeer(t, rawdb.ZkHashScheme)
 }
 
 func testSyncNoStorageAndOneCodeCappedPeer(t *testing.T, scheme string) {
@@ -1207,6 +1260,10 @@ func TestSyncBoundaryStorageTrie(t *testing.T) {
 	testSyncBoundaryStorageTrie(t, rawdb.PathScheme)
 }
 
+func TestSyncBoundaryStorageTrieZk(t *testing.T) {
+	testSyncBoundaryStorageTrie(t, rawdb.ZkHashScheme)
+}
+
 func testSyncBoundaryStorageTrie(t *testing.T, scheme string) {
 	var (
 		once   sync.Once
@@ -1247,6 +1304,10 @@ func TestSyncWithStorageAndOneCappedPeer(t *testing.T) {
 
 	testSyncWithStorageAndOneCappedPeer(t, rawdb.HashScheme)
 	testSyncWithStorageAndOneCappedPeer(t, rawdb.PathScheme)
+}
+
+func TestSyncWithStorageAndOneCappedPeerZk(t *testing.T) {
+	testSyncWithStorageAndOneCappedPeer(t, rawdb.ZkHashScheme)
 }
 
 func testSyncWithStorageAndOneCappedPeer(t *testing.T, scheme string) {
@@ -1296,6 +1357,10 @@ func TestSyncWithStorageAndCorruptPeer(t *testing.T) {
 	testSyncWithStorageAndCorruptPeer(t, rawdb.PathScheme)
 }
 
+func TestSyncWithStorageAndCorruptPeerZk(t *testing.T) {
+	testSyncWithStorageAndCorruptPeer(t, rawdb.ZkHashScheme)
+}
+
 func testSyncWithStorageAndCorruptPeer(t *testing.T, scheme string) {
 	var (
 		once   sync.Once
@@ -1338,6 +1403,10 @@ func TestSyncWithStorageAndNonProvingPeer(t *testing.T) {
 
 	testSyncWithStorageAndNonProvingPeer(t, rawdb.HashScheme)
 	testSyncWithStorageAndNonProvingPeer(t, rawdb.PathScheme)
+}
+
+func TestSyncWithStorageAndNonProvingPeerZk(t *testing.T) {
+	testSyncWithStorageAndNonProvingPeer(t, rawdb.ZkHashScheme)
 }
 
 func testSyncWithStorageAndNonProvingPeer(t *testing.T, scheme string) {
@@ -1385,6 +1454,10 @@ func TestSyncWithStorageMisbehavingProve(t *testing.T) {
 
 	testSyncWithStorageMisbehavingProve(t, rawdb.HashScheme)
 	testSyncWithStorageMisbehavingProve(t, rawdb.PathScheme)
+}
+
+func TestSyncWithStorageMisbehavingProveZk(t *testing.T) {
+	testSyncWithStorageMisbehavingProve(t, rawdb.ZkHashScheme)
 }
 
 func testSyncWithStorageMisbehavingProve(t *testing.T, scheme string) {
@@ -1501,24 +1574,25 @@ func getCodeByHash(hash common.Hash) []byte {
 }
 
 // makeAccountTrieNoStorage spits out a trie, along with the leafs
-func makeAccountTrieNoStorage(n int, scheme string) (string, *trie.Trie, []*kv) {
+func makeAccountTrieNoStorage(n int, scheme string) (string, *testTrie, []*kv) {
 	var (
 		db      = trie.NewDatabase(rawdb.NewMemoryDatabase(), newDbConfig(scheme))
-		accTrie = trie.NewEmpty(db)
+		accTrie = newEmptyTestTrie(db)
 		entries []*kv
 	)
 	for i := uint64(1); i <= uint64(n); i++ {
-		value, _ := rlp.EncodeToBytes(&types.StateAccount{
+		value, _ := (&types.StateAccount{
 			Nonce:    i,
 			Balance:  big.NewInt(int64(i)),
 			Root:     db.EmptyRoot(),
 			CodeHash: getCodeHash(i),
-		})
+		}).Encode(db.IsZk())
 		key := key32(i)
 		elem := &kv{key, value}
 		accTrie.MustUpdate(elem.k, elem.v)
 		entries = append(entries, elem)
 	}
+	replaceKey(entries, db.IsZk())
 	slices.SortFunc(entries, (*kv).cmp)
 
 	// Commit the state changes into db and re-create the trie
@@ -1526,20 +1600,20 @@ func makeAccountTrieNoStorage(n int, scheme string) (string, *trie.Trie, []*kv) 
 	root, nodes, _ := accTrie.Commit(false)
 	db.Update(root, types.EmptyRootHash, 0, trienode.NewWithNodeSet(nodes), nil)
 
-	accTrie, _ = trie.New(trie.StateTrieID(root), db)
+	accTrie, _ = newTestTrie(trie.StateTrieID(root), db)
 	return db.Scheme(), accTrie, entries
 }
 
 // makeBoundaryAccountTrie constructs an account trie. Instead of filling
 // accounts normally, this function will fill a few accounts which have
 // boundary hash.
-func makeBoundaryAccountTrie(scheme string, n int) (string, *trie.Trie, []*kv) {
+func makeBoundaryAccountTrie(scheme string, n int) (string, *testTrie, []*kv) {
 	var (
 		entries    []*kv
 		boundaries []common.Hash
 
 		db      = trie.NewDatabase(rawdb.NewMemoryDatabase(), newDbConfig(scheme))
-		accTrie = trie.NewEmpty(db)
+		accTrie = newEmptyTestTrie(db)
 	)
 	// Initialize boundaries
 	var next common.Hash
@@ -1559,28 +1633,29 @@ func makeBoundaryAccountTrie(scheme string, n int) (string, *trie.Trie, []*kv) {
 	}
 	// Fill boundary accounts
 	for i := 0; i < len(boundaries); i++ {
-		value, _ := rlp.EncodeToBytes(&types.StateAccount{
+		value, _ := (&types.StateAccount{
 			Nonce:    uint64(0),
 			Balance:  big.NewInt(int64(i)),
 			Root:     db.EmptyRoot(),
 			CodeHash: getCodeHash(uint64(i)),
-		})
+		}).Encode(db.IsZk())
 		elem := &kv{boundaries[i].Bytes(), value}
 		accTrie.MustUpdate(elem.k, elem.v)
 		entries = append(entries, elem)
 	}
 	// Fill other accounts if required
 	for i := uint64(1); i <= uint64(n); i++ {
-		value, _ := rlp.EncodeToBytes(&types.StateAccount{
+		value, _ := (&types.StateAccount{
 			Nonce:    i,
 			Balance:  big.NewInt(int64(i)),
 			Root:     db.EmptyRoot(),
 			CodeHash: getCodeHash(i),
-		})
+		}).Encode(db.IsZk())
 		elem := &kv{key32(i), value}
 		accTrie.MustUpdate(elem.k, elem.v)
 		entries = append(entries, elem)
 	}
+	replaceKey(entries, db.IsZk())
 	slices.SortFunc(entries, (*kv).cmp)
 
 	// Commit the state changes into db and re-create the trie
@@ -1588,19 +1663,19 @@ func makeBoundaryAccountTrie(scheme string, n int) (string, *trie.Trie, []*kv) {
 	root, nodes, _ := accTrie.Commit(false)
 	db.Update(root, types.EmptyRootHash, 0, trienode.NewWithNodeSet(nodes), nil)
 
-	accTrie, _ = trie.New(trie.StateTrieID(root), db)
+	accTrie, _ = newTestTrie(trie.StateTrieID(root), db)
 	return db.Scheme(), accTrie, entries
 }
 
 // makeAccountTrieWithStorageWithUniqueStorage creates an account trie where each accounts
 // has a unique storage set.
-func makeAccountTrieWithStorageWithUniqueStorage(scheme string, accounts, slots int, code bool) (string, *trie.Trie, []*kv, map[common.Hash]*trie.Trie, map[common.Hash][]*kv) {
+func makeAccountTrieWithStorageWithUniqueStorage(scheme string, accounts, slots int, code bool) (string, *testTrie, []*kv, map[common.Hash]*testTrie, map[common.Hash][]*kv) {
 	var (
 		db             = trie.NewDatabase(rawdb.NewMemoryDatabase(), newDbConfig(scheme))
-		accTrie        = trie.NewEmpty(db)
+		accTrie        = newEmptyTestTrie(db)
 		entries        []*kv
 		storageRoots   = make(map[common.Hash]common.Hash)
-		storageTries   = make(map[common.Hash]*trie.Trie)
+		storageTries   = make(map[common.Hash]*testTrie)
 		storageEntries = make(map[common.Hash][]*kv)
 		nodes          = trienode.NewMergedNodeSet()
 	)
@@ -1615,19 +1690,20 @@ func makeAccountTrieWithStorageWithUniqueStorage(scheme string, accounts, slots 
 		stRoot, stNodes, stEntries := makeStorageTrieWithSeed(common.BytesToHash(key), uint64(slots), i, db)
 		nodes.Merge(stNodes)
 
-		value, _ := rlp.EncodeToBytes(&types.StateAccount{
+		value, _ := (&types.StateAccount{
 			Nonce:    i,
 			Balance:  big.NewInt(int64(i)),
 			Root:     stRoot,
 			CodeHash: codehash,
-		})
+		}).Encode(db.IsZk())
 		elem := &kv{key, value}
 		accTrie.MustUpdate(elem.k, elem.v)
 		entries = append(entries, elem)
-
+		key = trie.BytesToIteratorKey(key, db.IsZk()).Bytes()
 		storageRoots[common.BytesToHash(key)] = stRoot
 		storageEntries[common.BytesToHash(key)] = stEntries
 	}
+	replaceKey(entries, db.IsZk())
 	slices.SortFunc(entries, (*kv).cmp)
 
 	// Commit account trie
@@ -1638,24 +1714,25 @@ func makeAccountTrieWithStorageWithUniqueStorage(scheme string, accounts, slots 
 	db.Update(root, types.EmptyRootHash, 0, nodes, nil)
 
 	// Re-create tries with new root
-	accTrie, _ = trie.New(trie.StateTrieID(root), db)
+	accTrie, _ = newTestTrie(trie.StateTrieID(root), db)
 	for i := uint64(1); i <= uint64(accounts); i++ {
 		key := key32(i)
-		id := trie.StorageTrieID(root, common.BytesToHash(key), storageRoots[common.BytesToHash(key)])
-		trie, _ := trie.New(id, db)
+		key = trie.BytesToIteratorKey(key, db.IsZk()).Bytes()
+		id := trie.StorageTrieID(root, *trie.IteratorKeyToHash(key, db.IsZk()), storageRoots[common.BytesToHash(key)])
+		trie, _ := newTestTrie(id, db)
 		storageTries[common.BytesToHash(key)] = trie
 	}
 	return db.Scheme(), accTrie, entries, storageTries, storageEntries
 }
 
 // makeAccountTrieWithStorage spits out a trie, along with the leafs
-func makeAccountTrieWithStorage(scheme string, accounts, slots int, code, boundary bool, uneven bool) (*trie.Trie, []*kv, map[common.Hash]*trie.Trie, map[common.Hash][]*kv) {
+func makeAccountTrieWithStorage(scheme string, accounts, slots int, code, boundary bool, uneven bool) (*testTrie, []*kv, map[common.Hash]*testTrie, map[common.Hash][]*kv) {
 	var (
 		db             = trie.NewDatabase(rawdb.NewMemoryDatabase(), newDbConfig(scheme))
-		accTrie        = trie.NewEmpty(db)
+		accTrie        = newEmptyTestTrie(db)
 		entries        []*kv
 		storageRoots   = make(map[common.Hash]common.Hash)
-		storageTries   = make(map[common.Hash]*trie.Trie)
+		storageTries   = make(map[common.Hash]*testTrie)
 		storageEntries = make(map[common.Hash][]*kv)
 		nodes          = trienode.NewMergedNodeSet()
 	)
@@ -1681,20 +1758,21 @@ func makeAccountTrieWithStorage(scheme string, accounts, slots int, code, bounda
 		}
 		nodes.Merge(stNodes)
 
-		value, _ := rlp.EncodeToBytes(&types.StateAccount{
+		value, _ := (&types.StateAccount{
 			Nonce:    i,
 			Balance:  big.NewInt(int64(i)),
 			Root:     stRoot,
 			CodeHash: codehash,
-		})
+		}).Encode(db.IsZk())
 		elem := &kv{key, value}
 		accTrie.MustUpdate(elem.k, elem.v)
 		entries = append(entries, elem)
-
+		key = trie.BytesToIteratorKey(key, db.IsZk()).Bytes()
 		// we reuse the same one for all accounts
 		storageRoots[common.BytesToHash(key)] = stRoot
 		storageEntries[common.BytesToHash(key)] = stEntries
 	}
+	replaceKey(entries, db.IsZk())
 	slices.SortFunc(entries, (*kv).cmp)
 
 	// Commit account trie
@@ -1705,14 +1783,15 @@ func makeAccountTrieWithStorage(scheme string, accounts, slots int, code, bounda
 	db.Update(root, types.EmptyRootHash, 0, nodes, nil)
 
 	// Re-create tries with new root
-	accTrie, err := trie.New(trie.StateTrieID(root), db)
+	accTrie, err := newTestTrie(trie.StateTrieID(root), db)
 	if err != nil {
 		panic(err)
 	}
 	for i := uint64(1); i <= uint64(accounts); i++ {
 		key := key32(i)
-		id := trie.StorageTrieID(root, common.BytesToHash(key), storageRoots[common.BytesToHash(key)])
-		trie, err := trie.New(id, db)
+		key = trie.BytesToIteratorKey(key, db.IsZk()).Bytes()
+		id := trie.StorageTrieID(root, *trie.IteratorKeyToHash(key, db.IsZk()), storageRoots[common.BytesToHash(key)])
+		trie, err := newTestTrie(id, db)
 		if err != nil {
 			panic(err)
 		}
@@ -1725,12 +1804,15 @@ func makeAccountTrieWithStorage(scheme string, accounts, slots int, code, bounda
 // not-yet-committed trie and the sorted entries. The seeds can be used to ensure
 // that tries are unique.
 func makeStorageTrieWithSeed(owner common.Hash, n, seed uint64, db *trie.Database) (common.Hash, *trienode.NodeSet, []*kv) {
-	trie, _ := trie.New(trie.StorageTrieID(types.EmptyRootHash, owner, types.EmptyRootHash), db)
+	trie, _ := newTestTrie(trie.StorageTrieID(types.GetEmptyRootHash(db.IsZk()), owner, types.GetEmptyRootHash(db.IsZk())), db)
 	var entries []*kv
 	for i := uint64(1); i <= n; i++ {
 		// store 'x' at slot 'x'
 		slotValue := key32(i + seed)
 		rlpSlotValue, _ := rlp.EncodeToBytes(common.TrimLeftZeroes(slotValue[:]))
+		if db.IsZk() {
+			rlpSlotValue = slotValue[:]
+		}
 
 		slotKey := key32(i)
 		key := crypto.Keccak256Hash(slotKey[:])
@@ -1739,6 +1821,7 @@ func makeStorageTrieWithSeed(owner common.Hash, n, seed uint64, db *trie.Databas
 		trie.MustUpdate(elem.k, elem.v)
 		entries = append(entries, elem)
 	}
+	replaceKey(entries, db.IsZk())
 	slices.SortFunc(entries, (*kv).cmp)
 	root, nodes, _ := trie.Commit(false)
 	return root, nodes, entries
@@ -1751,7 +1834,7 @@ func makeBoundaryStorageTrie(owner common.Hash, n int, db *trie.Database) (commo
 	var (
 		entries    []*kv
 		boundaries []common.Hash
-		trie, _    = trie.New(trie.StorageTrieID(types.EmptyRootHash, owner, types.EmptyRootHash), db)
+		trie, _    = newTestTrie(trie.StorageTrieID(types.GetEmptyRootHash(db.IsZk()), owner, types.GetEmptyRootHash(db.IsZk())), db)
 	)
 	// Initialize boundaries
 	var next common.Hash
@@ -1785,11 +1868,15 @@ func makeBoundaryStorageTrie(owner common.Hash, n int, db *trie.Database) (commo
 
 		slotValue := key32(i)
 		rlpSlotValue, _ := rlp.EncodeToBytes(common.TrimLeftZeroes(slotValue[:]))
+		if db.IsZk() {
+			rlpSlotValue = slotValue[:]
+		}
 
 		elem := &kv{key[:], rlpSlotValue}
 		trie.MustUpdate(elem.k, elem.v)
 		entries = append(entries, elem)
 	}
+	replaceKey(entries, db.IsZk())
 	slices.SortFunc(entries, (*kv).cmp)
 	root, nodes, _ := trie.Commit(false)
 	return root, nodes, entries
@@ -1830,26 +1917,21 @@ func makeUnevenStorageTrie(owner common.Hash, slots int, db *trie.Database) (com
 func verifyTrie(scheme string, db ethdb.KeyValueStore, root common.Hash, t *testing.T) {
 	t.Helper()
 	triedb := trie.NewDatabase(rawdb.NewDatabase(db), newDbConfig(scheme))
-	accTrie, err := trie.New(trie.StateTrieID(root), triedb)
+	accTrie, err := trie.NewMerkleTrie(trie.StateTrieID(root), triedb)
 	if err != nil {
 		t.Fatal(err)
 	}
 	accounts, slots := 0, 0
 	accIt := trie.NewIterator(accTrie.MustNodeIterator(nil))
 	for accIt.Next() {
-		var acc struct {
-			Nonce    uint64
-			Balance  *big.Int
-			Root     common.Hash
-			CodeHash []byte
-		}
-		if err := rlp.DecodeBytes(accIt.Value, &acc); err != nil {
+		acc, err := types.NewStateAccount(accIt.Value, testingx.IsZk(t))
+		if err != nil {
 			log.Crit("Invalid account encountered during snapshot creation", "err", err)
 		}
 		accounts++
 		if acc.Root != triedb.EmptyRoot() {
 			id := trie.StorageTrieID(root, common.BytesToHash(accIt.Key), acc.Root)
-			storeTrie, err := trie.NewStateTrie(id, triedb)
+			storeTrie, err := trie.NewMerkleTrie(id, triedb)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1970,5 +2052,65 @@ func newDbConfig(scheme string) *trie.Config {
 	if scheme == rawdb.HashScheme {
 		return &trie.Config{}
 	}
+	if scheme == rawdb.ZkHashScheme {
+		return &trie.Config{Zktrie: true}
+	}
 	return &trie.Config{PathDB: pathdb.Defaults}
+}
+
+type testTrie struct {
+	trie.MerkleTrie
+	zk bool
+}
+
+func newEmptyTestTrie(db *trie.Database) *testTrie {
+	return (&testTrie{trie.NewEmptyMerkleTrie(db), db.IsZk()}).withTestConfig()
+}
+
+func newTestTrie(id *trie.ID, db *trie.Database) (*testTrie, error) {
+	if tr, err := trie.NewMerkleTrie(id, db); err != nil {
+		return nil, err
+	} else {
+		return (&testTrie{tr, db.IsZk()}).withTestConfig(), nil
+	}
+}
+
+func (tr *testTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) (err error) {
+	if tr.zk {
+		hashKey := trie.ZkIteratorKeyToZkHash(common.BytesToHash(key))[:]
+		if err = tr.MerkleTrie.Prove(hashKey, proofDb); err == nil {
+			err = proofDb.Put([]byte("zk-hasher"), []byte("zk-KeccakHasher"))
+		}
+		return err
+	}
+	return tr.MerkleTrie.Prove(key, proofDb)
+}
+
+func (tr *testTrie) withTestConfig() *testTrie {
+	if tr, ok := tr.MerkleTrie.(*trie.ZkMerkleTrie); ok {
+		tr.WithTransformKey(func(key []byte) ([]byte, error) { return key, nil }).
+			WithTransformProveKey(func(key []byte) []byte { return key }).
+			WithHasher(zk.NewKeccakHasher()).
+			WithMaxLevels(256)
+	}
+	return tr
+}
+
+func (tr *testTrie) Copy() *testTrie {
+	switch t := tr.MerkleTrie.(type) {
+	case *trie.Trie:
+		return &testTrie{t.Copy(), tr.zk}
+	case *trie.ZkMerkleTrie:
+		return &testTrie{t.Copy(), tr.zk}
+	default:
+		panic("unsupported trie")
+	}
+}
+
+func replaceKey(entries []*kv, isZk bool) {
+	if isZk {
+		for i := range entries {
+			entries[i].k = common.BigToHash(zk.NewTreePathFromBytes(entries[i].k).ToBigInt()).Bytes()
+		}
+	}
 }

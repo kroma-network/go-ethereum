@@ -361,10 +361,15 @@ func (t *MerkleTree) Prove(key []byte, writeNode func(TreeNode) error) error {
 }
 
 func (t *MerkleTree) Copy() *MerkleTree {
+	rootNode := t.rootNode
+	if parent, ok := rootNode.(*ParentNode); ok {
+		rootNode = newParentNode(right, parent.childR, left, parent.childL)
+	}
 	return &MerkleTree{
-		rootNode:       t.rootNode,
+		rootNode:       rootNode,
 		maxLevels:      t.maxLevels,
 		findBlobByHash: t.findBlobByHash,
+		hasher:         t.hasher,
 	}
 }
 

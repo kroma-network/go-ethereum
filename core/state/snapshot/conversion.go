@@ -387,7 +387,7 @@ func zkTrieGenerate(db ethdb.KeyValueWriter, scheme string, owner common.Hash, i
 			rawdb.WriteTrieNode(db, owner, path, hash, blob, scheme)
 		}
 	}
-	t := trie.NewZkStackTrie(nodeWriter)
+	t := trie.NewZkStackTrie(nodeWriter, nil)
 	for leaf := range in {
 		t.Update(trie.ZkIteratorKeyToHash(leaf.key).Bytes(), leaf.value)
 	}
