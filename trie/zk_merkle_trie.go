@@ -12,17 +12,19 @@ import (
 
 type ZkMerkleTrie struct {
 	*zk.MerkleTree
-	db           *Database
-	logger       log.Logger
-	transformKey func(key []byte) ([]byte, error)
+	db                *Database
+	logger            log.Logger
+	transformKey      func(key []byte) ([]byte, error)
+	transformProveKey func(key []byte) []byte
 }
 
 func NewZkMerkleTrie(merkleTree *zk.MerkleTree, db *Database) *ZkMerkleTrie {
 	return &ZkMerkleTrie{
-		MerkleTree:   merkleTree,
-		db:           db,
-		logger:       log.New("trie", "ZkMerkleTrie"),
-		transformKey: func(key []byte) ([]byte, error) { return common.ReverseBytes(key), nil },
+		MerkleTree:        merkleTree,
+		db:                db,
+		logger:            log.New("trie", "ZkMerkleTrie"),
+		transformKey:      func(key []byte) ([]byte, error) { return common.ReverseBytes(key), nil },
+		transformProveKey: func(key []byte) []byte { return common.ReverseBytes(key) },
 	}
 }
 
@@ -116,7 +118,7 @@ func (z *ZkMerkleTrie) Commit(_ bool) (common.Hash, *trienode.NodeSet, error) {
 }
 
 func (z *ZkMerkleTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {
-	return z.prove(common.ReverseBytes(key), proofDb, func(node zk.TreeNode) error {
+	return z.prove(z.transformProveKey(key), proofDb, func(node zk.TreeNode) error {
 		return proofDb.Put(node.Hash()[:], node.CanonicalValue())
 	})
 }

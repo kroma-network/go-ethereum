@@ -70,31 +70,58 @@ func setNodeHash(n TreeNode, hash *zkt.Hash) {
 	}
 }
 
-func computeNodeHash(n TreeNode, handleDirtyNode func(dirtyNode TreeNode) error) (err error) {
+func ComputeNodeHash(hasher Hasher, n TreeNode, handleDirtyNode func(dirtyNode TreeNode) error) (err error) {
 	if n.Hash() != nil {
 		return nil
 	}
 	switch node := n.(type) {
 	case *ParentNode:
 		for _, child := range node.Children() {
-			if err = computeNodeHash(child, handleDirtyNode); err != nil {
+			if err = ComputeNodeHash(hasher, child, handleDirtyNode); err != nil {
 				return err
 			}
 		}
-		node.hash, err = zkt.HashElems(node.ChildL().Hash().BigInt(), node.ChildR().Hash().BigInt())
+		node.hash, err = hasher.HashElems(node.ChildL().Hash().BigInt(), node.ChildR().Hash().BigInt())
 		if err == nil && handleDirtyNode != nil {
 			err = handleDirtyNode(node)
 		}
 	case *LeafNode:
 		var valueHash *zkt.Hash
-		if valueHash, err = zkt.PreHandlingElems(node.CompressedFlags, node.ValuePreimage); err == nil {
-			node.hash, err = zkt.HashElems(common.Big1, new(big.Int).SetBytes(common.ReverseBytes(node.Key)), valueHash.BigInt())
+		if valueHash, err = computeLeafValueHash(hasher, node); err == nil {
+			node.hash, err = hasher.HashElems(common.Big1, new(big.Int).SetBytes(common.ReverseBytes(node.Key)), valueHash.BigInt())
 		}
 		if err == nil && handleDirtyNode != nil {
 			err = handleDirtyNode(node)
 		}
 	}
 	return err
+}
+
+func computeLeafValueHash(hasher Hasher, leaf *LeafNode) (*zkt.Hash, error) {
+	return hasher.PreHandlingElems(leaf.CompressedFlags, leaf.ValuePreimage)
+}
+
+func VisitNode(n TreeNode, handle func(TreeNode, TreePath) error) error {
+	path := new([]byte)
+	return visitNode(n, path, handle)
+}
+
+func visitNode(n TreeNode, path *[]byte, handle func(TreeNode, TreePath) error) error {
+	err := handle(n, common.CopyBytes(*path))
+	if err != nil {
+		return err
+	}
+	if parent, ok := n.(*ParentNode); ok {
+		*path = append(*path, 0)
+		for p, child := range parent.Children() {
+			(*path)[len(*path)-1] = byte(p)
+			if err := visitNode(child, path, handle); err != nil {
+				return err
+			}
+		}
+		*path = (*path)[:len(*path)-1]
+	}
+	return nil
 }
 
 func min(x, y, z int) int {
