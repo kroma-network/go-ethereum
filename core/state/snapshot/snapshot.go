@@ -647,6 +647,7 @@ func diffToDisk(bottom *diffLayer) *diskLayer {
 		triedb:     base.triedb,
 		genMarker:  base.genMarker,
 		genPending: base.genPending,
+		zk:         base.zk,
 	}
 	// If snapshot generation hasn't finished yet, port over all the starts and
 	// continue where the previous round left off.
@@ -788,12 +789,12 @@ func (t *Tree) Verify(root common.Hash) error {
 		}
 		defer storageIt.Release()
 
-		hash, err := generateTrieRoot(nil, "", storageIt, accountHash, stackTrieGenerate, nil, stat, false)
+		hash, err := generateTrieRoot(nil, "", storageIt, accountHash, stackTrieGenerate, nil, stat, false, t.triedb.IsZk())
 		if err != nil {
 			return common.Hash{}, err
 		}
 		return hash, nil
-	}, newGenerateStats(), true)
+	}, newGenerateStats(), true, t.triedb.IsZk())
 
 	if err != nil {
 		return err

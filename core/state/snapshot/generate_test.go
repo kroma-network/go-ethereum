@@ -20,19 +20,23 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"strings"
 	"testing"
 	"time"
+
+	zkt "github.com/kroma-network/zktrie/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/testingx"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
 	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
 	"github.com/ethereum/go-ethereum/trie/trienode"
+	"github.com/ethereum/go-ethereum/trie/zk"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -51,11 +55,14 @@ func TestGeneration(t *testing.T) {
 	testGeneration(t, rawdb.PathScheme)
 }
 
+func TestGenerationZk(t *testing.T) { testGeneration(t, rawdb.HashScheme) }
+
 func testGeneration(t *testing.T, scheme string) {
 	// We can't use statedb to make a test trie (circular dependency), so make
 	// a fake one manually. We're going with a small account trie of 3 accounts,
 	// two of which also has the same 3-slot storage trie attached.
-	var helper = newHelper(scheme)
+	hashData := initHashDataFunc(testingx.IsZk(t))
+	helper := newHelper(scheme, t)
 	stRoot := helper.makeStorageTrie(common.Hash{}, []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, false)
 
 	helper.addTrieAccount("acc-1", &types.StateAccount{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
@@ -66,7 +73,11 @@ func testGeneration(t *testing.T, scheme string) {
 	helper.makeStorageTrie(hashData([]byte("acc-3")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 
 	root, snap := helper.CommitAndGenerate()
-	if have, want := root, common.HexToHash("0xe3712f1a226f3782caca78ca770ccc19ee000552813a9f59d479f8611db9b1fd"); have != want {
+	wantHash := "0xe3712f1a226f3782caca78ca770ccc19ee000552813a9f59d479f8611db9b1fd"
+	if testingx.IsZk(t) {
+		wantHash = "0x2a95fc562eab709a65e5eabfffb4de4608aa34bfb71e416cfe30096c24c85c35"
+	}
+	if have, want := root, common.HexToHash(wantHash); have != want {
 		t.Fatalf("have %#x want %#x", have, want)
 	}
 	select {
@@ -90,11 +101,14 @@ func TestGenerateExistentState(t *testing.T) {
 	testGenerateExistentState(t, rawdb.PathScheme)
 }
 
+func TestGenerateExistentStateZk(t *testing.T) { testGenerateExistentState(t, rawdb.HashScheme) }
+
 func testGenerateExistentState(t *testing.T, scheme string) {
 	// We can't use statedb to make a test trie (circular dependency), so make
 	// a fake one manually. We're going with a small account trie of 3 accounts,
 	// two of which also has the same 3-slot storage trie attached.
-	var helper = newHelper(scheme)
+	helper := newHelper(scheme, t)
+	hashData := initHashDataFunc(testingx.IsZk(t))
 
 	stRoot := helper.makeStorageTrie(hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.addTrieAccount("acc-1", &types.StateAccount{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
@@ -127,7 +141,10 @@ func testGenerateExistentState(t *testing.T, scheme string) {
 
 func checkSnapRoot(t *testing.T, snap *diskLayer, trieRoot common.Hash) {
 	t.Helper()
-
+	stackTrieGenerate := stackTrieGenerate
+	if testingx.IsZk(t) {
+		stackTrieGenerate = zkTrieGenerate
+	}
 	accIt := snap.AccountIterator(common.Hash{})
 	defer accIt.Release()
 
@@ -136,12 +153,12 @@ func checkSnapRoot(t *testing.T, snap *diskLayer, trieRoot common.Hash) {
 			storageIt, _ := snap.StorageIterator(accountHash, common.Hash{})
 			defer storageIt.Release()
 
-			hash, err := generateTrieRoot(nil, "", storageIt, accountHash, stackTrieGenerate, nil, stat, false)
+			hash, err := generateTrieRoot(nil, "", storageIt, accountHash, stackTrieGenerate, nil, stat, false, testingx.IsZk(t))
 			if err != nil {
 				return common.Hash{}, err
 			}
 			return hash, nil
-		}, newGenerateStats(), true)
+		}, newGenerateStats(), true, testingx.IsZk(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,20 +173,20 @@ func checkSnapRoot(t *testing.T, snap *diskLayer, trieRoot common.Hash) {
 type testHelper struct {
 	diskdb  ethdb.Database
 	triedb  *trie.Database
-	accTrie *trie.StateTrie
+	accTrie *testStateTrie
 	nodes   *trienode.MergedNodeSet
 }
 
-func newHelper(scheme string) *testHelper {
+func newHelper(scheme string, t *testing.T) *testHelper {
 	diskdb := rawdb.NewMemoryDatabase()
-	config := &trie.Config{}
+	config := &trie.Config{Zktrie: testingx.IsZk(t)}
 	if scheme == rawdb.PathScheme {
 		config.PathDB = &pathdb.Config{} // disable caching
 	} else {
 		config.HashDB = &hashdb.Config{} // disable caching
 	}
 	triedb := trie.NewDatabase(diskdb, config)
-	accTrie, _ := trie.NewStateTrie(trie.StateTrieID(types.EmptyRootHash), triedb)
+	accTrie, _ := newTestStateTrie(trie.StateTrieID(types.GetEmptyRootHash(config.Zktrie)), triedb)
 	return &testHelper{
 		diskdb:  diskdb,
 		triedb:  triedb,
@@ -179,13 +196,14 @@ func newHelper(scheme string) *testHelper {
 }
 
 func (t *testHelper) addTrieAccount(acckey string, acc *types.StateAccount) {
-	val, _ := rlp.EncodeToBytes(acc)
+	val, _ := t.encodeAccount(acc)
 	t.accTrie.MustUpdate([]byte(acckey), val)
 }
 
 func (t *testHelper) addSnapAccount(acckey string, acc *types.StateAccount) {
+	hashData := initHashDataFunc(t.triedb.IsZk())
 	key := hashData([]byte(acckey))
-	rawdb.WriteAccountSnapshot(t.diskdb, key, types.SlimAccountRLP(*acc))
+	rawdb.WriteAccountSnapshot(t.diskdb, trie.HashToIteratorKey(key, t.triedb.IsZk()), types.SlimAccountBytes(*t.changeEmptyRoot(acc), t.triedb.IsZk()))
 }
 
 func (t *testHelper) addAccount(acckey string, acc *types.StateAccount) {
@@ -194,6 +212,13 @@ func (t *testHelper) addAccount(acckey string, acc *types.StateAccount) {
 }
 
 func (t *testHelper) addSnapStorage(accKey string, keys []string, vals []string) {
+	hashData := initHashDataFunc(t.triedb.IsZk())
+	if t.triedb.IsZk() {
+		hash := initHashDataFunc(t.triedb.IsZk())
+		hashData = func(data []byte) common.Hash {
+			return trie.HashToIteratorKey(hash(data), t.triedb.IsZk())
+		}
+	}
 	accHash := hashData([]byte(accKey))
 	for i, key := range keys {
 		rawdb.WriteStorageSnapshot(t.diskdb, accHash, hashData([]byte(key)), []byte(vals[i]))
@@ -201,8 +226,8 @@ func (t *testHelper) addSnapStorage(accKey string, keys []string, vals []string)
 }
 
 func (t *testHelper) makeStorageTrie(owner common.Hash, keys []string, vals []string, commit bool) common.Hash {
-	id := trie.StorageTrieID(types.EmptyRootHash, owner, types.EmptyRootHash)
-	stTrie, _ := trie.NewStateTrie(id, t.triedb)
+	id := trie.StorageTrieID(types.GetEmptyRootHash(t.triedb.IsZk()), owner, types.GetEmptyRootHash(t.triedb.IsZk()))
+	stTrie, _ := newTestStateTrie(id, t.triedb)
 	for i, k := range keys {
 		stTrie.MustUpdate([]byte(k), []byte(vals[i]))
 	}
@@ -232,6 +257,17 @@ func (t *testHelper) CommitAndGenerate() (common.Hash, *diskLayer) {
 	return root, snap
 }
 
+func (t *testHelper) encodeAccount(acc *types.StateAccount) ([]byte, error) {
+	return t.changeEmptyRoot(acc).Encode(t.triedb.IsZk())
+}
+
+func (t *testHelper) changeEmptyRoot(acc *types.StateAccount) *types.StateAccount {
+	if t.triedb.IsZk() && acc.Root == types.EmptyRootHash {
+		acc.Root = types.GetEmptyRootHash(true)
+	}
+	return acc
+}
+
 // Tests that snapshot generation with existent flat state, where the flat state
 // contains some errors:
 // - the contract with empty storage root but has storage entries in the disk
@@ -255,8 +291,13 @@ func TestGenerateExistentStateWithWrongStorage(t *testing.T) {
 	testGenerateExistentStateWithWrongStorage(t, rawdb.PathScheme)
 }
 
+func TestGenerateExistentStateWithWrongStorageZk(t *testing.T) {
+	testGenerateExistentStateWithWrongStorage(t, rawdb.HashScheme)
+}
+
 func testGenerateExistentStateWithWrongStorage(t *testing.T, scheme string) {
-	helper := newHelper(scheme)
+	helper := newHelper(scheme, t)
+	hashData := initHashDataFunc(testingx.IsZk(t))
 
 	// Account one, empty root but non-empty database
 	helper.addAccount("acc-1", &types.StateAccount{Balance: big.NewInt(1), Root: types.EmptyRootHash, CodeHash: types.EmptyCodeHash.Bytes()})
@@ -352,8 +393,13 @@ func TestGenerateExistentStateWithWrongAccounts(t *testing.T) {
 	testGenerateExistentStateWithWrongAccounts(t, rawdb.PathScheme)
 }
 
+func TestGenerateExistentStateWithWrongAccountsZk(t *testing.T) {
+	testGenerateExistentStateWithWrongAccounts(t, rawdb.HashScheme)
+}
+
 func testGenerateExistentStateWithWrongAccounts(t *testing.T, scheme string) {
-	helper := newHelper(scheme)
+	helper := newHelper(scheme, t)
+	hashData := initHashDataFunc(testingx.IsZk(t))
 
 	helper.makeStorageTrie(hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.makeStorageTrie(hashData([]byte("acc-2")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
@@ -412,11 +458,15 @@ func TestGenerateCorruptAccountTrie(t *testing.T) {
 	testGenerateCorruptAccountTrie(t, rawdb.PathScheme)
 }
 
+func TestGenerateCorruptAccountTrieZk(t *testing.T) {
+	testGenerateCorruptAccountTrie(t, rawdb.HashScheme)
+}
+
 func testGenerateCorruptAccountTrie(t *testing.T, scheme string) {
 	// We can't use statedb to make a test trie (circular dependency), so make
 	// a fake one manually. We're going with a small account trie of 3 accounts,
 	// without any storage slots to keep the test smaller.
-	helper := newHelper(scheme)
+	helper := newHelper(scheme, t)
 
 	helper.addTrieAccount("acc-1", &types.StateAccount{Balance: big.NewInt(1), Root: types.EmptyRootHash, CodeHash: types.EmptyCodeHash.Bytes()}) // 0xc7a30f39aff471c95d8a837497ad0e49b65be475cc0953540f80cfcdbdcd9074
 	helper.addTrieAccount("acc-2", &types.StateAccount{Balance: big.NewInt(2), Root: types.EmptyRootHash, CodeHash: types.EmptyCodeHash.Bytes()}) // 0x65145f923027566669a1ae5ccac66f945b55ff6eaeb17d2ea8e048b7d381f2d7
@@ -427,7 +477,9 @@ func testGenerateCorruptAccountTrie(t *testing.T, scheme string) {
 	// Delete an account trie node and ensure the generator chokes
 	targetPath := []byte{0xc}
 	targetHash := common.HexToHash("0x65145f923027566669a1ae5ccac66f945b55ff6eaeb17d2ea8e048b7d381f2d7")
-
+	if testingx.IsZk(t) {
+		targetHash = common.HexToHash("0x886208f22d3107b728ee3c66045038e7d5f564a1ea55f87938976658442cbd0c")
+	}
 	rawdb.DeleteTrieNode(helper.diskdb, common.Hash{}, targetPath, targetHash, scheme)
 
 	snap := generateSnapshot(helper.diskdb, helper.triedb, 16, root)
@@ -453,14 +505,19 @@ func TestGenerateMissingStorageTrie(t *testing.T) {
 	testGenerateMissingStorageTrie(t, rawdb.PathScheme)
 }
 
+func TestGenerateMissingStorageTrieZk(t *testing.T) {
+	testGenerateMissingStorageTrie(t, rawdb.HashScheme)
+}
+
 func testGenerateMissingStorageTrie(t *testing.T, scheme string) {
+	hashData := initHashDataFunc(testingx.IsZk(t))
 	// We can't use statedb to make a test trie (circular dependency), so make
 	// a fake one manually. We're going with a small account trie of 3 accounts,
 	// two of which also has the same 3-slot storage trie attached.
 	var (
 		acc1   = hashData([]byte("acc-1"))
 		acc3   = hashData([]byte("acc-3"))
-		helper = newHelper(scheme)
+		helper = newHelper(scheme, t)
 	)
 	stRoot := helper.makeStorageTrie(hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)   // 0xddefcd9376dd029653ef384bd2f0a126bb755fe84fdcc9e7cf421ba454f2bc67
 	helper.addTrieAccount("acc-1", &types.StateAccount{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})              // 0x9250573b9c18c664139f3b6a7a8081b7d8f8916a8fcc5d94feec6c29f5fd4e9e
@@ -470,6 +527,9 @@ func testGenerateMissingStorageTrie(t *testing.T, scheme string) {
 
 	root := helper.Commit()
 
+	if helper.triedb.IsZk() {
+		stRoot = common.BytesToHash(common.ReverseBytes(stRoot[:]))
+	}
 	// Delete storage trie root of account one and three.
 	rawdb.DeleteTrieNode(helper.diskdb, acc1, nil, stRoot, scheme)
 	rawdb.DeleteTrieNode(helper.diskdb, acc3, nil, stRoot, scheme)
@@ -496,11 +556,16 @@ func TestGenerateCorruptStorageTrie(t *testing.T) {
 	testGenerateCorruptStorageTrie(t, rawdb.PathScheme)
 }
 
+func TestGenerateCorruptStorageTrieZk(t *testing.T) {
+	testGenerateCorruptStorageTrie(t, rawdb.HashScheme)
+}
+
 func testGenerateCorruptStorageTrie(t *testing.T, scheme string) {
 	// We can't use statedb to make a test trie (circular dependency), so make
 	// a fake one manually. We're going with a small account trie of 3 accounts,
 	// two of which also has the same 3-slot storage trie attached.
-	helper := newHelper(scheme)
+	helper := newHelper(scheme, t)
+	hashData := initHashDataFunc(testingx.IsZk(t))
 
 	stRoot := helper.makeStorageTrie(hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)   // 0xddefcd9376dd029653ef384bd2f0a126bb755fe84fdcc9e7cf421ba454f2bc67
 	helper.addTrieAccount("acc-1", &types.StateAccount{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})              // 0x9250573b9c18c664139f3b6a7a8081b7d8f8916a8fcc5d94feec6c29f5fd4e9e
@@ -513,6 +578,9 @@ func testGenerateCorruptStorageTrie(t *testing.T, scheme string) {
 	// Delete a node in the storage trie.
 	targetPath := []byte{0x4}
 	targetHash := common.HexToHash("0x18a0f4d79cff4459642dd7604f303886ad9d77c30cf3d7d7cedb3a693ab6d371")
+	if testingx.IsZk(t) {
+		targetHash = common.HexToHash("0xbcbe648693016f467dd1b9c384e5c2e89e4df240fca3b0cb5c23c7226aff0229")
+	}
 	rawdb.DeleteTrieNode(helper.diskdb, hashData([]byte("acc-1")), targetPath, targetHash, scheme)
 	rawdb.DeleteTrieNode(helper.diskdb, hashData([]byte("acc-3")), targetPath, targetHash, scheme)
 
@@ -537,8 +605,13 @@ func TestGenerateWithExtraAccounts(t *testing.T) {
 	testGenerateWithExtraAccounts(t, rawdb.PathScheme)
 }
 
+func TestGenerateWithExtraAccountsZk(t *testing.T) {
+	testGenerateWithExtraAccounts(t, rawdb.HashScheme)
+}
+
 func testGenerateWithExtraAccounts(t *testing.T, scheme string) {
-	helper := newHelper(scheme)
+	hashData, rawdb := initHashDataFunc(testingx.IsZk(t)), newTestRawDB(t)
+	helper := newHelper(scheme, t)
 	{
 		// Account one in the trie
 		stRoot := helper.makeStorageTrie(hashData([]byte("acc-1")),
@@ -547,7 +620,7 @@ func testGenerateWithExtraAccounts(t *testing.T, scheme string) {
 			true,
 		)
 		acc := &types.StateAccount{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()}
-		val, _ := rlp.EncodeToBytes(acc)
+		val, _ := helper.encodeAccount(acc)
 		helper.accTrie.MustUpdate([]byte("acc-1"), val) // 0x9250573b9c18c664139f3b6a7a8081b7d8f8916a8fcc5d94feec6c29f5fd4e9e
 
 		// Identical in the snap
@@ -567,7 +640,7 @@ func testGenerateWithExtraAccounts(t *testing.T, scheme string) {
 			true,
 		)
 		acc := &types.StateAccount{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()}
-		val, _ := rlp.EncodeToBytes(acc)
+		val, _ := helper.encodeAccount(acc)
 		key := hashData([]byte("acc-2"))
 		rawdb.WriteAccountSnapshot(helper.diskdb, key, val)
 		rawdb.WriteStorageSnapshot(helper.diskdb, key, hashData([]byte("b-key-1")), []byte("b-val-1"))
@@ -610,11 +683,16 @@ func TestGenerateWithManyExtraAccounts(t *testing.T) {
 	testGenerateWithManyExtraAccounts(t, rawdb.PathScheme)
 }
 
+func TestGenerateWithManyExtraAccountsZk(t *testing.T) {
+	testGenerateWithManyExtraAccounts(t, rawdb.HashScheme)
+}
+
 func testGenerateWithManyExtraAccounts(t *testing.T, scheme string) {
 	if false {
 		enableLogging()
 	}
-	helper := newHelper(scheme)
+	hashData, rawdb := initHashDataFunc(testingx.IsZk(t)), newTestRawDB(t)
+	helper := newHelper(scheme, t)
 	{
 		// Account one in the trie
 		stRoot := helper.makeStorageTrie(hashData([]byte("acc-1")),
@@ -623,7 +701,7 @@ func testGenerateWithManyExtraAccounts(t *testing.T, scheme string) {
 			true,
 		)
 		acc := &types.StateAccount{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()}
-		val, _ := rlp.EncodeToBytes(acc)
+		val, _ := helper.encodeAccount(acc)
 		helper.accTrie.MustUpdate([]byte("acc-1"), val) // 0x9250573b9c18c664139f3b6a7a8081b7d8f8916a8fcc5d94feec6c29f5fd4e9e
 
 		// Identical in the snap
@@ -637,7 +715,7 @@ func testGenerateWithManyExtraAccounts(t *testing.T, scheme string) {
 		// 100 accounts exist only in snapshot
 		for i := 0; i < 1000; i++ {
 			acc := &types.StateAccount{Balance: big.NewInt(int64(i)), Root: types.EmptyRootHash, CodeHash: types.EmptyCodeHash.Bytes()}
-			val, _ := rlp.EncodeToBytes(acc)
+			val, _ := helper.encodeAccount(acc)
 			key := hashData([]byte(fmt.Sprintf("acc-%d", i)))
 			rawdb.WriteAccountSnapshot(helper.diskdb, key, val)
 		}
@@ -671,15 +749,20 @@ func TestGenerateWithExtraBeforeAndAfter(t *testing.T) {
 	testGenerateWithExtraBeforeAndAfter(t, rawdb.PathScheme)
 }
 
+func TestGenerateWithExtraBeforeAndAfterZk(t *testing.T) {
+	testGenerateWithExtraBeforeAndAfter(t, rawdb.HashScheme)
+}
+
 func testGenerateWithExtraBeforeAndAfter(t *testing.T, scheme string) {
+	rawdb := newTestRawDB(t)
 	accountCheckRange = 3
 	if false {
 		enableLogging()
 	}
-	helper := newHelper(scheme)
+	helper := newHelper(scheme, t)
 	{
 		acc := &types.StateAccount{Balance: big.NewInt(1), Root: types.EmptyRootHash, CodeHash: types.EmptyCodeHash.Bytes()}
-		val, _ := rlp.EncodeToBytes(acc)
+		val, _ := helper.encodeAccount(acc)
 		helper.accTrie.MustUpdate(common.HexToHash("0x03").Bytes(), val)
 		helper.accTrie.MustUpdate(common.HexToHash("0x07").Bytes(), val)
 
@@ -713,15 +796,20 @@ func TestGenerateWithMalformedSnapdata(t *testing.T) {
 	testGenerateWithMalformedSnapdata(t, rawdb.PathScheme)
 }
 
+func TestGenerateWithMalformedSnapdataZk(t *testing.T) {
+	testGenerateWithMalformedSnapdata(t, rawdb.HashScheme)
+}
+
 func testGenerateWithMalformedSnapdata(t *testing.T, scheme string) {
 	accountCheckRange = 3
 	if false {
 		enableLogging()
 	}
-	helper := newHelper(scheme)
+	rawdb := newTestRawDB(t)
+	helper := newHelper(scheme, t)
 	{
 		acc := &types.StateAccount{Balance: big.NewInt(1), Root: types.EmptyRootHash, CodeHash: types.EmptyCodeHash.Bytes()}
-		val, _ := rlp.EncodeToBytes(acc)
+		val, _ := helper.encodeAccount(acc)
 		helper.accTrie.MustUpdate(common.HexToHash("0x03").Bytes(), val)
 
 		junk := make([]byte, 100)
@@ -755,11 +843,14 @@ func TestGenerateFromEmptySnap(t *testing.T) {
 	testGenerateFromEmptySnap(t, rawdb.PathScheme)
 }
 
+func TestGenerateFromEmptySnapZk(t *testing.T) { testGenerateFromEmptySnap(t, rawdb.HashScheme) }
+
 func testGenerateFromEmptySnap(t *testing.T, scheme string) {
+	hashData := initHashDataFunc(testingx.IsZk(t))
 	//enableLogging()
 	accountCheckRange = 10
 	storageCheckRange = 20
-	helper := newHelper(scheme)
+	helper := newHelper(scheme, t)
 	// Add 1K accounts to the trie
 	for i := 0; i < 400; i++ {
 		stRoot := helper.makeStorageTrie(hashData([]byte(fmt.Sprintf("acc-%d", i))), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
@@ -795,9 +886,15 @@ func TestGenerateWithIncompleteStorage(t *testing.T) {
 	testGenerateWithIncompleteStorage(t, rawdb.PathScheme)
 }
 
+func TestGenerateWithIncompleteStorageZk(t *testing.T) {
+	testGenerateWithIncompleteStorage(t, rawdb.HashScheme)
+}
+
 func testGenerateWithIncompleteStorage(t *testing.T, scheme string) {
+	hashData := initHashDataFunc(testingx.IsZk(t))
+
 	storageCheckRange = 4
-	helper := newHelper(scheme)
+	helper := newHelper(scheme, t)
 	stKeys := []string{"1", "2", "3", "4", "5", "6", "7", "8"}
 	stVals := []string{"v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8"}
 	// We add 8 accounts, each one is missing exactly one of the storage slots. This means
@@ -854,7 +951,13 @@ func decKey(key []byte) []byte {
 	return key
 }
 
-func populateDangling(disk ethdb.KeyValueStore) {
+func populateDangling(disk ethdb.KeyValueStore, t *testing.T) {
+	hashData := hashData
+	if testingx.IsZk(t) {
+		hashData = func(input []byte) common.Hash {
+			return trie.HashToZkIteratorKey(common.BytesToHash(zk.MustNewSecureHash(input)[:]))
+		}
+	}
 	populate := func(accountHash common.Hash, keys []string, vals []string) {
 		for i, key := range keys {
 			rawdb.WriteStorageSnapshot(disk, accountHash, hashData([]byte(key)), []byte(vals[i]))
@@ -899,8 +1002,13 @@ func TestGenerateCompleteSnapshotWithDanglingStorage(t *testing.T) {
 	testGenerateCompleteSnapshotWithDanglingStorage(t, rawdb.PathScheme)
 }
 
+func TestGenerateCompleteSnapshotWithDanglingStorageZk(t *testing.T) {
+	testGenerateCompleteSnapshotWithDanglingStorage(t, rawdb.HashScheme)
+}
+
 func testGenerateCompleteSnapshotWithDanglingStorage(t *testing.T, scheme string) {
-	var helper = newHelper(scheme)
+	hashData := initHashDataFunc(testingx.IsZk(t))
+	helper := newHelper(scheme, t)
 
 	stRoot := helper.makeStorageTrie(hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.addAccount("acc-1", &types.StateAccount{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
@@ -912,7 +1020,7 @@ func testGenerateCompleteSnapshotWithDanglingStorage(t *testing.T, scheme string
 	helper.addSnapStorage("acc-1", []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"})
 	helper.addSnapStorage("acc-3", []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"})
 
-	populateDangling(helper.diskdb)
+	populateDangling(helper.diskdb, t)
 
 	root, snap := helper.CommitAndGenerate()
 	select {
@@ -939,8 +1047,13 @@ func TestGenerateBrokenSnapshotWithDanglingStorage(t *testing.T) {
 	testGenerateBrokenSnapshotWithDanglingStorage(t, rawdb.PathScheme)
 }
 
+func TestGenerateBrokenSnapshotWithDanglingStorageZk(t *testing.T) {
+	testGenerateBrokenSnapshotWithDanglingStorage(t, rawdb.HashScheme)
+}
+
 func testGenerateBrokenSnapshotWithDanglingStorage(t *testing.T, scheme string) {
-	var helper = newHelper(scheme)
+	hashData := initHashDataFunc(testingx.IsZk(t))
+	helper := newHelper(scheme, t)
 
 	stRoot := helper.makeStorageTrie(hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.addTrieAccount("acc-1", &types.StateAccount{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
@@ -949,7 +1062,7 @@ func testGenerateBrokenSnapshotWithDanglingStorage(t *testing.T, scheme string) 
 	helper.makeStorageTrie(hashData([]byte("acc-3")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.addTrieAccount("acc-3", &types.StateAccount{Balance: big.NewInt(3), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
 
-	populateDangling(helper.diskdb)
+	populateDangling(helper.diskdb, t)
 
 	root, snap := helper.CommitAndGenerate()
 	select {
@@ -965,4 +1078,71 @@ func testGenerateBrokenSnapshotWithDanglingStorage(t *testing.T, scheme string) 
 	stop := make(chan *generatorStats)
 	snap.genAbort <- stop
 	<-stop
+}
+
+func initHashDataFunc(isZk bool) func(input []byte) common.Hash {
+	if isZk {
+		return func(input []byte) common.Hash {
+			zkhash := zk.MustNewSecureHash(input)
+			return common.BytesToHash(zkhash.Bytes())
+		}
+	}
+	return hashData
+}
+
+type testStateTrie struct {
+	trie.MerkleStateTrie
+	zk bool
+}
+
+func newTestStateTrie(id *trie.ID, db *trie.Database) (*testStateTrie, error) {
+	tr, err := trie.NewMerkleStateTrie(id, db)
+	if err != nil {
+		return nil, err
+	}
+	return &testStateTrie{tr, db.IsZk()}, nil
+}
+
+func (t *testStateTrie) MustUpdate(k, v []byte) {
+	if t.zk {
+		flag, values, err := zk.MarshalBytes(v)
+		if err == nil {
+			err = t.MerkleStateTrie.(*trie.ZkTrie).Tree().TryUpdate(zk.MustNewSecureHash(k), flag, values)
+		}
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		t.MerkleStateTrie.MustUpdate(k, v)
+	}
+}
+
+type testRawDB struct {
+	zk                    bool
+	SnapshotAccountPrefix []byte
+}
+
+func newTestRawDB(t *testing.T) *testRawDB {
+	return &testRawDB{
+		zk:                    strings.HasSuffix(t.Name(), "Zk"),
+		SnapshotAccountPrefix: rawdb.SnapshotAccountPrefix,
+	}
+}
+
+func (t *testRawDB) WriteAccountSnapshot(db ethdb.KeyValueWriter, hash common.Hash, entry []byte) {
+	if t.zk {
+		entry = zkt.NewByte32FromBytes(entry).Bytes()
+	}
+	rawdb.WriteAccountSnapshot(db, trie.HashToIteratorKey(hash, t.zk), entry)
+}
+
+func (t *testRawDB) ReadStorageSnapshot(db ethdb.KeyValueReader, accountHash, storageHash common.Hash) []byte {
+	return rawdb.ReadStorageSnapshot(db, trie.HashToIteratorKey(accountHash, t.zk), trie.HashToIteratorKey(storageHash, t.zk))
+}
+
+func (t *testRawDB) WriteStorageSnapshot(db ethdb.KeyValueWriter, accountHash, storageHash common.Hash, entry []byte) {
+	if t.zk {
+		entry = zkt.NewByte32FromBytes(entry).Bytes()
+	}
+	rawdb.WriteStorageSnapshot(db, trie.HashToIteratorKey(accountHash, t.zk), trie.HashToIteratorKey(storageHash, t.zk), entry)
 }

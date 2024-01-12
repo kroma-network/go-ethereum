@@ -18,10 +18,13 @@ package types
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/iden3/go-iden3-crypto/utils"
 )
 
 //go:generate go run ../../rlp/rlpgen -type StateAccount -out gen_account_rlp.go
@@ -44,6 +47,18 @@ func NewEmptyStateAccount(isZk bool) *StateAccount {
 	}
 }
 
+// NewStateAccount constructs an empty state account.
+func NewStateAccount(data []byte, isZk bool) (*StateAccount, error) {
+	if isZk {
+		return UnmarshalStateAccount(data)
+	}
+	var account StateAccount
+	if err := rlp.DecodeBytes(data, &account); err != nil {
+		return nil, err // Returning the error here would drop the remote peer
+	}
+	return &account, nil
+}
+
 // Copy returns a deep-copied state account object.
 func (acct *StateAccount) Copy() *StateAccount {
 	var balance *big.Int
@@ -56,6 +71,21 @@ func (acct *StateAccount) Copy() *StateAccount {
 		Root:     acct.Root,
 		CodeHash: common.CopyBytes(acct.CodeHash),
 	}
+}
+
+func (acct *StateAccount) Encode(isZk bool) ([]byte, error) {
+	if isZk {
+		if !utils.CheckBigIntInField(acct.Balance) {
+			return nil, errors.New("balance overflow")
+		}
+		result := make([]byte, 128)
+		binary.BigEndian.PutUint64(result[24:32], acct.Nonce)
+		acct.Balance.FillBytes(result[32:64])
+		copy(result[64:96], acct.CodeHash)
+		copy(result[96:128], acct.Root[:])
+		return result, nil
+	}
+	return rlp.EncodeToBytes(acct)
 }
 
 // SlimAccount is a modified version of an Account, where the root is replaced
@@ -118,4 +148,85 @@ func FullAccountRLP(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	return rlp.EncodeToBytes(account)
+}
+
+// -------------------------------
+// Transformation function for ZK format
+
+// SlimAccountZkBytes is zk version SlimAccountRLP
+func SlimAccountZkBytes(account StateAccount) []byte {
+	encoded, err := account.Encode(true)
+	if err != nil {
+		panic(err)
+	}
+	return encoded
+}
+
+// FullAccountZk is zk version FullAccount
+func FullAccountZk(data []byte) (*StateAccount, error) {
+	return UnmarshalStateAccount(data)
+}
+
+// FullAccountZkBytes is zk version FullAccountRLP
+func FullAccountZkBytes(data []byte) ([]byte, error) {
+	account, err := FullAccountZk(data)
+	if err != nil {
+		return nil, err
+	}
+	return account.Encode(true)
+}
+
+// -------------------------------
+// Transformation functions. The processing method is determined by the 'isZk' parameter.
+
+func SlimAccountBytes(account StateAccount, isZk bool) []byte {
+	if isZk {
+		return SlimAccountZkBytes(account)
+	}
+	return SlimAccountRLP(account)
+}
+
+func NewFullAccount(data []byte, isZk bool) (*StateAccount, error) {
+	if isZk {
+		return FullAccountZk(data)
+	}
+	return FullAccount(data)
+}
+
+func FullAccountBytes(data []byte, isZk bool) ([]byte, error) {
+	if isZk {
+		return FullAccountZkBytes(data)
+	}
+	return FullAccountRLP(data)
+}
+
+func NewSlimAccount(data []byte, isZk bool) (*SlimAccount, error) {
+	if isZk {
+		full, err := FullAccountZk(data)
+		if err != nil {
+			return nil, err
+		}
+		slim := &SlimAccount{
+			Nonce:   full.Nonce,
+			Balance: full.Balance,
+		}
+		if !isAllZero(full.CodeHash) {
+			slim.CodeHash = full.CodeHash
+		}
+		if !isAllZero(full.Root[:]) {
+			slim.Root = full.Root[:]
+		}
+		return slim, err
+	}
+	account := new(SlimAccount)
+	return account, rlp.DecodeBytes(data, account)
+}
+
+func isAllZero(slice []byte) bool {
+	for _, b := range slice {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
 }

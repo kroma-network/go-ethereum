@@ -17,8 +17,11 @@
 package snap
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+
+	"github.com/kroma-network/zktrie/trie"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -99,12 +102,19 @@ type AccountData struct {
 // once and cache the results if need be. Ideally discard the packet afterwards
 // to not double the memory use.
 func (p *AccountRangePacket) Unpack() ([]common.Hash, [][]byte, error) {
+	isZk := false
+	for i := len(p.Proof) - 1; i >= 0; i-- {
+		isZk = bytes.Equal(p.Proof[i], trie.ProofMagicBytes())
+		if isZk {
+			break
+		}
+	}
 	var (
 		hashes   = make([]common.Hash, len(p.Accounts))
 		accounts = make([][]byte, len(p.Accounts))
 	)
 	for i, acc := range p.Accounts {
-		val, err := types.FullAccountRLP(acc.Body)
+		val, err := types.FullAccountBytes(acc.Body, isZk)
 		if err != nil {
 			return nil, nil, fmt.Errorf("invalid account %x: %v", acc.Body, err)
 		}

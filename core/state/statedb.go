@@ -651,7 +651,7 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	// to the deletion, because whereas it is enough to track account updates
 	// at commit time, deletions need tracking at transaction boundary level to
 	// ensure we capture state clearing.
-	s.accounts[obj.addrHash] = types.SlimAccountRLP(obj.data)
+	s.accounts[obj.addrHash] = types.SlimAccountBytes(obj.data, s.IsZktrie())
 
 	// Track the original value of mutated account, nil means it was not present.
 	// Skip if it has been tracked (because updateStateObject may be called
@@ -660,7 +660,7 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 		if obj.origin == nil {
 			s.accountsOrigin[obj.address] = nil
 		} else {
-			s.accountsOrigin[obj.address] = types.SlimAccountRLP(*obj.origin)
+			s.accountsOrigin[obj.address] = types.SlimAccountBytes(*obj.origin, s.IsZktrie())
 		}
 	}
 }
@@ -701,7 +701,7 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 	var data *types.StateAccount
 	if s.snap != nil {
 		start := time.Now()
-		acc, err := s.snap.Account(crypto.HashData(s.hasher, addr.Bytes()))
+		acc, err := s.snap.Account(trie.HashToIteratorKey(crypto.MustHashing(s.hasher, addr.Bytes(), s.IsZktrie()), s.IsZktrie()))
 		if metrics.EnabledExpensive {
 			s.SnapshotAccountReads += time.Since(start)
 		}
@@ -1090,7 +1090,7 @@ func (s *StateDB) clearJournalAndRefund() {
 // storage iteration and constructs trie node deletion markers by creating
 // stack trie with iterated slots.
 func (s *StateDB) fastDeleteStorage(addrHash common.Hash, root common.Hash) (bool, common.StorageSize, map[common.Hash][]byte, *trienode.NodeSet, error) {
-	iter, err := s.snaps.StorageIterator(s.originalRoot, addrHash, common.Hash{})
+	iter, err := s.snaps.StorageIterator(s.originalRoot, trie.HashToIteratorKey(addrHash, s.IsZktrie()), common.Hash{})
 	if err != nil {
 		return false, 0, nil, nil, err
 	}
@@ -1255,7 +1255,7 @@ func (s *StateDB) handleDestruction(nodes *trienode.MergedNodeSet) (map[common.A
 			continue
 		}
 		// It can overwrite the data in s.accountsOrigin set by 'updateStateObject'.
-		s.accountsOrigin[addr] = types.SlimAccountRLP(*prev) // case (c) or (d)
+		s.accountsOrigin[addr] = types.SlimAccountBytes(*prev, s.IsZktrie()) // case (c) or (d)
 
 		// Short circuit if the storage was empty.
 		if prev.Root == types.EmptyRootHash {
@@ -1389,7 +1389,7 @@ func (s *StateDB) Commit(block uint64, deleteEmptyObjects bool) (common.Hash, er
 		start := time.Now()
 		// Only update if there's a state transition (skip empty Clique blocks)
 		if parent := s.snap.Root(); parent != root {
-			if err := s.snaps.Update(root, parent, s.convertAccountSet(s.stateObjectsDestruct), s.accounts, s.storages); err != nil {
+			if err := s.snaps.Update(root, parent, s.convertAccountSet(s.stateObjectsDestruct), s.convertAccounts(s.accounts), s.convertStorages(s.storages)); err != nil {
 				log.Warn("Failed to update snapshot tree", "from", parent, "to", root, "err", err)
 			}
 			// Keep 128 diff layers in the memory, persistent layer is 129th.
@@ -1522,10 +1522,37 @@ func (s *StateDB) convertAccountSet(set map[common.Address]*types.StateAccount) 
 	for addr := range set {
 		obj, exist := s.stateObjects[addr]
 		if !exist {
-			ret[crypto.Keccak256Hash(addr[:])] = struct{}{}
+			hashKey := crypto.MustHashing(nil, addr[:], s.IsZktrie())
+			ret[trie.HashToIteratorKey(hashKey, s.IsZktrie())] = struct{}{}
 		} else {
-			ret[obj.addrHash] = struct{}{}
+			ret[trie.HashToIteratorKey(obj.addrHash, s.IsZktrie())] = struct{}{}
 		}
+	}
+	return ret
+}
+
+func (s *StateDB) convertAccounts(accounts map[common.Hash][]byte) map[common.Hash][]byte {
+	if !s.IsZktrie() {
+		return accounts
+	}
+	ret := make(map[common.Hash][]byte, len(accounts))
+	for hash, v := range accounts {
+		ret[trie.HashToZkIteratorKey(hash)] = v
+	}
+	return ret
+}
+
+func (s *StateDB) convertStorages(storages map[common.Hash]map[common.Hash][]byte) map[common.Hash]map[common.Hash][]byte {
+	if !s.IsZktrie() {
+		return storages
+	}
+	ret := make(map[common.Hash]map[common.Hash][]byte, len(storages))
+	for hash, slots := range storages {
+		retSlots := make(map[common.Hash][]byte, len(slots))
+		for slotHash, v := range slots {
+			retSlots[trie.HashToZkIteratorKey(slotHash)] = v
+		}
+		ret[trie.HashToZkIteratorKey(hash)] = retSlots
 	}
 	return ret
 }

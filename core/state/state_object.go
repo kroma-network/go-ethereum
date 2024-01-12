@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/trienode"
 )
 
@@ -105,7 +106,7 @@ func newObject(db *StateDB, address common.Address, acct *types.StateAccount) *s
 	return &stateObject{
 		db:             db,
 		address:        address,
-		addrHash:       crypto.Keccak256Hash(address[:]),
+		addrHash:       crypto.MustHashing(nil, address[:], db.IsZktrie()),
 		origin:         origin,
 		data:           *acct,
 		originStorage:  make(Storage),
@@ -194,7 +195,7 @@ func (s *stateObject) GetCommittedState(key common.Hash) common.Hash {
 	)
 	if s.db.snap != nil {
 		start := time.Now()
-		enc, err = s.db.snap.Storage(s.addrHash, crypto.Keccak256Hash(key.Bytes()))
+		enc, err = s.db.snap.Storage(trie.HashToIteratorKey(s.addrHash, s.db.IsZktrie()), trie.HashToIteratorKey(crypto.MustHashing(nil, key.Bytes(), s.db.IsZktrie()), s.db.IsZktrie()))
 		if metrics.EnabledExpensive {
 			s.db.SnapshotStorageReads += time.Since(start)
 		}
@@ -336,7 +337,7 @@ func (s *stateObject) updateTrie() (Trie, error) {
 				s.db.storages[s.addrHash] = storage
 			}
 		}
-		khash := crypto.HashData(s.db.hasher, key[:])
+		khash := crypto.MustHashing(s.db.hasher, key[:], s.db.IsZktrie())
 		storage[khash] = encoded // encoded will be nil if it's deleted
 
 		// Cache the original value of mutated storage slots

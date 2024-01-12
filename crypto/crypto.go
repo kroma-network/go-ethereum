@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie/zk"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -62,6 +63,16 @@ type KeccakState interface {
 // NewKeccakState creates a new KeccakState
 func NewKeccakState() KeccakState {
 	return sha3.NewLegacyKeccak256().(KeccakState)
+}
+
+func MustHashing(hasher KeccakState, data []byte, isZk bool) common.Hash {
+	if isZk {
+		return common.BytesToHash(zk.MustNewSecureHash(data).Bytes())
+	}
+	if hasher != nil {
+		return HashData(hasher, data)
+	}
+	return Keccak256Hash(data)
 }
 
 // HashData hashes the provided data using the KeccakState and returns a 32 byte hash
