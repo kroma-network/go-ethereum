@@ -4,7 +4,6 @@ import (
 	zktrie "github.com/kroma-network/zktrie/trie"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie/trienode"
@@ -40,13 +39,13 @@ func (z *ZkMerkleTrie) NodeIterator(startKey []byte) (NodeIterator, error) {
 }
 
 func (z *ZkMerkleTrie) Commit(_ bool) (common.Hash, *trienode.NodeSet, error) {
+	if root := z.RootNode().Hash(); root != nil {
+		return common.BytesToHash(root.Bytes()), nil, nil
+	}
 	err := z.ComputeAllNodeHash(func(node zk.TreeNode) error { return z.db.Put(node.Hash()[:], node.CanonicalValue()) })
 	if err != nil {
 		log.Error("Failed to commit zk merkle trie", "err", err)
 	}
-	// There is a bug where root node is saved twice.
-	// It is because of the bottom rawdb.WriteLegacyTrieNode, and we will remove it after checking if it can be removed.
-	rawdb.WriteLegacyTrieNode(z.db.diskdb, common.BytesToHash(z.RootNode().Hash().Bytes()), z.RootNode().CanonicalValue())
 	// Since NodeSet relies directly on mpt, we can't create a NodeSet.
 	// Of course, we might be able to force-fit it by implementing the node interface.
 	// However, NodeSet has been improved in geth, it could be improved to return a NodeSet when a commit is applied.

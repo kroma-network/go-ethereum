@@ -26,7 +26,6 @@ import (
 	zkt "github.com/kroma-network/zktrie/types"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto/poseidon"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -171,12 +170,6 @@ func (t *ZkTrie) GetKey(kHashBytes []byte) []byte {
 func (t *ZkTrie) Commit(bool) (common.Hash, *trienode.NodeSet, error) {
 	// in current implementation, every update of trie already writes into database
 	// so Commit does nothing
-	node, err := t.Tree().GetNode(t.Tree().Root())
-	if err != nil {
-		return types.GetEmptyRootHash(true), nil, err
-	}
-
-	rawdb.WriteLegacyTrieNode(t.db.diskdb, t.Hash(), node.Value())
 	return t.Hash(), nil, nil
 }
 

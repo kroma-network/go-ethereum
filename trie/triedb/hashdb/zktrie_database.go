@@ -9,6 +9,7 @@ import (
 
 	"github.com/VictoriaMetrics/fastcache"
 	zktrie "github.com/kroma-network/zktrie/trie"
+	zkt "github.com/kroma-network/zktrie/types"
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -47,7 +48,7 @@ func NewZk(diskdb ethdb.Database, config *Config) *ZktrieDatabase {
 func (db *ZktrieDatabase) Scheme() string { return rawdb.HashScheme }
 
 func (db *ZktrieDatabase) Initialized(genesisRoot common.Hash) bool {
-	return rawdb.HasLegacyTrieNode(db.diskdb, genesisRoot)
+	return rawdb.HasLegacyTrieNode(db.diskdb, common.BytesToHash(zkt.ReverseByteOrder(genesisRoot[:])))
 }
 
 func (db *ZktrieDatabase) Size() (common.StorageSize, common.StorageSize) {
