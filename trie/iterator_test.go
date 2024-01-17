@@ -651,10 +651,10 @@ func TestMerkleTreeIterator(t *testing.T) {
 
 	t.Run("zk merkle tree", func(t *testing.T) {
 		tree, db := makeMerkleTreeWithData(testdata1)
-		expected := db.Len() - 1
+		expected := db.Len()
 		it, _ := tree.NodeIterator(nil)
 		count, leafCount := testIterator(t, db, it)
-		if db.Len()-1 != 0 {
+		if db.Len() != 0 {
 			t.Errorf("db is not empty. remain size %d", db.Len())
 		}
 		if expected != count {
