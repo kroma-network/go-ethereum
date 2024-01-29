@@ -116,10 +116,10 @@ func (z *ZkMerkleStateTrie) delete(key []byte) error {
 }
 
 func (z *ZkMerkleStateTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {
-	return z.MerkleTree.Prove(key, func(node zk.TreeNode) error {
+	return z.prove(common.ReverseBytes(key), proofDb, func(node zk.TreeNode) error {
 		value := node.CanonicalValue()
 		if leaf, ok := node.(*zk.LeafNode); ok {
-			if preImage := z.GetKey(zkt.ReverseByteOrder(leaf.Key)); len(preImage) > 0 {
+			if preImage := z.GetKey(common.ReverseBytes(leaf.Key)); len(preImage) > 0 {
 				value[len(value)-1] = byte(len(preImage))
 				value = append(value, preImage[:]...)
 			}

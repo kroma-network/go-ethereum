@@ -149,3 +149,11 @@ func TrimRightZeroes(s []byte) []byte {
 	}
 	return s[:idx]
 }
+
+func ReverseBytes(b []byte) []byte {
+	o := make([]byte, len(b))
+	for i := range b {
+		o[len(b)-1-i] = b[i]
+	}
+	return o
+}
