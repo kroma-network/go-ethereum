@@ -106,9 +106,6 @@ func (n *ParentNode) Children() [2]TreeNode { return [2]TreeNode{n.childL, n.chi
 type LeafNode struct {
 	Key []byte
 
-	// valueHash is the cache of the hash of valuePreimage to avoid recalculating, only valid for leaf node
-	ValueHash *zkt.Hash
-
 	// ValuePreimage can store at most 256 byte32 as fields (represented by BIG-ENDIAN integer)
 	// and the first 24 can be compressed (each bytes32 consider as 2 fields), in hashing the compressed
 	// elements would be calculated first
