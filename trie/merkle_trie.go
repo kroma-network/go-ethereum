@@ -62,16 +62,9 @@ type MerkleStackTrie interface {
 
 func NewMerkleStackTrie(writeFn NodeWriteFunc, isZk bool) MerkleStackTrie {
 	if isZk {
-		return NewZkStackTrie(writeFn, common.Hash{})
+		return NewZkStackTrie(writeFn)
 	}
 	return NewStackTrie(writeFn)
-}
-
-func NewMerkleStackTrieWithOwner(writeFn NodeWriteFunc, owner common.Hash, isZk bool) MerkleStackTrie {
-	if isZk {
-		return NewZkStackTrie(writeFn, owner)
-	}
-	return NewStackTrieWithOwner(writeFn, owner)
 }
 
 // MerkleStateTrie Interface to make StateTrie and ZkTrie and ZkMerkleStateTrie compatible.

@@ -8,11 +8,10 @@ import (
 type ZkMerkleStackTrie struct {
 	*zk.MerkleTree
 	writeFn NodeWriteFunc
-	owner   common.Hash
 }
 
-func NewZkStackTrie(writeFn NodeWriteFunc, owner common.Hash) *ZkMerkleStackTrie {
-	return &ZkMerkleStackTrie{MerkleTree: zk.NewEmptyMerkleTree(), writeFn: writeFn, owner: owner}
+func NewZkStackTrie(writeFn NodeWriteFunc) *ZkMerkleStackTrie {
+	return &ZkMerkleStackTrie{MerkleTree: zk.NewEmptyMerkleTree(), writeFn: writeFn}
 }
 
 func (z *ZkMerkleStackTrie) Update(hash []byte, value []byte) error {
@@ -23,7 +22,7 @@ func (z *ZkMerkleStackTrie) Commit() (h common.Hash, err error) {
 	var handleDirtyNode func(dirtyNode zk.TreeNode) error
 	if z.writeFn != nil {
 		handleDirtyNode = func(n zk.TreeNode) error {
-			z.writeFn(z.owner, zk.NewTreePathFromZkHash(*n.Hash()), common.BytesToHash(n.Hash().Bytes()), n.CanonicalValue())
+			z.writeFn(zk.NewTreePathFromZkHash(*n.Hash()), common.BytesToHash(n.Hash().Bytes()), n.CanonicalValue())
 			return nil
 		}
 	}
