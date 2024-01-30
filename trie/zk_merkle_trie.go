@@ -12,11 +12,71 @@ import (
 
 type ZkMerkleTrie struct {
 	*zk.MerkleTree
-	db *Database
+	db           *Database
+	logger       log.Logger
+	transformKey func(key []byte) ([]byte, error)
 }
 
 func NewZkMerkleTrie(merkleTree *zk.MerkleTree, db *Database) *ZkMerkleTrie {
-	return &ZkMerkleTrie{MerkleTree: merkleTree, db: db}
+	return &ZkMerkleTrie{
+		MerkleTree:   merkleTree,
+		db:           db,
+		logger:       log.New("trie", "ZkMerkleTrie"),
+		transformKey: func(key []byte) ([]byte, error) { return common.ReverseBytes(key), nil },
+	}
+}
+
+func (z *ZkMerkleTrie) MustGet(key []byte) []byte {
+	if data, err := z.Get(key); err != nil {
+		z.logger.Error("failed to MustGet", "error", err, "key", key)
+		return nil
+	} else {
+		return data
+	}
+}
+
+func (z *ZkMerkleTrie) Get(key []byte) ([]byte, error) {
+	if key, err := z.transformKey(key); err != nil {
+		return nil, err
+	} else {
+		return z.MerkleTree.Get(key)
+	}
+}
+
+func (z *ZkMerkleTrie) GetLeafNode(key []byte) (*zk.LeafNode, error) {
+	if key, err := z.transformKey(key); err != nil {
+		return nil, err
+	} else {
+		return z.MerkleTree.GetLeafNode(key)
+	}
+}
+
+func (z *ZkMerkleTrie) MustUpdate(key, value []byte) {
+	if err := z.Update(key, value); err != nil {
+		z.logger.Error("failed to MustUpdate", "error", err, "key", key, "value", value)
+	}
+}
+
+func (z *ZkMerkleTrie) Update(key, value []byte) error {
+	if key, err := z.transformKey(key); err != nil {
+		return err
+	} else {
+		return z.MerkleTree.Update(key, value)
+	}
+}
+
+func (z *ZkMerkleTrie) MustDelete(key []byte) {
+	if err := z.Delete(key); err != nil {
+		z.logger.Error("failed to MustDelete", "error", err, "key", key)
+	}
+}
+
+func (z *ZkMerkleTrie) Delete(key []byte) error {
+	if key, err := z.transformKey(key); err != nil {
+		return err
+	} else {
+		return z.MerkleTree.Delete(key)
+	}
 }
 
 func (z *ZkMerkleTrie) Hash() common.Hash {
@@ -26,7 +86,7 @@ func (z *ZkMerkleTrie) Hash() common.Hash {
 
 func (z *ZkMerkleTrie) MustNodeIterator(start []byte) NodeIterator {
 	if it, err := z.NodeIterator(start); err != nil {
-		log.Error("ZkMerkleTrie.MustNodeIterator", "error", err)
+		z.logger.Error("failed to MustNodeIterator", "error", err, "start", start)
 		return nil
 	} else {
 		return it
@@ -44,7 +104,8 @@ func (z *ZkMerkleTrie) Commit(_ bool) (common.Hash, *trienode.NodeSet, error) {
 	}
 	err := z.ComputeAllNodeHash(func(node zk.TreeNode) error { return z.db.Put(node.Hash()[:], node.CanonicalValue()) })
 	if err != nil {
-		log.Error("Failed to commit zk merkle trie", "err", err)
+		z.logger.Error("failed to Commit", "error", err)
+		return common.Hash{}, nil, err
 	}
 	// Since NodeSet relies directly on mpt, we can't create a NodeSet.
 	// Of course, we might be able to force-fit it by implementing the node interface.
@@ -55,7 +116,7 @@ func (z *ZkMerkleTrie) Commit(_ bool) (common.Hash, *trienode.NodeSet, error) {
 }
 
 func (z *ZkMerkleTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {
-	return z.prove(key, proofDb, func(node zk.TreeNode) error {
+	return z.prove(common.ReverseBytes(key), proofDb, func(node zk.TreeNode) error {
 		return proofDb.Put(node.Hash()[:], node.CanonicalValue())
 	})
 }

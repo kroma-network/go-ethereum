@@ -20,18 +20,33 @@ func NewZkMerkleStateTrie(rootHash common.Hash, db *Database) (*ZkMerkleStateTri
 	if err != nil {
 		return nil, err
 	}
-	return &ZkMerkleStateTrie{ZkMerkleTrie: NewZkMerkleTrie(tree, db), preimage: db.preimages}, nil
+	return newZkMerkleStateTrie(tree, db), nil
 }
 
-func NewEmptyZkMerkleTrie(db *Database) *ZkMerkleStateTrie {
-	return &ZkMerkleStateTrie{ZkMerkleTrie: NewZkMerkleTrie(zk.NewEmptyMerkleTree(), db), preimage: db.preimages}
+func NewEmptyZkMerkleStateTrie(db *Database) *ZkMerkleStateTrie {
+	return newZkMerkleStateTrie(zk.NewEmptyMerkleTree(), db)
+}
+
+func newZkMerkleStateTrie(tree *zk.MerkleTree, db *Database) *ZkMerkleStateTrie {
+	trie := NewZkMerkleTrie(tree, db)
+	trie.logger = log.New("trie", "ZkMerkleStateTrie")
+	trie.transformKey = func(key []byte) ([]byte, error) {
+		sanityCheckByte32Key(key)
+		hash, err := zk.NewSecureHash(key)
+		if err != nil {
+			return nil, err
+		}
+		return hash[:], nil
+	}
+	return &ZkMerkleStateTrie{ZkMerkleTrie: trie, preimage: db.preimages}
 }
 
 func (z *ZkMerkleStateTrie) GetKey(kHashBytes []byte) []byte {
 	// TODO: use a kv cache in memory
 	k, err := zkt.NewBigIntFromHashBytes(kHashBytes)
 	if err != nil {
-		log.Error("ZkMerkleStateTrie.GetKey", "error", err)
+		z.logger.Error("failed to GetKey", "error", err)
+		return nil
 	}
 	if z.db.preimages == nil {
 		return nil
@@ -39,43 +54,20 @@ func (z *ZkMerkleStateTrie) GetKey(kHashBytes []byte) []byte {
 	return z.db.preimages.preimage(common.BytesToHash(k.Bytes()))
 }
 
-func (z *ZkMerkleStateTrie) MustGet(key []byte) []byte {
-	if data, err := z.get(key); err != nil {
-		log.Error("ZkMerkleStateTrie.MustGet", "error", err)
-		return nil
-	} else {
-		return data
-	}
-}
-
 func (z *ZkMerkleStateTrie) GetStorage(_ common.Address, key []byte) ([]byte, error) {
-	return z.get(key)
+	return z.Get(key)
 }
 
 func (z *ZkMerkleStateTrie) GetAccount(address common.Address) (*types.StateAccount, error) {
-	if blob, err := z.get(address[:]); blob == nil || err != nil {
+	if blob, err := z.Get(address[:]); blob == nil || err != nil {
 		return nil, err
 	} else {
 		return types.UnmarshalStateAccount(blob)
 	}
 }
 
-func (z *ZkMerkleStateTrie) get(key []byte) ([]byte, error) {
-	if hash, err := z.hash(key); err != nil {
-		return nil, err
-	} else {
-		return z.MerkleTree.Get(hash[:])
-	}
-}
-
-func (z *ZkMerkleStateTrie) MustUpdate(key, value []byte) {
-	if err := z.update(key, value); err != nil {
-		log.Error("ZkMerkleStateTrie.MustUpdate", "error", err)
-	}
-}
-
 func (z *ZkMerkleStateTrie) UpdateStorage(_ common.Address, key, value []byte) error {
-	return z.update(key, value)
+	return z.Update(key, value)
 }
 
 func (z *ZkMerkleStateTrie) UpdateAccount(address common.Address, account *types.StateAccount) error {
@@ -84,36 +76,15 @@ func (z *ZkMerkleStateTrie) UpdateAccount(address common.Address, account *types
 	for _, value := range values {
 		v = append(v, value.Bytes()...)
 	}
-	return z.update(address[:], v)
+	return z.Update(address[:], v)
 }
 
 func (z *ZkMerkleStateTrie) UpdateContractCode(_ common.Address, _ common.Hash, _ []byte) error {
 	return nil
 }
 
-func (z *ZkMerkleStateTrie) update(key, value []byte) error {
-	if hash, err := z.hash(key); err != nil {
-		return err
-	} else {
-		return z.MerkleTree.Update(hash[:], value)
-	}
-}
-
-func (z *ZkMerkleStateTrie) MustDelete(key []byte) {
-	if err := z.delete(key); err != nil {
-		log.Error("ZkMerkleStateTrie.MustDelete", "error", err)
-	}
-}
-
-func (z *ZkMerkleStateTrie) DeleteStorage(_ common.Address, key []byte) error { return z.delete(key) }
-func (z *ZkMerkleStateTrie) DeleteAccount(address common.Address) error       { return z.delete(address[:]) }
-func (z *ZkMerkleStateTrie) delete(key []byte) error {
-	if hash, err := z.hash(key); err != nil {
-		return err
-	} else {
-		return z.MerkleTree.Delete(hash[:])
-	}
-}
+func (z *ZkMerkleStateTrie) DeleteStorage(_ common.Address, key []byte) error { return z.Delete(key) }
+func (z *ZkMerkleStateTrie) DeleteAccount(address common.Address) error       { return z.Delete(address[:]) }
 
 func (z *ZkMerkleStateTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {
 	return z.prove(common.ReverseBytes(key), proofDb, func(node zk.TreeNode) error {
@@ -129,13 +100,5 @@ func (z *ZkMerkleStateTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) erro
 }
 
 func (z *ZkMerkleStateTrie) Copy() *ZkMerkleStateTrie {
-	return &ZkMerkleStateTrie{
-		ZkMerkleTrie: NewZkMerkleTrie(z.MerkleTree.Copy(), z.db),
-		preimage:     z.preimage,
-	}
-}
-
-func (z *ZkMerkleStateTrie) hash(key []byte) (*zkt.Hash, error) {
-	sanityCheckByte32Key(key)
-	return zk.NewSecureHash(key)
+	return newZkMerkleStateTrie(z.MerkleTree.Copy(), z.db)
 }

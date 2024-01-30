@@ -640,9 +640,9 @@ func TestMerkleTreeIterator(t *testing.T) {
 	makeMerkleTreeWithData := func(input []kvs) (*ZkMerkleStateTrie, *memorydb.Database) {
 		db := memorydb.New()
 		zdb := NewZkDatabase(rawdb.NewDatabase(db))
-		tree := NewEmptyZkMerkleTrie(zdb)
+		tree := NewEmptyZkMerkleStateTrie(zdb)
 		for _, val := range input {
-			tree.Update(zk.MustNewSecureHash(common.LeftPadBytes([]byte(val.k), 32))[:], common.LeftPadBytes([]byte(val.v), 32))
+			tree.Update(common.LeftPadBytes([]byte(val.k), 32), common.LeftPadBytes([]byte(val.v), 32))
 		}
 		rootHash, _, _ := tree.Commit(false)
 		zdb.Commit(rootHash, true)
