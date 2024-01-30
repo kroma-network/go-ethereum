@@ -756,7 +756,10 @@ func (s *BlockChainAPI) GetProof(ctx context.Context, address common.Address, st
 }
 
 func (s *BlockChainAPI) newStateTrie(id *trie.ID, db *trie.Database) (state.Trie, error) {
-	if s.b.ChainConfig().Zktrie {
+	if db.IsZkStateTrie() {
+		return trie.NewZkMerkleStateTrie(id.Root, db)
+	}
+	if db.IsZk() {
 		return trie.NewZkTrie(id.Root, db)
 	}
 	return trie.NewStateTrie(id, db)

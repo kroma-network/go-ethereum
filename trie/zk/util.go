@@ -57,10 +57,7 @@ func clearNodeHash(n TreeNode) {
 	case *ParentNode:
 		node.hash = nil
 	case *LeafNode:
-		node.ValueHash = nil
 		node.hash = nil
-	case *EmptyNode:
-	case *HashNode:
 	}
 }
 
@@ -70,39 +67,34 @@ func setNodeHash(n TreeNode, hash *zkt.Hash) {
 		node.hash = hash
 	case *LeafNode:
 		node.hash = hash
-	case *EmptyNode:
-	case *HashNode:
 	}
 }
 
 func computeNodeHash(n TreeNode, handleDirtyNode func(dirtyNode TreeNode) error) (err error) {
+	if n.Hash() != nil {
+		return nil
+	}
 	switch node := n.(type) {
 	case *ParentNode:
-		if node.hash == nil {
-			for _, child := range node.Children() {
-				if err = computeNodeHash(child, handleDirtyNode); err != nil {
-					return err
-				}
+		for _, child := range node.Children() {
+			if err = computeNodeHash(child, handleDirtyNode); err != nil {
+				return err
 			}
-			node.hash, err = zkt.HashElems(node.ChildL().Hash().BigInt(), node.ChildR().Hash().BigInt())
-			if err == nil && handleDirtyNode != nil {
-				err = handleDirtyNode(node)
-			}
+		}
+		node.hash, err = zkt.HashElems(node.ChildL().Hash().BigInt(), node.ChildR().Hash().BigInt())
+		if err == nil && handleDirtyNode != nil {
+			err = handleDirtyNode(node)
 		}
 	case *LeafNode:
-		if node.ValueHash == nil {
-			node.ValueHash, err = zkt.PreHandlingElems(node.CompressedFlags, node.ValuePreimage)
+		var valueHash *zkt.Hash
+		if valueHash, err = zkt.PreHandlingElems(node.CompressedFlags, node.ValuePreimage); err == nil {
+			node.hash, err = zkt.HashElems(common.Big1, new(big.Int).SetBytes(common.ReverseBytes(node.Key)), valueHash.BigInt())
 		}
-		if node.hash == nil && err == nil {
-			node.hash, err = zkt.HashElems(common.Big1, new(big.Int).SetBytes(zkt.ReverseByteOrder(node.Key)), node.ValueHash.BigInt())
-			if err == nil && handleDirtyNode != nil {
-				err = handleDirtyNode(node)
-			}
+		if err == nil && handleDirtyNode != nil {
+			err = handleDirtyNode(node)
 		}
-	case *EmptyNode:
-	case *HashNode:
 	}
-	return
+	return err
 }
 
 func min(x, y, z int) int {

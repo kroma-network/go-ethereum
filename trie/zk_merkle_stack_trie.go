@@ -16,7 +16,7 @@ func NewZkStackTrie(writeFn NodeWriteFunc, owner common.Hash) *ZkMerkleStackTrie
 }
 
 func (z *ZkMerkleStackTrie) Update(hash []byte, value []byte) error {
-	return z.MerkleTree.Update(hash, value)
+	return z.MerkleTree.Update(common.ReverseBytes(hash), value)
 }
 
 func (z *ZkMerkleStackTrie) Commit() (h common.Hash, err error) {
