@@ -26,9 +26,14 @@ import (
 // Genesis hashes to enforce below configs on.
 var (
 	MainnetGenesisHash = common.HexToHash("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
-	HoleskyGenesisHash = common.HexToHash("0xff9006519a8ce843ac9c28549d24211420b546e12ce2d170c77a8cca7964f23d")
+	HoleskyGenesisHash = common.HexToHash("0xb5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4")
 	SepoliaGenesisHash = common.HexToHash("0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9")
 	GoerliGenesisHash  = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
+)
+
+const (
+	KromaMainnetChainID = 255
+	KromaSepoliaChainID = 2358
 )
 
 func newUint64(val uint64) *uint64 { return &val }
@@ -80,8 +85,7 @@ var (
 		TerminalTotalDifficulty:       big.NewInt(0),
 		TerminalTotalDifficultyPassed: true,
 		MergeNetsplitBlock:            nil,
-		ShanghaiTime:                  newUint64(1694790240),
-		CancunTime:                    newUint64(2000000000),
+		ShanghaiTime:                  newUint64(1696000704),
 		Ethash:                        new(EthashConfig),
 	}
 	// SepoliaChainConfig contains the chain parameters to run a node on the Sepolia test network.
@@ -215,7 +219,7 @@ var (
 	}
 
 	// TestChainConfig contains every protocol change (EIPs) introduced
-	// and accepted by the Ethereum core developers for testing proposes.
+	// and accepted by the Ethereum core developers for testing purposes.
 	TestChainConfig = &ChainConfig{
 		ChainID:                       big.NewInt(1),
 		HomesteadBlock:                big.NewInt(0),
@@ -275,11 +279,12 @@ var (
 	}
 	TestRules = TestChainConfig.Rules(new(big.Int), false, 0)
 
-	// This is a Kroma chain config based on the clique config
+	// This is a Kroma chain config with bedrock starting a block 5, introduced for historical endpoint testing, largely based on the clique config
 	KromaTestConfig = func() *ChainConfig {
 		conf := *AllCliqueProtocolChanges // copy the config
 		conf.Clique = nil
 		conf.TerminalTotalDifficultyPassed = true
+		conf.BedrockBlock = big.NewInt(5)
 		conf.Kroma = &KromaConfig{EIP1559Elasticity: 50, EIP1559Denominator: 10}
 		return &conf
 	}()
@@ -328,6 +333,10 @@ type ChainConfig struct {
 	CancunTime   *uint64 `json:"cancunTime,omitempty"`   // Cancun switch time (nil = no fork, 0 = already on cancun)
 	PragueTime   *uint64 `json:"pragueTime,omitempty"`   // Prague switch time (nil = no fork, 0 = already on prague)
 	VerkleTime   *uint64 `json:"verkleTime,omitempty"`   // Verkle switch time (nil = no fork, 0 = already on verkle)
+
+	BedrockBlock *big.Int `json:"bedrockBlock,omitempty"` // Bedrock switch block (nil = no fork, 0 = already on optimism bedrock)
+	RegolithTime *uint64  `json:"regolithTime,omitempty"` // Regolith switch time (nil = no fork, 0 = already on optimism regolith)
+	CanyonTime   *uint64  `json:"canyonTime,omitempty"`   // Canyon switch time (nil = no fork, 0 = already on optimism canyon)
 
 	// TerminalTotalDifficulty is the amount of total difficulty reached by
 	// the network that triggers the consensus upgrade.
@@ -379,8 +388,9 @@ func (c *CliqueConfig) String() string {
 
 // KromaConfig is the kroma config.
 type KromaConfig struct {
-	EIP1559Elasticity  uint64 `json:"eip1559Elasticity"`
-	EIP1559Denominator uint64 `json:"eip1559Denominator"`
+	EIP1559Elasticity        uint64 `json:"eip1559Elasticity"`
+	EIP1559Denominator       uint64 `json:"eip1559Denominator"`
+	EIP1559DenominatorCanyon uint64 `json:"eip1559DenominatorCanyon"`
 }
 
 // String implements the stringer interface, returning the kroma fee config details.
@@ -478,6 +488,12 @@ func (c *ChainConfig) Description() string {
 	}
 	if c.VerkleTime != nil {
 		banner += fmt.Sprintf(" - Verkle:                      @%-10v\n", *c.VerkleTime)
+	}
+	if c.RegolithTime != nil {
+		banner += fmt.Sprintf(" - Regolith:                    @%-10v\n", *c.RegolithTime)
+	}
+	if c.CanyonTime != nil {
+		banner += fmt.Sprintf(" - Canyon:                      @%-10v\n", *c.CanyonTime)
 	}
 	return banner
 }
@@ -582,12 +598,43 @@ func (c *ChainConfig) IsVerkle(num *big.Int, time uint64) bool {
 	return c.IsLondon(num) && isTimestampForked(c.VerkleTime, time)
 }
 
-// IsKroma returns whether the node is a kroma node or not.
+// IsBedrock returns whether num is either equal to the Bedrock fork block or greater.
+func (c *ChainConfig) IsBedrock(num *big.Int) bool {
+	return isBlockForked(c.BedrockBlock, num)
+}
+
+func (c *ChainConfig) IsRegolith(time uint64) bool {
+	return isTimestampForked(c.RegolithTime, time)
+}
+
+func (c *ChainConfig) IsCanyon(time uint64) bool {
+	return isTimestampForked(c.CanyonTime, time)
+}
+
+// IsKroma returns whether the node is a kroma(based on optimism) node or not.
 func (c *ChainConfig) IsKroma() bool {
 	return c.Kroma != nil
 }
 
+// IsOptimismBedrock returns true iff this is an optimism node & bedrock is active
+func (c *ChainConfig) IsOptimismBedrock(num *big.Int) bool {
+	return c.IsKroma() && c.IsBedrock(num)
+}
+
+func (c *ChainConfig) IsOptimismRegolith(time uint64) bool {
+	return c.IsKroma() && c.IsRegolith(time)
+}
+func (c *ChainConfig) IsOptimismCanyon(time uint64) bool {
+	return c.IsKroma() && c.IsCanyon(time)
+}
+
+// IsOptimismPreBedrock returns true iff this is an optimism node & bedrock is not yet active
+func (c *ChainConfig) IsOptimismPreBedrock(num *big.Int) bool {
+	return c.IsKroma() && !c.IsBedrock(num)
+}
+
 // [Scroll: START]
+
 // IsValidTxCount returns whether the given block's transaction count is below the limit.
 func (c *ChainConfig) IsValidTxCount(count int) bool {
 	return c.MaxTxPerBlock == nil || *c.MaxTxPerBlock == 0 || count <= *c.MaxTxPerBlock
@@ -765,8 +812,12 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, headNumber *big.Int, 
 }
 
 // BaseFeeChangeDenominator bounds the amount the base fee can change between blocks.
-func (c *ChainConfig) BaseFeeChangeDenominator() uint64 {
+// The time parameters is the timestamp of the block to determine if Canyon is active or not
+func (c *ChainConfig) BaseFeeChangeDenominator(time uint64) uint64 {
 	if c.Kroma != nil {
+		if c.IsCanyon(time) {
+			return c.Kroma.EIP1559DenominatorCanyon
+		}
 		return c.Kroma.EIP1559Denominator
 	}
 	return DefaultBaseFeeChangeDenominator
@@ -913,6 +964,8 @@ type Rules struct {
 	IsBerlin, IsLondon                                      bool
 	IsMerge, IsShanghai, IsCancun, IsPrague                 bool
 	IsVerkle                                                bool
+	IsOptimismBedrock, IsOptimismRegolith                   bool
+	IsOptimismCanyon                                        bool
 }
 
 // Rules ensures c's ChainID is not nil.
@@ -938,6 +991,10 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool, timestamp uint64) Rules 
 		IsCancun:         c.IsCancun(num, timestamp),
 		IsPrague:         c.IsPrague(num, timestamp),
 		IsVerkle:         c.IsVerkle(num, timestamp),
+		// Optimism
+		IsOptimismBedrock:  c.IsOptimismBedrock(num),
+		IsOptimismRegolith: c.IsOptimismRegolith(timestamp),
+		IsOptimismCanyon:   c.IsOptimismCanyon(timestamp),
 	}
 }
 

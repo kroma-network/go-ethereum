@@ -49,3 +49,5 @@ profile.cov
 
 **/yarn-error.log
 logs/
+
+tests/spec-tests/

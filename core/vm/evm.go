@@ -72,14 +72,14 @@ type BlockContext struct {
 	FeeDistributionFunc types.FeeDistributionFunc
 
 	// Block information
-	Coinbase      common.Address // Provides information for COINBASE
-	GasLimit      uint64         // Provides information for GASLIMIT
-	BlockNumber   *big.Int       // Provides information for NUMBER
-	Time          uint64         // Provides information for TIME
-	Difficulty    *big.Int       // Provides information for DIFFICULTY
-	BaseFee       *big.Int       // Provides information for BASEFEE
-	Random        *common.Hash   // Provides information for PREVRANDAO
-	ExcessBlobGas *uint64        // ExcessBlobGas field in the header, needed to compute the data
+	Coinbase    common.Address // Provides information for COINBASE
+	GasLimit    uint64         // Provides information for GASLIMIT
+	BlockNumber *big.Int       // Provides information for NUMBER
+	Time        uint64         // Provides information for TIME
+	Difficulty  *big.Int       // Provides information for DIFFICULTY
+	BaseFee     *big.Int       // Provides information for BASEFEE
+	BlobBaseFee *big.Int       // Provides information for BLOBBASEFEE
+	Random      *common.Hash   // Provides information for PREVRANDAO
 }
 
 // TxContext provides the EVM with information about a transaction.
@@ -90,7 +90,7 @@ type TxContext struct {
 	// [Scroll: START]
 	To *common.Address // Provides information for trace
 	// [Scroll: END]
-	GasPrice   *big.Int      // Provides information for GASPRICEBlobHashes []common.Hash  // Provides information for BLOBHASH
+	GasPrice   *big.Int      // Provides information for GASPRICE
 	BlobHashes []common.Hash // Provides information for BLOBHASH
 }
 

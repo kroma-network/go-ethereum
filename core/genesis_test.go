@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -232,7 +233,7 @@ func TestReadWriteGenesisAlloc(t *testing.T) {
 			{2}: {Balance: big.NewInt(2), Storage: map[common.Hash]common.Hash{{2}: {2}}},
 		}
 		// [Scroll: START]
-		hash, _ = alloc.deriveHash(nil)
+		hash, _ = alloc.hash(nil)
 		// [Scroll: END]
 	)
 	blob, _ := json.Marshal(alloc)
