@@ -78,7 +78,7 @@ func makeGasSStoreFunc(clearingRefund uint64) gasFunc {
 		if original == value {
 			if original == (common.Hash{}) { // reset to original inexistent slot (2.2.2.1)
 				// EIP 2200 Original clause:
-				//evm.StateDB.AddRefund(params.SstoreSetGasEIP2200 - params.SloadGasEIP2200)
+				// evm.StateDB.AddRefund(params.SstoreSetGasEIP2200 - params.SloadGasEIP2200)
 				evm.StateDB.AddRefund(params.SstoreSetGasEIP2200 - params.WarmStorageReadCostEIP2929)
 			} else { // reset to original existing slot (2.2.2.2)
 				// EIP 2200 Original clause:
@@ -90,7 +90,7 @@ func makeGasSStoreFunc(clearingRefund uint64) gasFunc {
 			}
 		}
 		// EIP-2200 original clause:
-		//return params.SloadGasEIP2200, nil // dirty update (2.2)
+		// return params.SloadGasEIP2200, nil // dirty update (2.2)
 		return cost + params.WarmStorageReadCostEIP2929, nil // dirty update (2.2)
 	}
 }
@@ -196,13 +196,9 @@ var (
 	gasDelegateCallEIP2929 = makeCallVariantGasCallEIP2929(gasDelegateCall)
 	gasStaticCallEIP2929   = makeCallVariantGasCallEIP2929(gasStaticCall)
 	gasCallCodeEIP2929     = makeCallVariantGasCallEIP2929(gasCallCode)
-	// [Scroll: START]
-	/*
-		gasSelfdestructEIP2929 = makeSelfdestructGasFn(true)
-		// gasSelfdestructEIP3529 implements the changes in EIP-2539 (no refunds)
-		gasSelfdestructEIP3529 = makeSelfdestructGasFn(false)
-	*/
-	// [Scroll: END]
+	gasSelfdestructEIP2929 = makeSelfdestructGasFn(true)
+	// gasSelfdestructEIP3529 implements the changes in EIP-2539 (no refunds)
+	gasSelfdestructEIP3529 = makeSelfdestructGasFn(false)
 
 	// gasSStoreEIP2929 implements gas cost for SSTORE according to EIP-2929
 	//
@@ -214,7 +210,7 @@ var (
 	// SLOAD_GAS 	800 	= WARM_STORAGE_READ_COST
 	// SSTORE_RESET_GAS 	5000 	5000 - COLD_SLOAD_COST
 	//
-	//The other parameters defined in EIP 2200 are unchanged.
+	// The other parameters defined in EIP 2200 are unchanged.
 	// see gasSStoreEIP2200(...) in core/vm/gas_table.go for more info about how EIP 2200 is specified
 	gasSStoreEIP2929 = makeGasSStoreFunc(params.SstoreClearsScheduleRefundEIP2200)
 
@@ -223,9 +219,6 @@ var (
 	gasSStoreEIP3529 = makeGasSStoreFunc(params.SstoreClearsScheduleRefundEIP3529)
 )
 
-// [Scroll: START]
-/*
-SELFDESTRUCT is disabled in Kroma
 // makeSelfdestructGasFn can create the selfdestruct dynamic gas function for EIP-2929 and EIP-2539
 func makeSelfdestructGasFn(refundsEnabled bool) gasFunc {
 	gasFunc := func(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
@@ -249,5 +242,3 @@ func makeSelfdestructGasFn(refundsEnabled bool) gasFunc {
 	}
 	return gasFunc
 }
-*/
-// [Scroll: END]

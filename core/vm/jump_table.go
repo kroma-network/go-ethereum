@@ -82,7 +82,8 @@ func validate(jt JumpTable) JumpTable {
 
 func newCancunInstructionSet() JumpTable {
 	instructionSet := newShanghaiInstructionSet()
-	enable4844(&instructionSet) // EIP-4844 (DATAHASH opcode)
+	enable4844(&instructionSet) // EIP-4844 (BLOBHASH opcode)
+	enable7516(&instructionSet) // EIP-7516 (BLOBBASEFEE opcode)
 	enable1153(&instructionSet) // EIP-1153 "Transient Storage"
 	enable5656(&instructionSet) // EIP-5656 (MCOPY opcode)
 	enable6780(&instructionSet) // EIP-6780 SELFDESTRUCT only in same transaction
@@ -1045,19 +1046,12 @@ func newFrontierInstructionSet() JumpTable {
 			maxStack:   maxStack(2, 0),
 			memorySize: memoryReturn,
 		},
-		// [Scroll: START]
-		/*
-			NOTE: SELFDESTRUCT is disabled in Kroma. This is not meant to disable
-			forever this opcode. Once zkevm spec can cover it, we need to re-enable it.
-			SELFDESTRUCT: {
-				execute:    opSelfdestruct,
-				dynamicGas: gasSelfdestruct,
-				minStack:   minStack(1, 0),
-				maxStack:   maxStack(1, 0),
-			},
-		*/
-		SELFDESTRUCT: nil,
-		// [Scroll: END]
+		SELFDESTRUCT: {
+			execute:    opSelfdestruct,
+			dynamicGas: gasSelfdestruct,
+			minStack:   minStack(1, 0),
+			maxStack:   maxStack(1, 0),
+		},
 	}
 
 	// Fill all unassigned slots with opUndefined.

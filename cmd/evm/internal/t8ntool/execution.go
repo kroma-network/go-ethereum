@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"math/big"
 
+	"golang.org/x/crypto/sha3"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
@@ -36,7 +38,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
-	"golang.org/x/crypto/sha3"
 )
 
 type Prestate struct {
@@ -59,7 +60,7 @@ type ExecutionResult struct {
 	BaseFee              *math.HexOrDecimal256 `json:"currentBaseFee,omitempty"`
 	WithdrawalsRoot      *common.Hash          `json:"withdrawalsRoot,omitempty"`
 	CurrentExcessBlobGas *math.HexOrDecimal64  `json:"currentExcessBlobGas,omitempty"`
-	CurrentBlobGasUsed   *math.HexOrDecimal64  `json:"currentBlobGasUsed,omitempty"`
+	CurrentBlobGasUsed   *math.HexOrDecimal64  `json:"blobGasUsed,omitempty"`
 }
 
 type ommer struct {
@@ -85,7 +86,7 @@ type stEnv struct {
 	Withdrawals           []*types.Withdrawal                 `json:"withdrawals,omitempty"`
 	BaseFee               *big.Int                            `json:"currentBaseFee,omitempty"`
 	ParentUncleHash       common.Hash                         `json:"parentUncleHash"`
-	ExcessBlobGas         *uint64                             `json:"excessBlobGas,omitempty"`
+	ExcessBlobGas         *uint64                             `json:"currentExcessBlobGas,omitempty"`
 	ParentExcessBlobGas   *uint64                             `json:"parentExcessBlobGas,omitempty"`
 	ParentBlobGasUsed     *uint64                             `json:"parentBlobGasUsed,omitempty"`
 	ParentBeaconBlockRoot *common.Hash                        `json:"parentBeaconBlockRoot"`
@@ -163,17 +164,19 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 		rnd := common.BigToHash(pre.Env.Random)
 		vmContext.Random = &rnd
 	}
-	// If excessBlobGas is defined, add it to the vmContext.
+	// Calculate the BlobBaseFee
+	var excessBlobGas uint64
 	if pre.Env.ExcessBlobGas != nil {
-		vmContext.ExcessBlobGas = pre.Env.ExcessBlobGas
+		excessBlobGas := *pre.Env.ExcessBlobGas
+		vmContext.BlobBaseFee = eip4844.CalcBlobFee(excessBlobGas)
 	} else {
 		// If it is not explicitly defined, but we have the parent values, we try
 		// to calculate it ourselves.
 		parentExcessBlobGas := pre.Env.ParentExcessBlobGas
 		parentBlobGasUsed := pre.Env.ParentBlobGasUsed
 		if parentExcessBlobGas != nil && parentBlobGasUsed != nil {
-			excessBlobGas := eip4844.CalcExcessBlobGas(*parentExcessBlobGas, *parentBlobGasUsed)
-			vmContext.ExcessBlobGas = &excessBlobGas
+			excessBlobGas = eip4844.CalcExcessBlobGas(*parentExcessBlobGas, *parentBlobGasUsed)
+			vmContext.BlobBaseFee = eip4844.CalcBlobFee(excessBlobGas)
 		}
 	}
 	// If DAO is supported/enabled, we need to handle it here. In geth 'proper', it's
@@ -189,11 +192,14 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 	}
 	var blobGasUsed uint64
 	for i, tx := range txs {
-		if tx.Type() == types.BlobTxType && vmContext.ExcessBlobGas == nil {
+		if tx.Type() == types.BlobTxType && vmContext.BlobBaseFee == nil {
 			errMsg := "blob tx used but field env.ExcessBlobGas missing"
 			log.Warn("rejected tx", "index", i, "hash", tx.Hash(), "error", errMsg)
 			rejectedTxs = append(rejectedTxs, &rejectedTx{i, errMsg})
 			continue
+		}
+		if tx.Type() == types.BlobTxType {
+			blobGasUsed += uint64(params.BlobTxBlobGasPerBlob * len(tx.BlobHashes()))
 		}
 		msg, err := core.TransactionToMessage(tx, signer, pre.Env.BaseFee)
 		if err != nil {
@@ -224,9 +230,6 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 			gaspool.SetGas(prevGas)
 			continue
 		}
-		if tx.Type() == types.BlobTxType {
-			blobGasUsed += params.BlobTxBlobGasPerBlob
-		}
 		includedTxs = append(includedTxs, tx)
 		if hashError != nil {
 			return nil, nil, NewError(ErrorMissingBlockhash, hashError)
@@ -253,15 +256,9 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 			receipt.TxHash = tx.Hash()
 			receipt.GasUsed = msgResult.UsedGas
 
-			nonce := tx.Nonce()
-			if msg.IsDepositTx {
-				nonce = statedb.GetNonce(msg.From)
-				receipt.DepositNonce = &nonce
-			}
-
 			// If the transaction created a contract, store the creation address in the receipt.
 			if msg.To == nil {
-				receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, nonce)
+				receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce())
 			}
 
 			// Set the receipt logs and create the bloom filter.
@@ -328,8 +325,8 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 		h := types.DeriveSha(types.Withdrawals(pre.Env.Withdrawals), trie.NewStackTrie(nil))
 		execRs.WithdrawalsRoot = &h
 	}
-	if vmContext.ExcessBlobGas != nil {
-		execRs.CurrentExcessBlobGas = (*math.HexOrDecimal64)(vmContext.ExcessBlobGas)
+	if vmContext.BlobBaseFee != nil {
+		execRs.CurrentExcessBlobGas = (*math.HexOrDecimal64)(&excessBlobGas)
 		execRs.CurrentBlobGasUsed = (*math.HexOrDecimal64)(&blobGasUsed)
 	}
 	// Re-create statedb instance with new root upon the updated database

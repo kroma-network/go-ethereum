@@ -88,11 +88,6 @@ func (b *BlockGen) SetPoS() {
 	b.header.Difficulty = new(big.Int)
 }
 
-// SetBlobGas sets the data gas used by the blob in the generated block.
-func (b *BlockGen) SetBlobGas(blobGasUsed uint64) {
-	b.header.BlobGasUsed = &blobGasUsed
-}
-
 // addTx adds a transaction to the generated block. If no coinbase has
 // been set, the block's coinbase is set to the zero address.
 //
@@ -111,6 +106,9 @@ func (b *BlockGen) addTx(bc *BlockChain, vmConfig vm.Config, tx *types.Transacti
 	}
 	b.txs = append(b.txs, tx)
 	b.receipts = append(b.receipts, receipt)
+	if b.header.BlobGasUsed != nil {
+		*b.header.BlobGasUsed += receipt.BlobGasUsed
+	}
 }
 
 // AddTx adds a transaction to the generated block. If no coinbase has
@@ -209,7 +207,7 @@ func (b *BlockGen) AddUncle(h *types.Header) {
 	// The gas limit and price should be derived from the parent
 	h.GasLimit = parent.GasLimit
 	if b.config.IsLondon(h.Number) {
-		h.BaseFee = eip1559.CalcBaseFee(b.config, parent)
+		h.BaseFee = eip1559.CalcBaseFee(b.config, parent, h.Time)
 		if !b.config.IsLondon(parent.Number) {
 			parentGasLimit := parent.GasLimit * b.config.ElasticityMultiplier()
 			h.GasLimit = CalcGasLimit(parentGasLimit, parentGasLimit)
@@ -393,7 +391,7 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 		Time:     time,
 	}
 	if chain.Config().IsLondon(header.Number) {
-		header.BaseFee = eip1559.CalcBaseFee(chain.Config(), parent.Header())
+		header.BaseFee = eip1559.CalcBaseFee(chain.Config(), parent.Header(), header.Time)
 		if !chain.Config().IsLondon(parent.Number()) {
 			parentGasLimit := parent.GasLimit() * chain.Config().ElasticityMultiplier()
 			header.GasLimit = CalcGasLimit(parentGasLimit, parentGasLimit)

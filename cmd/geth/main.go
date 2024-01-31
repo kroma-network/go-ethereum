@@ -69,8 +69,8 @@ var (
 		utils.SmartCardDaemonPathFlag,
 		utils.OverrideCancun,
 		utils.OverrideVerkle,
+		utils.OverrideOptimismCanyon,
 		utils.EnablePersonal,
-		utils.OverrideKroma,
 		utils.TxPoolLocalsFlag,
 		utils.TxPoolNoLocalsFlag,
 		utils.TxPoolJournalFlag,
@@ -93,7 +93,6 @@ var (
 		utils.SnapshotFlag,
 		utils.TxLookupLimitFlag,
 		utils.TransactionHistoryFlag,
-		utils.StateSchemeFlag,
 		utils.StateHistoryFlag,
 		utils.LightServeFlag,
 		utils.LightIngressFlag,
@@ -154,11 +153,13 @@ var (
 		// utils.RollupHistoricalRPCFlag
 		// utils.RollupHistoricalRPCTimeoutFlag
 		// utils.RollupDisableTxPoolGossipFlag
-		// utils.RollupHaltOnIncompatibleProtocolVersionFlag,
 		utils.RollupComputePendingBlock,
+		// [kroma unsupported]
+		// utils.RollupHaltOnIncompatibleProtocolVersionFlag,
+		// utils.RollupSuperchainUpgradesFlag,
 		utils.ExperimentalZkTrie,
 		configFileFlag,
-	}, utils.NetworkFlags, utils.DatabasePathFlags)
+	}, utils.NetworkFlags, utils.DatabaseFlags)
 
 	rpcFlags = []cli.Flag{
 		utils.HTTPEnabledFlag,
@@ -314,6 +315,9 @@ func prepare(ctx *cli.Context) {
      to 0, and discovery is disabled.
 `)
 
+	case ctx.IsSet(utils.OPNetworkFlag.Name):
+		log.Info("Starting geth on an OP network...", "network", ctx.String(utils.OPNetworkFlag.Name))
+
 	case !ctx.IsSet(utils.NetworkIdFlag.Name):
 		log.Info("Starting Geth on Ethereum mainnet...")
 	}
@@ -325,7 +329,14 @@ func prepare(ctx *cli.Context) {
 			!ctx.IsSet(utils.GoerliFlag.Name) &&
 			!ctx.IsSet(utils.DeveloperFlag.Name) {
 			// Nope, we're really on mainnet. Bump that cache up!
+			// Note: If we don't set the OPNetworkFlag and have already initialized the database, we may hit this case.
 			log.Info("Bumping default cache on mainnet", "provided", ctx.Int(utils.CacheFlag.Name), "updated", 4096)
+			ctx.Set(utils.CacheFlag.Name, strconv.Itoa(4096))
+		}
+	} else if ctx.String(utils.SyncModeFlag.Name) != "light" && !ctx.IsSet(utils.CacheFlag.Name) && ctx.IsSet(utils.OPNetworkFlag.Name) {
+		// We haven't set the cache, but may used the OP network flag we may be on an OP stack mainnet.
+		if strings.Contains(ctx.String(utils.OPNetworkFlag.Name), "mainnet") {
+			log.Info("Bumping default cache on mainnet", "provided", ctx.Int(utils.CacheFlag.Name), "updated", 4096, "network", ctx.String(utils.OPNetworkFlag.Name))
 			ctx.Set(utils.CacheFlag.Name, strconv.Itoa(4096))
 		}
 	}
