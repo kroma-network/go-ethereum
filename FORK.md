@@ -2,13 +2,16 @@
 
 ## op-geth
 
-- tag: `v1.101105.1`
-- commit: `24ae687`
+- tag: `v1.101304.1`
+- commit: `ed8e9f54`
 - differences
   - change predeployed contract address [#17](https://github.com/kroma-network/go-ethereum/pull/17).
   - remove daisy chain [#11](https://github.com/kroma-network/go-ethereum/pull/11).
   - enable tx pool sync by force [#13](https://github.com/kroma-network/go-ethereum/pull/13).
   - remove system tx related fields. (e.g, `IsSystemTx()`) [#29](https://github.com/kroma-network/go-ethereum/pull/29).
+  - update ValidatorRewardScalar to L1Block contract [#36](https://github.com/kroma-network/go-ethereum/pull/36).
+  - change transaction fee distribution logic [#36](https://github.com/kroma-network/go-ethereum/pull/36).
+  - use zktrie instead of merkle patricia trie
 
 ## scroll-geth
 

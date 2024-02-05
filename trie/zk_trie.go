@@ -26,11 +26,11 @@ import (
 	zkt "github.com/kroma-network/zktrie/types"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto/poseidon"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/trie/trienode"
 )
 
 var magicHash []byte = []byte("THIS IS THE MAGIC INDEX FOR ZKTRIE")
@@ -38,7 +38,7 @@ var magicHash []byte = []byte("THIS IS THE MAGIC INDEX FOR ZKTRIE")
 // wrap zktrie for trie interface
 type ZkTrie struct {
 	*zktrie.ZkTrie
-	db *ZktrieDatabase
+	db *Database
 }
 
 func init() {
@@ -59,7 +59,7 @@ func IsMagicHash(k []byte) bool {
 // NewZkTrie creates a trie
 // NewZkTrie bypasses all the buffer mechanism in *Database, it directly uses the
 // underlying diskdb
-func NewZkTrie(root common.Hash, db *ZktrieDatabase) (*ZkTrie, error) {
+func NewZkTrie(root common.Hash, db *Database) (*ZkTrie, error) {
 	tr, err := zktrie.NewZkTrie(*zkt.NewByte32FromBytes(root.Bytes()), db)
 	if err != nil {
 		return nil, err
@@ -67,22 +67,31 @@ func NewZkTrie(root common.Hash, db *ZktrieDatabase) (*ZkTrie, error) {
 	return &ZkTrie{tr, db}, nil
 }
 
-// Get returns the value for key stored in the trie.
-// The value bytes must not be modified by the caller.
-func (t *ZkTrie) Get(key []byte) []byte {
-	sanityCheckByte32Key(key)
-	res, err := t.TryGet(key)
+func (t *ZkTrie) MustGet(key []byte) []byte {
+	b, err := t.Get(key)
 	if err != nil {
 		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
 	}
-	return res
+	return b
+}
+
+// Get returns the value for key stored in the trie.
+// The value bytes must not be modified by the caller.
+func (t *ZkTrie) Get(key []byte) ([]byte, error) {
+	sanityCheckByte32Key(key)
+	return t.TryGet(key)
+}
+
+func (t *ZkTrie) GetStorage(_ common.Address, key []byte) ([]byte, error) {
+	sanityCheckByte32Key(key)
+	return t.TryGet(key)
 }
 
 // [Scroll: START]
 // NOTE(chokobole): This part is different from scroll
-// TryUpdateAccount will abstract the write of an account to the
+// UpdateAccount will abstract the write of an account to the
 // ZkTrie.
-func (t *ZkTrie) TryUpdateAccount(address common.Address, acc *types.StateAccount) error {
+func (t *ZkTrie) UpdateAccount(address common.Address, acc *types.StateAccount) error {
 	sanityCheckByte32Key(address.Bytes())
 	value, flag := acc.MarshalFields()
 	return t.ZkTrie.TryUpdate(address.Bytes(), flag, value)
@@ -90,14 +99,22 @@ func (t *ZkTrie) TryUpdateAccount(address common.Address, acc *types.StateAccoun
 
 // [Scroll: END]
 
+func (t *ZkTrie) UpdateContractCode(_ common.Address, _ common.Hash, _ []byte) error {
+	return nil
+}
+
 // Update associates key with value in the trie. Subsequent calls to
 // Get will return value. If value has length zero, any existing value
 // is deleted from the trie and calls to Get will return nil.
 //
 // The value bytes must not be modified by the caller while they are
 // stored in the trie.
-func (t *ZkTrie) Update(key, value []byte) {
-	if err := t.TryUpdate(key, value); err != nil {
+func (t *ZkTrie) Update(key, value []byte) error {
+	return t.TryUpdate(key, value)
+}
+
+func (t *ZkTrie) MustUpdate(k, v []byte) {
+	if err := t.TryUpdate(k, v); err != nil {
 		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
 	}
 }
@@ -105,6 +122,11 @@ func (t *ZkTrie) Update(key, value []byte) {
 // NOTE: value is restricted to length of bytes32.
 // we override the underlying zktrie's TryUpdate method
 func (t *ZkTrie) TryUpdate(key, value []byte) error {
+	sanityCheckByte32Key(key)
+	return t.ZkTrie.TryUpdate(key, 1, []zkt.Byte32{*zkt.NewByte32FromBytes(value)})
+}
+
+func (t *ZkTrie) UpdateStorage(_ common.Address, key, value []byte) error {
 	sanityCheckByte32Key(key)
 	return t.ZkTrie.TryUpdate(key, 1, []zkt.Byte32{*zkt.NewByte32FromBytes(value)})
 }
@@ -117,6 +139,14 @@ func (t *ZkTrie) Delete(key []byte) {
 	}
 }
 
+func (t *ZkTrie) MustDelete(key []byte) { t.Delete(key) }
+
+// Delete removes any existing value for key from the trie.
+func (t *ZkTrie) DeleteStorage(_ common.Address, key []byte) error {
+	sanityCheckByte32Key(key)
+	return t.TryDelete(key)
+}
+
 // GetKey returns the preimage of a hashed key that was
 // previously used to store a value.
 func (t *ZkTrie) GetKey(kHashBytes []byte) []byte {
@@ -126,10 +156,10 @@ func (t *ZkTrie) GetKey(kHashBytes []byte) []byte {
 		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
 	}
 
-	if t.db.db.preimages == nil {
+	if t.db.preimages == nil {
 		return nil
 	}
-	return t.db.db.preimages.preimage(common.BytesToHash(k.Bytes()))
+	return t.db.preimages.preimage(common.BytesToHash(k.Bytes()))
 }
 
 // Commit writes all nodes and the secure hash pre-images to the trie's database.
@@ -137,16 +167,10 @@ func (t *ZkTrie) GetKey(kHashBytes []byte) []byte {
 //
 // Committing flushes nodes from memory. Subsequent Get calls will load nodes
 // from the database.
-func (t *ZkTrie) Commit(bool) (common.Hash, *NodeSet) {
+func (t *ZkTrie) Commit(bool) (common.Hash, *trienode.NodeSet, error) {
 	// in current implementation, every update of trie already writes into database
 	// so Commit does nothing
-	node, err := t.Tree().GetNode(t.Tree().Root())
-	if err != nil {
-		panic(err)
-	}
-
-	rawdb.WriteLegacyTrieNode(t.db.db.diskdb, t.Hash(), node.Value())
-	return t.Hash(), nil
+	return t.Hash(), nil, nil
 }
 
 // Hash returns the root hash of ZkTrie. It does not write to the
@@ -164,9 +188,17 @@ func (t *ZkTrie) Copy() *ZkTrie {
 
 // NodeIterator returns an iterator that returns nodes of the underlying trie. Iteration
 // starts at the key after the given start key.
-func (t *ZkTrie) NodeIterator(start []byte) NodeIterator {
-	/// FIXME
-	panic("not implemented")
+func (t *ZkTrie) NodeIterator(start []byte) (NodeIterator, error) {
+	nodeBlobFromTree, nodeBlobToIteratorNode := zktrieNodeBlobFunctions(t.ZkTrie)
+	return newMerkleTreeIterator(t.Hash(), nodeBlobFromTree, nodeBlobToIteratorNode, start), nil
+}
+
+func (t *ZkTrie) MustNodeIterator(start []byte) NodeIterator {
+	it, err := t.NodeIterator(start)
+	if err != nil {
+		panic(err)
+	}
+	return it
 }
 
 // hashKey returns the hash of key as an ephemeral buffer.
@@ -193,8 +225,8 @@ func (t *ZkTrie) NodeIterator(start []byte) NodeIterator {
 // If the trie does not contain a value for key, the returned proof contains all
 // nodes of the longest existing prefix of the key (at least the root node), ending
 // with the node that proves the absence of the key.
-func (t *ZkTrie) Prove(key []byte, fromLevel uint, proofDb ethdb.KeyValueWriter) error {
-	err := t.ZkTrie.Prove(key, fromLevel, func(n *zktrie.Node) error {
+func (t *ZkTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {
+	err := t.ZkTrie.Prove(key, 0, func(n *zktrie.Node) error {
 		nodeHash, err := n.NodeHash()
 		if err != nil {
 			return err
@@ -254,11 +286,11 @@ func VerifyProofSMT(rootHash common.Hash, key []byte, proofDb ethdb.KeyValueRead
 
 // [Scroll: START]
 // NOTE(chokobole): This part is different from scroll
-func (t *ZkTrie) TryDeleteAccount(address common.Address) error {
+func (t *ZkTrie) DeleteAccount(address common.Address) error {
 	return t.TryDelete(address.Bytes())
 }
 
-func (t *ZkTrie) TryGetAccount(address common.Address) (*types.StateAccount, error) {
+func (t *ZkTrie) GetAccount(address common.Address) (*types.StateAccount, error) {
 	res, err := t.TryGet(address.Bytes())
 	if res == nil || err != nil {
 		return nil, err

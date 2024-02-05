@@ -26,9 +26,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/holiman/uint256"
-
 	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/holiman/uint256"
 )
 
 type testEncoder struct {
@@ -397,7 +396,7 @@ var encTests = []encTest{
 	{val: &struct{ TE testEncoder }{testEncoder{errors.New("test error")}}, error: "test error"},
 
 	// Verify the error for non-addressable non-pointer Encoder.
-	{val: testEncoder{}, error: "rlp: unadressable value of type rlp.testEncoder, EncodeRLP is pointer method"},
+	{val: testEncoder{}, error: "rlp: unaddressable value of type rlp.testEncoder, EncodeRLP is pointer method"},
 
 	// Verify Encoder takes precedence over []byte.
 	{val: []byteEncoder{0, 1, 2, 3, 4}, output: "C5C0C0C0C0C0"},

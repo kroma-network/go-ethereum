@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
@@ -44,6 +45,9 @@ type Config struct {
 	Debug       bool
 	EVMConfig   vm.Config
 	BaseFee     *big.Int
+	BlobBaseFee *big.Int
+	BlobHashes  []common.Hash
+	Random      *common.Hash
 
 	State     *state.StateDB
 	GetHashFn func(n uint64) common.Hash
@@ -58,7 +62,6 @@ func setDefaults(cfg *Config) {
 			DAOForkBlock:        new(big.Int),
 			DAOForkSupport:      false,
 			EIP150Block:         new(big.Int),
-			EIP150Hash:          common.Hash{},
 			EIP155Block:         new(big.Int),
 			EIP158Block:         new(big.Int),
 			ByzantiumBlock:      new(big.Int),
@@ -94,6 +97,9 @@ func setDefaults(cfg *Config) {
 	if cfg.BaseFee == nil {
 		cfg.BaseFee = big.NewInt(params.InitialBaseFee)
 	}
+	if cfg.BlobBaseFee == nil {
+		cfg.BlobBaseFee = new(big.Int)
+	}
 }
 
 // Execute executes the code using the input as call data during the execution.
@@ -110,7 +116,7 @@ func Execute(code, input []byte, cfg *Config) ([]byte, *state.StateDB, error) {
 	if cfg.State == nil {
 		// [Scroll: START]
 		// NOTE(chokobole): This part is different from scroll
-		cfg.State, _ = state.New(common.Hash{}, state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), &trie.Config{
+		cfg.State, _ = state.New(types.EmptyRootHash, state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), &trie.Config{
 			Zktrie: cfg.ChainConfig.Zktrie,
 		}), nil)
 		// [Scroll: END]
@@ -147,7 +153,7 @@ func Create(input []byte, cfg *Config) ([]byte, common.Address, uint64, error) {
 	setDefaults(cfg)
 
 	if cfg.State == nil {
-		cfg.State, _ = state.New(common.Hash{}, state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(),
+		cfg.State, _ = state.New(types.EmptyRootHash, state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(),
 			// [Scroll: START]
 			&trie.Config{
 				Zktrie: cfg.ChainConfig.Zktrie,

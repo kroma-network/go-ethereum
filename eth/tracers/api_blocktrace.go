@@ -106,7 +106,7 @@ func (api *API) createTraceEnv(ctx context.Context, config *TraceConfig, block *
 	env := &traceEnv{
 		config:   config,
 		coinbase: coinbase,
-		signer:   types.MakeSigner(api.backend.ChainConfig(), block.Number()),
+		signer:   types.MakeSigner(api.backend.ChainConfig(), block.Number(), block.Time()),
 		state:    statedb,
 		blockCtx: core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil, api.backend.ChainConfig(), statedb),
 		StorageTrace: &types.StorageTrace{
@@ -227,7 +227,7 @@ func (api *API) getTxResult(env *traceEnv, state *state.StateDB, index int, bloc
 
 	tracer := vm.NewStructLogger(env.config.LogConfig)
 	// Run the transaction with tracing enabled.
-	vmenv := vm.NewEVM(env.blockCtx, core.NewEVMTxContext(msg), state, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true})
+	vmenv := vm.NewEVM(env.blockCtx, core.NewEVMTxContext(msg), state, api.backend.ChainConfig(), vm.Config{Tracer: tracer, NoBaseFee: true})
 
 	// Call SetTxContext to clear out the statedb access list
 	state.SetTxContext(txctx.TxHash, txctx.TxIndex)
@@ -339,7 +339,7 @@ func (api *API) fillBlockTrace(env *traceEnv, block *types.Block) (*types.BlockT
 	statedb := env.state
 	txs := make([]*types.TransactionData, block.Transactions().Len())
 	for i, tx := range block.Transactions() {
-		txs[i] = types.NewTransactionData(tx, block.NumberU64(), api.backend.ChainConfig(), block.BaseFee())
+		txs[i] = types.NewTransactionData(tx, block.NumberU64(), api.backend.ChainConfig(), block.BaseFee(), block.Time())
 	}
 	blockTrace := &types.BlockTrace{
 		ChainID: api.backend.ChainConfig().ChainID.Uint64(),
