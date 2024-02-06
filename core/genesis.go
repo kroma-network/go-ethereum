@@ -311,14 +311,20 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 			// 	// Apply Base Goerli regolith time
 			// 	config.RegolithTime = &params.BaseGoerliRegolithTime
 			// }
-			// TODO(pangssu): need to hardcode overrides for each chain. (kroma mainnet, kroma sepolia, devnet)
 
-			// NOTE: kroma always post-regolith
+			// [Kroma: START]
 			zero := uint64(0)
 			if config.IsKroma() {
+				// NOTE: kroma always post-regolith
 				config.BedrockBlock = new(big.Int).SetUint64(zero)
 				config.RegolithTime = &zero
+				// Canyon upgrade
+				canyonTime := &params.UpgradeConfigs[config.ChainID.Uint64()].CanyonTime
+				config.CanyonTime = canyonTime
+				config.ShanghaiTime = canyonTime
+				config.Kroma.EIP1559DenominatorCanyon = 250
 			}
+			// [Kroma: END]
 			if overrides != nil && overrides.OverrideCancun != nil {
 				config.CancunTime = overrides.OverrideCancun
 			}
@@ -333,12 +339,14 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 				}
 			}
 
+			// [Kroma: START]
 			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxTxs != nil {
 				config.MaxTxPerBlock = overrides.CircuitParams.MaxTxs
 			}
 			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxCalldata != nil {
 				config.MaxTxPayloadBytesPerBlock = overrides.CircuitParams.MaxCalldata
 			}
+			// [Kroma: END]
 		}
 	}
 	// Just commit the new block if there is no stored genesis block.
