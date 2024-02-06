@@ -34,6 +34,7 @@ var (
 const (
 	KromaMainnetChainID = 255
 	KromaSepoliaChainID = 2358
+	KromaDevnetChainID  = 7791
 )
 
 func newUint64(val uint64) *uint64 { return &val }
