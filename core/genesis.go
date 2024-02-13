@@ -313,16 +313,21 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 			// }
 
 			// [Kroma: START]
-			zero := uint64(0)
 			if config.IsKroma() {
+				// Load the chain-config for the given chain id, and overrides it if it exists.
+				if config.ChainID != nil && config.ChainID.IsUint64() {
+					conf, err := params.LoadKromaChainConfig(config.ChainID.Uint64())
+					if err != nil {
+						log.Warn("failed to load chain config from registry, skipping override", "err", err, "chain_id", config.ChainID)
+					} else {
+						*config = *conf
+					}
+				}
+
 				// NOTE: kroma always post-regolith
+				zero := uint64(0)
 				config.BedrockBlock = new(big.Int).SetUint64(zero)
 				config.RegolithTime = &zero
-				// Canyon upgrade
-				canyonTime := &params.UpgradeConfigs[config.ChainID.Uint64()].CanyonTime
-				config.CanyonTime = canyonTime
-				config.ShanghaiTime = canyonTime
-				config.Kroma.EIP1559DenominatorCanyon = 250
 			}
 			// [Kroma: END]
 			if overrides != nil && overrides.OverrideCancun != nil {
