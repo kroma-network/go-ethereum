@@ -67,6 +67,29 @@ func NewZkTrie(root common.Hash, db *Database) (*ZkTrie, error) {
 	return &ZkTrie{tr, db}, nil
 }
 
+func (t *ZkTrie) TryGetNode(compactPath []byte) ([]byte, int, error) { return t.GetNode(compactPath) }
+func (t *ZkTrie) GetNode(compactPath []byte) ([]byte, int, error) {
+	originPath := compactToHex(compactPath)
+	n, err := t.Tree().GetNode(t.Tree().Root())
+	if err != nil {
+		return nil, 0, err
+	}
+	for _, p := range originPath {
+		if n.Type != zktrie.NodeTypeParent {
+			break
+		}
+		child := n.ChildL
+		if p == 1 { // right
+			child = n.ChildR
+		}
+		n, err = t.Tree().GetNode(child)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+	return n.Value(), 0, nil
+}
+
 func (t *ZkTrie) MustGet(key []byte) []byte {
 	b, err := t.Get(key)
 	if err != nil {
@@ -299,3 +322,11 @@ func (t *ZkTrie) GetAccount(address common.Address) (*types.StateAccount, error)
 }
 
 // [Scroll: END]
+
+func (t *ZkTrie) GetAccountByHash(addrHash common.Hash) (*types.StateAccount, error) {
+	res, err := t.Tree().TryGet(zkt.NewHashFromBytes(addrHash[:]))
+	if res == nil || err != nil {
+		return nil, err
+	}
+	return types.UnmarshalStateAccount(res)
+}

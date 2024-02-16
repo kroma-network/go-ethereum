@@ -27,6 +27,8 @@ They are compatible as follows
 // ZkTrie is not compatible with MerkleTrie because it always hashes keys.
 type MerkleTrie interface {
 	Hash() common.Hash
+	GetNode(path []byte) ([]byte, int, error)
+	MustGet(key []byte) []byte
 	Get(key []byte) ([]byte, error)
 	MustUpdate(key, value []byte)
 	Update(key, value []byte) error
@@ -60,9 +62,9 @@ type MerkleStackTrie interface {
 	Hash() common.Hash
 }
 
-func NewMerkleStackTrie(writeFn NodeWriteFunc, isZk bool) MerkleStackTrie {
+func NewMerkleStackTrie(writeFn NodeWriteFunc, isZk bool, zkNodeHasher zk.Hasher) MerkleStackTrie {
 	if isZk {
-		return NewZkStackTrie(writeFn)
+		return NewZkStackTrie(writeFn, zkNodeHasher)
 	}
 	return NewStackTrie(writeFn)
 }
@@ -70,7 +72,9 @@ func NewMerkleStackTrie(writeFn NodeWriteFunc, isZk bool) MerkleStackTrie {
 // MerkleStateTrie Interface to make StateTrie and ZkTrie and ZkMerkleStateTrie compatible.
 type MerkleStateTrie interface {
 	Hash() common.Hash
+	GetNode(path []byte) ([]byte, int, error)
 	MustGet(key []byte) []byte
+	GetAccountByHash(addrHash common.Hash) (*types.StateAccount, error)
 	UpdateAccount(address common.Address, account *types.StateAccount) error
 	MustUpdate(key, value []byte)
 	MustDelete(key []byte)

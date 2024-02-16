@@ -1164,7 +1164,7 @@ func getString(trie *Trie, k string) []byte {
 	return trie.MustGet([]byte(k))
 }
 
-func updateString(trie *Trie, k, v string) {
+func updateString(trie MerkleTrie, k, v string) {
 	trie.MustUpdate([]byte(k), []byte(v))
 }
 

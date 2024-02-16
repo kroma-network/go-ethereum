@@ -12,7 +12,7 @@ import (
 )
 
 // MerkleTree wraps a tree with key hashing.
-// All access operations hash the key using poseidon computeNodeHash
+// All access operations hash the key using poseidon ComputeNodeHash
 //
 // MerkleTree is not safe for concurrent use.
 type MerkleTree struct {
@@ -22,27 +22,24 @@ type MerkleTree struct {
 	// findBlobByHash is a function that reads tree blob data by [TreeNode.Hash].
 	// It exists to decode the HashNode into the original TreeNode, so it is not needed if the HashNode cannot be created (e.g, rootNode is an EmptyNode).
 	findBlobByHash func(hash []byte) ([]byte, error)
+
+	hasher Hasher
 }
 
 func NewMerkleTreeFromHash(rootHash *zkt.Hash, findBlobByHash func(hash []byte) ([]byte, error)) (*MerkleTree, error) {
 	if bytes.Equal(rootHash.Bytes(), zkt.HashZero.Bytes()) {
 		return NewEmptyMerkleTree(), nil
 	}
-	blob, err := findBlobByHash(rootHash[:])
+	rootNode, err := NewTreeNodeFromHash(rootHash, findBlobByHash)
 	if err != nil {
 		return nil, err
 	}
-	rootNode, err := NewTreeNodeFromBlob(blob)
-	if err != nil {
-		return nil, err
-	}
-	setNodeHash(rootNode, rootHash)
 	return NewMerkleTree(rootNode).WithNodeBlobFinder(findBlobByHash), nil
 }
 
 func NewEmptyMerkleTree() *MerkleTree { return NewMerkleTree(EmptyNodeValue) }
 func NewMerkleTree(rootNode TreeNode) *MerkleTree {
-	return &MerkleTree{rootNode: rootNode, maxLevels: trie.NodeKeyValidBytes * 8}
+	return (&MerkleTree{rootNode: rootNode, maxLevels: trie.NodeKeyValidBytes * 8}).WithHasher(NewHasher())
 }
 
 func (t *MerkleTree) RootNode() TreeNode { return t.rootNode }
@@ -55,6 +52,11 @@ func (t *MerkleTree) WithMaxLevels(maxLevels int) *MerkleTree {
 
 func (t *MerkleTree) WithNodeBlobFinder(findBlobByHash func(hash []byte) ([]byte, error)) *MerkleTree {
 	t.findBlobByHash = findBlobByHash
+	return t
+}
+
+func (t *MerkleTree) WithHasher(hasher Hasher) *MerkleTree {
+	t.hasher = hasher
 	return t
 }
 
@@ -71,7 +73,7 @@ func (t *MerkleTree) Hash() []byte {
 // ComputeAllNodeHash Compute the node hash, and call the handleDirtyNode function.
 // handleDirtyNode is only called if the node hash is newly computed.
 func (t *MerkleTree) ComputeAllNodeHash(handleDirtyNode func(dirtyNode TreeNode) error) error {
-	return computeNodeHash(t.rootNode, handleDirtyNode)
+	return ComputeNodeHash(t.hasher, t.rootNode, handleDirtyNode)
 }
 
 func (t *MerkleTree) MustGet(key []byte) []byte {
@@ -359,42 +361,28 @@ func (t *MerkleTree) Prove(key []byte, writeNode func(TreeNode) error) error {
 }
 
 func (t *MerkleTree) Copy() *MerkleTree {
+	rootNode := t.rootNode
+	if parent, ok := rootNode.(*ParentNode); ok {
+		rootNode = newParentNode(right, parent.childR, left, parent.childL)
+	}
 	return &MerkleTree{
-		rootNode:       t.rootNode,
+		rootNode:       rootNode,
 		maxLevels:      t.maxLevels,
 		findBlobByHash: t.findBlobByHash,
+		hasher:         t.hasher,
 	}
 }
 
 // getChild If the child node is a hash node, decode it and update the parent node.
 func (t *MerkleTree) getChild(node *ParentNode, path byte) TreeNode {
-	if hashNode, ok := node.Child(path).(*HashNode); ok {
-		if child := t.findNodeByHash(hashNode.Hash()); child != nil {
+	if hashNode, ok := node.Child(path).(*HashNode); ok && t.findBlobByHash != nil {
+		if child, err := NewTreeNodeFromHash(hashNode.Hash(), t.findBlobByHash); err != nil {
+			log.Error("fail to resolve hash node", "hash", hashNode.Hash(), "err", err)
+		} else {
 			node.SetChild(path, child)
 		}
 	}
 	return node.Child(path)
-}
-
-// findNodeByHash finds a treeNode by hash. The TreeNode found is not always the most recent state node.
-// If compatibility mode is enabled, the intermediate state of the tree can be read from the dirtyNode.
-// The [ParentNode.Children] present in the dirtyNode must be HashNode (see copyNode).
-func (t *MerkleTree) findNodeByHash(hash *zkt.Hash) TreeNode {
-	if hash == nil || t.findBlobByHash == nil {
-		return nil
-	}
-	blob, err := t.findBlobByHash(hash[:])
-	if err != nil {
-		log.Error("fail to read blob by hash", "hash", hash, "err", err)
-		return nil
-	}
-	node, err := NewTreeNodeFromBlob(blob)
-	if err != nil {
-		log.Error("fail to decode node from blob", "hash", hash, "blob", blob, "err", err)
-		return nil
-	}
-	setNodeHash(node, hash)
-	return node
 }
 
 func (t *MerkleTree) newTreePath(key []byte) TreePath {

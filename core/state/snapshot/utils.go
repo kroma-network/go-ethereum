@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 // CheckDanglingStorage iterates the snap storage data, and verifies that all
@@ -93,12 +94,13 @@ func checkDanglingMemStorage(db ethdb.KeyValueStore) error {
 
 // CheckJournalAccount shows information about an account, from the disk layer and
 // up through the diff layers.
-func CheckJournalAccount(db ethdb.KeyValueStore, hash common.Hash) error {
+func CheckJournalAccount(db ethdb.KeyValueStore, hash common.Hash, isZk bool) error {
 	// Look up the disk layer first
+	snapshotKey := trie.HashToIteratorKey(hash, isZk)
 	baseRoot := rawdb.ReadSnapshotRoot(db)
 	fmt.Printf("Disklayer: Root: %x\n", baseRoot)
-	if data := rawdb.ReadAccountSnapshot(db, hash); data != nil {
-		account, err := types.FullAccount(data)
+	if data := rawdb.ReadAccountSnapshot(db, snapshotKey); data != nil {
+		account, err := types.NewFullAccount(data, isZk)
 		if err != nil {
 			panic(err)
 		}
@@ -109,7 +111,7 @@ func CheckJournalAccount(db ethdb.KeyValueStore, hash common.Hash) error {
 	}
 	// Check storage
 	{
-		it := rawdb.NewKeyLengthIterator(db.NewIterator(append(rawdb.SnapshotStoragePrefix, hash.Bytes()...), nil), 1+2*common.HashLength)
+		it := rawdb.NewKeyLengthIterator(db.NewIterator(append(rawdb.SnapshotStoragePrefix, snapshotKey.Bytes()...), nil), 1+2*common.HashLength)
 		fmt.Printf("\tStorage:\n")
 		for it.Next() {
 			slot := it.Key()[33:]
@@ -129,7 +131,7 @@ func CheckJournalAccount(db ethdb.KeyValueStore, hash common.Hash) error {
 		}
 		fmt.Printf("Disklayer+%d: Root: %x, parent %x\n", depth, root, pRoot)
 		if data, ok := accounts[hash]; ok {
-			account, err := types.FullAccount(data)
+			account, err := types.NewFullAccount(data, isZk)
 			if err != nil {
 				panic(err)
 			}

@@ -156,13 +156,13 @@ block is used.
 // Deprecation: this command should be deprecated once the hash-based
 // scheme is deprecated.
 func pruneState(ctx *cli.Context) error {
-	stack, _ := makeConfigNode(ctx)
+	stack, cfg := makeConfigNode(ctx)
 	defer stack.Close()
 
 	chaindb := utils.MakeChainDatabase(ctx, stack, false)
 	defer chaindb.Close()
 
-	if rawdb.ReadStateScheme(chaindb) != rawdb.HashScheme {
+	if rawdb.ReadStateScheme(chaindb, cfg.Eth.Genesis.Config.Zktrie) != rawdb.HashScheme {
 		log.Crit("Offline pruning is not required for path scheme")
 	}
 	prunerconfig := pruner.Config{
@@ -563,7 +563,7 @@ func dumpState(ctx *cli.Context) error {
 		Root common.Hash `json:"root"`
 	}{root})
 	for accIt.Next() {
-		account, err := types.FullAccount(accIt.Account())
+		account, err := types.NewFullAccount(accIt.Account(), cfg.Eth.Genesis.Config.Zktrie)
 		if err != nil {
 			return err
 		}
@@ -623,13 +623,13 @@ func checkAccount(ctx *cli.Context) error {
 	default:
 		return errors.New("malformed address or hash")
 	}
-	stack, _ := makeConfigNode(ctx)
+	stack, cfg := makeConfigNode(ctx)
 	defer stack.Close()
 	chaindb := utils.MakeChainDatabase(ctx, stack, true)
 	defer chaindb.Close()
 	start := time.Now()
 	log.Info("Checking difflayer journal", "address", addr, "hash", hash)
-	if err := snapshot.CheckJournalAccount(chaindb, hash); err != nil {
+	if err := snapshot.CheckJournalAccount(chaindb, hash, cfg.Eth.Genesis.Config.Zktrie); err != nil {
 		return err
 	}
 	log.Info("Checked the snapshot journalled storage", "time", common.PrettyDuration(time.Since(start)))

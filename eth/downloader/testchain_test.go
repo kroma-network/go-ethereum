@@ -29,9 +29,53 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 )
+
+func getTestGspec(isZk bool) *core.Genesis {
+	if isZk {
+		return testZkgspec
+	}
+	return testGspec
+}
+
+func getTestGenesis(isZk bool) *types.Block {
+	if isZk {
+		return testZkGenesis
+	}
+	return testGenesis
+}
+
+func getTestDB(isZk bool) ethdb.Database {
+	if isZk {
+		return testZkDB
+	}
+	return testDB
+}
+
+func getTestChains(isZk bool) (base, forkLightA, forkLightB, forkHeavy *testChain) {
+	if isZk {
+		return testZkChainBase, testZkChainForkLightA, testZkChainForkLightB, testZkChainForkHeavy
+	}
+	return testChainBase, testChainForkLightA, testChainForkLightB, testChainForkHeavy
+}
+
+func setTestChains(isZk bool, base, forkLightA, forkLightB, forkHeavy *testChain) {
+	if isZk {
+		testZkChainBase, testZkChainForkLightA, testZkChainForkLightB, testZkChainForkHeavy = base, forkLightA, forkLightB, forkHeavy
+	} else {
+		testChainBase, testChainForkLightA, testChainForkLightB, testChainForkHeavy = base, forkLightA, forkLightB, forkHeavy
+	}
+}
+
+func getTestBlockchain(isZk bool) (map[common.Hash]*testBlockchain, *sync.Mutex) {
+	if isZk {
+		return testZkBlockchains, &testZkBlockchainsLock
+	}
+	return testBlockchains, &testBlockchainsLock
+}
 
 // Test chain parameters.
 var (
@@ -55,25 +99,29 @@ var testChainForkLightA, testChainForkLightB, testChainForkHeavy *testChain
 
 var pregenerated bool
 
-func init() {
-	// Reduce some of the parameters to make the tester faster
+func init() { initChains(false) }
+
+func initChains(isZk bool) {
+	var testChainBase, testChainForkLightA, testChainForkLightB, testChainForkHeavy *testChain
+	testGenesis := getTestGenesis(isZk)
 	fullMaxForkAncestry = 10000
 	lightMaxForkAncestry = 10000
 	blockCacheMaxItems = 1024
 	fsHeaderSafetyNet = 256
 	fsHeaderContCheck = 500 * time.Millisecond
 
-	testChainBase = newTestChain(blockCacheMaxItems+200, testGenesis)
+	testChainBase = newTestChain(blockCacheMaxItems+200, testGenesis, isZk)
 
 	var forkLen = int(fullMaxForkAncestry + 50)
 	var wg sync.WaitGroup
 
 	// Generate the test chains to seed the peers with
 	wg.Add(3)
-	go func() { testChainForkLightA = testChainBase.makeFork(forkLen, false, 1); wg.Done() }()
-	go func() { testChainForkLightB = testChainBase.makeFork(forkLen, false, 2); wg.Done() }()
-	go func() { testChainForkHeavy = testChainBase.makeFork(forkLen, true, 3); wg.Done() }()
+	go func() { testChainForkLightA = testChainBase.makeFork(forkLen, false, 1, isZk); wg.Done() }()
+	go func() { testChainForkLightB = testChainBase.makeFork(forkLen, false, 2, isZk); wg.Done() }()
+	go func() { testChainForkHeavy = testChainBase.makeFork(forkLen, true, 3, isZk); wg.Done() }()
 	wg.Wait()
+	setTestChains(isZk, testChainBase, testChainForkLightA, testChainForkLightB, testChainForkHeavy)
 
 	// Generate the test peers used by the tests to avoid overloading during testing.
 	// These seemingly random chains are used in various downloader tests. We're just
@@ -107,14 +155,18 @@ func init() {
 	wg.Add(len(chains))
 	for _, chain := range chains {
 		go func(blocks []*types.Block) {
-			newTestBlockchain(blocks)
+			newTestBlockchain(blocks, isZk)
 			wg.Done()
 		}(chain.blocks[1:])
 	}
 	wg.Wait()
 
 	// Mark the chains pregenerated. Generating a new one will lead to a panic.
-	pregenerated = true
+	if isZk {
+		zkpregenerated = true
+	} else {
+		pregenerated = true
+	}
 }
 
 type testChain struct {
@@ -122,18 +174,18 @@ type testChain struct {
 }
 
 // newTestChain creates a blockchain of the given length.
-func newTestChain(length int, genesis *types.Block) *testChain {
+func newTestChain(length int, genesis *types.Block, isZk bool) *testChain {
 	tc := &testChain{
 		blocks: []*types.Block{genesis},
 	}
-	tc.generate(length-1, 0, genesis, false)
+	tc.generate(length-1, 0, genesis, false, isZk)
 	return tc
 }
 
 // makeFork creates a fork on top of the test chain.
-func (tc *testChain) makeFork(length int, heavy bool, seed byte) *testChain {
+func (tc *testChain) makeFork(length int, heavy bool, seed byte, isZk bool) *testChain {
 	fork := tc.copy(len(tc.blocks) + length)
-	fork.generate(length, seed, tc.blocks[len(tc.blocks)-1], heavy)
+	fork.generate(length, seed, tc.blocks[len(tc.blocks)-1], heavy, isZk)
 	return fork
 }
 
@@ -160,7 +212,9 @@ func (tc *testChain) copy(newlen int) *testChain {
 // the returned hash chain is ordered head->parent. In addition, every 22th block
 // contains a transaction and every 5th an uncle to allow testing correct block
 // reassembly.
-func (tc *testChain) generate(n int, seed byte, parent *types.Block, heavy bool) {
+func (tc *testChain) generate(n int, seed byte, parent *types.Block, heavy bool, isZk bool) {
+	testGspec := getTestGspec(isZk)
+	testDB := getTestDB(isZk)
 	blocks, _ := core.GenerateChain(testGspec.Config, parent, ethash.NewFaker(), testDB, n, func(i int, block *core.BlockGen) {
 		block.SetCoinbase(common.Address{seed})
 		// If a heavy chain is requested, delay blocks to raise difficulty
@@ -200,8 +254,11 @@ type testBlockchain struct {
 // newTestBlockchain creates a blockchain database built by running the given blocks,
 // either actually running them, or reusing a previously created one. The returned
 // chains are *shared*, so *do not* mutate them.
-func newTestBlockchain(blocks []*types.Block) *core.BlockChain {
+func newTestBlockchain(blocks []*types.Block, isZk bool) *core.BlockChain {
 	// Retrieve an existing database, or create a new one
+	testGspec := getTestGspec(isZk)
+	testGenesis := getTestGenesis(isZk)
+	testBlockchains, testBlockchainsLock := getTestBlockchain(isZk)
 	head := testGenesis.Hash()
 	if len(blocks) > 0 {
 		head = blocks[len(blocks)-1].Hash()
@@ -215,6 +272,10 @@ func newTestBlockchain(blocks []*types.Block) *core.BlockChain {
 
 	// Ensure that the database is generated
 	tbc.gen.Do(func() {
+		pregenerated := pregenerated
+		if isZk {
+			pregenerated = zkpregenerated
+		}
 		if pregenerated {
 			panic("Requested chain generation outside of init")
 		}

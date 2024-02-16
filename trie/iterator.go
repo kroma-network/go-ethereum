@@ -812,6 +812,7 @@ type (
 	merkleTreeIteratorLeafNode struct {
 		hash common.Hash
 		blob []byte
+		data []byte
 		key  []byte
 	}
 )
@@ -858,8 +859,9 @@ func zkMerkleTreeNodeBlobFunctions(findBlobByHash func(key []byte) ([]byte, erro
 			case *zk.LeafNode:
 				return &merkleTreeIteratorLeafNode{
 					hash: hash,
-					blob: n.Data(),
-					key:  zkt.ReverseByteOrder(n.Key),
+					blob: blob,
+					data: n.Data(),
+					key:  BytesToZkIteratorKey(n.Key).Bytes(),
 				}, nil
 			}
 			return nil, nil
@@ -898,8 +900,9 @@ func zktrieNodeBlobFunctions(t *zktrie.ZkTrie) (
 			case zktrie.NodeTypeLeaf:
 				return &merkleTreeIteratorLeafNode{
 					hash: hash,
-					blob: node.Data(),
-					key:  node.NodeKey.Bytes(),
+					blob: blob,
+					data: node.Data(),
+					key:  BytesToZkIteratorKey(node.NodeKey[:]).Bytes(),
 				}, nil
 			}
 			return nil, nil
@@ -933,6 +936,7 @@ func (it *merkleTreeIterator) seek(path []byte) {
 	if len(path) == 0 {
 		return
 	}
+	path = zk.NewTreePathFromHashBig(common.BytesToHash(path))
 
 	for _, p := range path {
 		if parent, ok := it.stack[len(it.stack)-1].(*merkleTreeIteratorParentNode); ok {
@@ -1055,12 +1059,12 @@ func (it *merkleTreeIterator) Leaf() bool {
 }
 
 func (it *merkleTreeIterator) LeafKey() []byte  { return it.lastNodeAsLeaf().key }
-func (it *merkleTreeIterator) LeafBlob() []byte { return it.lastNodeAsLeaf().blob }
+func (it *merkleTreeIterator) LeafBlob() []byte { return it.lastNodeAsLeaf().data }
 
 func (it *merkleTreeIterator) LeafProof() [][]byte {
 	proofs := make([][]byte, 0, len(it.stack))
 	for _, stack := range it.stack {
-		proofs = append(proofs, stack.Hash().Bytes())
+		proofs = append(proofs, stack.Blob())
 	}
 	return proofs
 }

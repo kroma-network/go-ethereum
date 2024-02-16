@@ -25,6 +25,7 @@ import (
 	"math/big"
 	"math/rand"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,9 +40,9 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/msgrate"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/trienode"
+	"github.com/ethereum/go-ethereum/trie/zk"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -312,8 +313,8 @@ type accountTask struct {
 	codeTasks  map[common.Hash]struct{}    // Code hashes that need retrieval
 	stateTasks map[common.Hash]common.Hash // Account hashes->roots that need full state retrieval
 
-	genBatch ethdb.Batch     // Batch used by the node generator
-	genTrie  *trie.StackTrie // Node generator from storage slots
+	genBatch ethdb.Batch          // Batch used by the node generator
+	genTrie  trie.MerkleStackTrie // Node generator from storage slots
 
 	done bool // Flag whether the task can be removed
 }
@@ -327,8 +328,8 @@ type storageTask struct {
 	root common.Hash     // Storage root hash for this instance
 	req  *storageRequest // Pending request to fill this task
 
-	genBatch ethdb.Batch     // Batch used by the node generator
-	genTrie  *trie.StackTrie // Node generator from storage slots
+	genBatch ethdb.Batch          // Batch used by the node generator
+	genTrie  trie.MerkleStackTrie // Node generator from storage slots
 
 	done bool // Flag whether the task can be removed
 }
@@ -473,6 +474,8 @@ type Syncer struct {
 
 	pend sync.WaitGroup // Tracks network request goroutines for graceful shutdown
 	lock sync.RWMutex   // Protects fields that can change outside of sync (peers, reqs, root)
+
+	zkNodeHasher zk.Hasher
 }
 
 // NewSyncer creates a new snapshot syncer to download the Ethereum state over the
@@ -738,9 +741,9 @@ func (s *Syncer) loadSyncStatus() {
 						s.accountBytes += common.StorageSize(len(key) + len(value))
 					},
 				}
-				task.genTrie = trie.NewStackTrie(func(path []byte, hash common.Hash, val []byte) {
+				task.genTrie = trie.NewMerkleStackTrie(func(path []byte, hash common.Hash, val []byte) {
 					rawdb.WriteTrieNode(task.genBatch, common.Hash{}, path, hash, val, s.scheme)
-				})
+				}, s.isZk(), s.zkNodeHasher)
 				for accountHash, subtasks := range task.SubTasks {
 					for _, subtask := range subtasks {
 						subtask := subtask // closure for subtask.genBatch in the stacktrie writer callback
@@ -752,9 +755,9 @@ func (s *Syncer) loadSyncStatus() {
 							},
 						}
 						owner := accountHash // local assignment for stacktrie writer closure
-						subtask.genTrie = trie.NewStackTrie(func(path []byte, hash common.Hash, val []byte) {
+						subtask.genTrie = trie.NewMerkleStackTrie(func(path []byte, hash common.Hash, val []byte) {
 							rawdb.WriteTrieNode(subtask.genBatch, owner, path, hash, val, s.scheme)
-						})
+						}, s.isZk(), s.zkNodeHasher)
 					}
 				}
 			}
@@ -811,9 +814,9 @@ func (s *Syncer) loadSyncStatus() {
 			Last:     last,
 			SubTasks: make(map[common.Hash][]*storageTask),
 			genBatch: batch,
-			genTrie: trie.NewStackTrie(func(path []byte, hash common.Hash, val []byte) {
+			genTrie: trie.NewMerkleStackTrie(func(path []byte, hash common.Hash, val []byte) {
 				rawdb.WriteTrieNode(batch, common.Hash{}, path, hash, val, s.scheme)
-			}),
+			}, s.isZk(), s.zkNodeHasher),
 		})
 		log.Debug("Created account sync task", "from", next, "last", last)
 		next = common.BigToHash(new(big.Int).Add(last.Big(), common.Big1))
@@ -1376,7 +1379,7 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 			}
 		}
 		// Group requests by account hash
-		paths, hashes, _, pathsets = sortByAccountPath(paths, hashes)
+		paths, hashes, _, pathsets = sortByAccountPath(paths, hashes, s.isZk())
 		req := &trienodeHealRequest{
 			peer:    idle,
 			id:      reqid,
@@ -1837,7 +1840,7 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 			}
 		}
 		// Check if the account is a contract with an unknown storage trie
-		if account.Root != types.EmptyRootHash {
+		if account.Root != types.GetEmptyRootHash(s.isZk()) {
 			if !rawdb.HasTrieNode(s.db, res.hashes[i], nil, account.Root, s.scheme) {
 				// If there was a previous large state retrieval in progress,
 				// don't restart it from scratch. This happens if a sync cycle
@@ -2011,9 +2014,9 @@ func (s *Syncer) processStorageResponse(res *storageResponse) {
 						Last:     r.End(),
 						root:     acc.Root,
 						genBatch: batch,
-						genTrie: trie.NewStackTrie(func(path []byte, hash common.Hash, val []byte) {
+						genTrie: trie.NewMerkleStackTrie(func(path []byte, hash common.Hash, val []byte) {
 							rawdb.WriteTrieNode(batch, owner, path, hash, val, s.scheme)
-						}),
+						}, s.isZk(), s.zkNodeHasher),
 					})
 					for r.Next() {
 						batch := ethdb.HookedBatch{
@@ -2027,9 +2030,9 @@ func (s *Syncer) processStorageResponse(res *storageResponse) {
 							Last:     r.End(),
 							root:     acc.Root,
 							genBatch: batch,
-							genTrie: trie.NewStackTrie(func(path []byte, hash common.Hash, val []byte) {
+							genTrie: trie.NewMerkleStackTrie(func(path []byte, hash common.Hash, val []byte) {
 								rawdb.WriteTrieNode(batch, owner, path, hash, val, s.scheme)
-							}),
+							}, s.isZk(), s.zkNodeHasher),
 						})
 					}
 					for _, task := range tasks {
@@ -2075,11 +2078,11 @@ func (s *Syncer) processStorageResponse(res *storageResponse) {
 
 		if i < len(res.hashes)-1 || res.subTask == nil {
 			// no need to make local reassignment of account: this closure does not outlive the loop
-			tr := trie.NewStackTrie(func(path []byte, hash common.Hash, val []byte) {
+			tr := trie.NewMerkleStackTrie(func(path []byte, hash common.Hash, val []byte) {
 				rawdb.WriteTrieNode(batch, account, path, hash, val, s.scheme)
-			})
+			}, s.isZk(), s.zkNodeHasher)
 			for j := 0; j < len(res.hashes[i]); j++ {
-				tr.Update(res.hashes[i][j][:], res.slots[i][j])
+				tr.Update(trie.IteratorKeyToHash(res.hashes[i][j][:], s.isZk())[:], res.slots[i][j])
 			}
 			tr.Commit()
 		}
@@ -2092,7 +2095,7 @@ func (s *Syncer) processStorageResponse(res *storageResponse) {
 			// If we're storing large contracts, generate the trie nodes
 			// on the fly to not trash the gluing points
 			if i == len(res.hashes)-1 && res.subTask != nil {
-				res.subTask.genTrie.Update(res.hashes[i][j][:], res.slots[i][j])
+				res.subTask.genTrie.Update(trie.IteratorKeyToHash(res.hashes[i][j][:], s.isZk())[:], res.slots[i][j])
 			}
 		}
 	}
@@ -2283,17 +2286,17 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 		if task.needCode[i] || task.needState[i] {
 			break
 		}
-		slim := types.SlimAccountRLP(*res.accounts[i])
+		slim := types.SlimAccountBytes(*res.accounts[i], s.isZk())
 		rawdb.WriteAccountSnapshot(batch, hash, slim)
 
 		// If the task is complete, drop it into the stack trie to generate
 		// account trie nodes for it
 		if !task.needHeal[i] {
-			full, err := types.FullAccountRLP(slim) // TODO(karalabe): Slim parsing can be omitted
+			full, err := types.FullAccountBytes(slim, s.isZk()) // TODO(karalabe): Slim parsing can be omitted
 			if err != nil {
 				panic(err) // Really shouldn't ever happen
 			}
-			task.genTrie.Update(hash[:], full)
+			task.genTrie.Update(trie.IteratorKeyToHash(hash[:], s.isZk())[:], full)
 		}
 	}
 	// Flush anything written just now and update the stats
@@ -2401,7 +2404,7 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 	for i, node := range proof {
 		nodes[i] = node
 	}
-	cont, err := trie.VerifyRangeProof(root, req.origin[:], keys, accounts, nodes.Set())
+	cont, err := s.verifyRangeProof(root, req.origin[:], keys, accounts, nodes.Set())
 	if err != nil {
 		logger.Warn("Account range failed proof", "err", err)
 		// Signal this request as failed, and ready for rescheduling
@@ -2410,8 +2413,8 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 	}
 	accs := make([]*types.StateAccount, len(accounts))
 	for i, account := range accounts {
-		acc := new(types.StateAccount)
-		if err := rlp.DecodeBytes(account, acc); err != nil {
+		acc, err := types.NewStateAccount(account, s.isZk())
+		if err != nil {
 			panic(err) // We created these blobs, we must be able to decode them
 		}
 		accs[i] = acc
@@ -2653,7 +2656,7 @@ func (s *Syncer) OnStorage(peer SyncPeer, id uint64, hashes [][]common.Hash, slo
 		if len(nodes) == 0 {
 			// No proof has been attached, the response must cover the entire key
 			// space and hash to the origin root.
-			_, err = trie.VerifyRangeProof(req.roots[i], nil, keys, slots[i], nil)
+			_, err = s.verifyRangeProof(req.roots[i], nil, keys, slots[i], nil)
 			if err != nil {
 				s.scheduleRevertStorageRequest(req) // reschedule request
 				logger.Warn("Storage slots failed proof", "err", err)
@@ -2664,7 +2667,7 @@ func (s *Syncer) OnStorage(peer SyncPeer, id uint64, hashes [][]common.Hash, slo
 			// returned data is indeed part of the storage trie
 			proofdb := nodes.Set()
 
-			cont, err = trie.VerifyRangeProof(req.roots[i], req.origin[:], keys, slots[i], proofdb)
+			cont, err = s.verifyRangeProof(req.roots[i], req.origin[:], keys, slots[i], proofdb)
 			if err != nil {
 				s.scheduleRevertStorageRequest(req) // reschedule request
 				logger.Warn("Storage range failed proof", "err", err)
@@ -2751,7 +2754,7 @@ func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error
 	// Cross reference the requested trienodes with the response to find gaps
 	// that the serving node is missing
 	var (
-		hasher = sha3.NewLegacyKeccak256().(crypto.KeccakState)
+		hasher = newTrienodeHasher(s.isZk(), s.zkNodeHasher)
 		hash   = make([]byte, 32)
 		nodes  = make([][]byte, len(req.hashes))
 		fills  uint64
@@ -2901,11 +2904,11 @@ func (s *Syncer) onHealByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) e
 // Note it's not concurrent safe, please handle the concurrent issue outside.
 func (s *Syncer) onHealState(paths [][]byte, value []byte) error {
 	if len(paths) == 1 {
-		var account types.StateAccount
-		if err := rlp.DecodeBytes(value, &account); err != nil {
+		account, err := types.NewStateAccount(value, s.isZk())
+		if err != nil {
 			return nil // Returning the error here would drop the remote peer
 		}
-		blob := types.SlimAccountRLP(account)
+		blob := types.SlimAccountBytes(*account, s.isZk())
 		rawdb.WriteAccountSnapshot(s.stateWriter, common.BytesToHash(paths[0]), blob)
 		s.accountHealed += 1
 		s.accountHealedBytes += common.StorageSize(1 + common.HashLength + len(blob))
@@ -2994,6 +2997,25 @@ func (s *Syncer) reportHealProgress(force bool) {
 	log.Info("Syncing: state healing in progress", "accounts", accounts, "slots", storage,
 		"codes", bytecode, "nodes", trienode, "pending", s.healer.scheduler.Pending())
 }
+
+func (s *Syncer) verifyRangeProof(
+	rootHash common.Hash,
+	origin []byte,
+	keys [][]byte,
+	values [][]byte,
+	proof ethdb.KeyValueReader,
+) (bool, error) {
+	if s.isZk() {
+		var configTree func(tree *zk.MerkleTree)
+		if s.zkNodeHasher != nil {
+			configTree = func(tree *zk.MerkleTree) { tree.WithHasher(s.zkNodeHasher) }
+		}
+		return trie.VerifyRangeProofZk(rootHash, origin, keys, values, proof, configTree)
+	}
+	return trie.VerifyRangeProof(rootHash, origin, keys, values, proof)
+}
+
+func (s *Syncer) isZk() bool { return strings.HasSuffix(s.scheme, "Zk") }
 
 // estimateRemainingSlots tries to determine roughly how many slots are left in
 // a contract storage, based on the number of keys and the last hash. This method
@@ -3100,13 +3122,53 @@ func (t *healRequestSort) Merge() []TrieNodePathSet {
 
 // sortByAccountPath takes hashes and paths, and sorts them. After that, it generates
 // the TrieNodePaths and merges paths which belongs to the same account path.
-func sortByAccountPath(paths []string, hashes []common.Hash) ([]string, []common.Hash, []trie.SyncPath, []TrieNodePathSet) {
+func sortByAccountPath(paths []string, hashes []common.Hash, isZk bool) ([]string, []common.Hash, []trie.SyncPath, []TrieNodePathSet) {
 	var syncPaths []trie.SyncPath
 	for _, path := range paths {
-		syncPaths = append(syncPaths, trie.NewSyncPath([]byte(path)))
+		syncPaths = append(syncPaths, trie.NewSyncPath([]byte(path), isZk))
 	}
 	n := &healRequestSort{paths, hashes, syncPaths}
 	sort.Sort(n)
 	pathsets := n.Merge()
 	return n.paths, n.hashes, n.syncPaths, pathsets
+}
+
+type trienodeHasher struct {
+	zk           bool
+	zkNodeHasher zk.Hasher
+	zkhash       []byte
+	sha3         crypto.KeccakState
+}
+
+func newTrienodeHasher(isZk bool, zkNodeHasher zk.Hasher) *trienodeHasher {
+	if zkNodeHasher == nil {
+		zkNodeHasher = zk.NewHasher()
+	}
+	return &trienodeHasher{zk: isZk, zkNodeHasher: zkNodeHasher, sha3: sha3.NewLegacyKeccak256().(crypto.KeccakState)}
+}
+
+func (h *trienodeHasher) Reset() {
+	if !h.zk {
+		h.sha3.Reset()
+	}
+}
+
+func (h *trienodeHasher) Write(i []byte) {
+	if h.zk {
+		if hash, err := zk.ComputeProofHash(h.zkNodeHasher, i); err != nil {
+			log.Error("ComputeProofHash failed in the trienodeHasher.write", err)
+		} else {
+			h.zkhash = hash.Bytes()
+		}
+	} else {
+		h.sha3.Write(i)
+	}
+}
+
+func (h *trienodeHasher) Read(hash []byte) {
+	if h.zk {
+		copy(hash, h.zkhash)
+	} else {
+		h.sha3.Read(hash)
+	}
 }

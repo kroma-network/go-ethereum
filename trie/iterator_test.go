@@ -628,7 +628,7 @@ func TestMerkleTreeIterator(t *testing.T) {
 			db.Delete(zkt.ReverseByteOrder(it.Hash().Bytes()))
 			if it.Leaf() {
 				leafCount++
-				leafPath := zk.NewTreePathFromHash(common.BytesToHash(it.LeafKey()))
+				leafPath := zk.NewTreePathFromHashBig(common.BytesToHash(it.LeafKey()))
 				if !bytes.Equal(it.Path(), leafPath[:len(it.Path())]) {
 					t.Errorf("incorrect tree path. iterator path : %v, leaf path %v", it.Path(), leafPath)
 				}
@@ -670,7 +670,7 @@ func TestMerkleTreeIterator(t *testing.T) {
 		var inputs []*kvs
 		for _, data := range testdata1 {
 			hash := zk.MustNewSecureHash(common.LeftPadBytes([]byte(data.k), 32))
-			inputs = append(inputs, &kvs{k: string(zk.NewTreePathFromZkHash(*hash)), v: data.v})
+			inputs = append(inputs, &kvs{k: string(BytesToZkIteratorKey(hash[:]).Bytes()), v: data.v})
 		}
 		slices.SortFunc(inputs, func(a, b *kvs) int { return bytes.Compare([]byte(a.k), []byte(b.k)) })
 		for idx := 0; idx < len(inputs); idx++ {

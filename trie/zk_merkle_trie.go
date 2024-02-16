@@ -12,18 +12,35 @@ import (
 
 type ZkMerkleTrie struct {
 	*zk.MerkleTree
-	db           *Database
-	logger       log.Logger
-	transformKey func(key []byte) ([]byte, error)
+	db                *Database
+	logger            log.Logger
+	transformKey      func(key []byte) ([]byte, error)
+	transformProveKey func(key []byte) []byte
+}
+
+func (z *ZkMerkleTrie) WithTransformKey(transformKey func(key []byte) ([]byte, error)) *ZkMerkleTrie {
+	z.transformKey = transformKey
+	return z
+}
+
+func (z *ZkMerkleTrie) WithTransformProveKey(transformProveKey func(key []byte) []byte) *ZkMerkleTrie {
+	z.transformProveKey = transformProveKey
+	return z
 }
 
 func NewZkMerkleTrie(merkleTree *zk.MerkleTree, db *Database) *ZkMerkleTrie {
 	return &ZkMerkleTrie{
-		MerkleTree:   merkleTree,
-		db:           db,
-		logger:       log.New("trie", "ZkMerkleTrie"),
-		transformKey: func(key []byte) ([]byte, error) { return common.ReverseBytes(key), nil },
+		MerkleTree:        merkleTree,
+		db:                db,
+		logger:            log.New("trie", "ZkMerkleTrie"),
+		transformKey:      func(key []byte) ([]byte, error) { return common.ReverseBytes(key), nil },
+		transformProveKey: func(key []byte) []byte { return common.ReverseBytes(key) },
 	}
+}
+
+func (z *ZkMerkleTrie) GetNode(compactPath []byte) ([]byte, int, error) {
+	node := z.MerkleTree.GetNodeByPath(compactToHex(compactPath))
+	return node.CanonicalValue(), 0, nil
 }
 
 func (z *ZkMerkleTrie) MustGet(key []byte) []byte {
@@ -116,7 +133,7 @@ func (z *ZkMerkleTrie) Commit(_ bool) (common.Hash, *trienode.NodeSet, error) {
 }
 
 func (z *ZkMerkleTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {
-	return z.prove(common.ReverseBytes(key), proofDb, func(node zk.TreeNode) error {
+	return z.prove(z.transformProveKey(key), proofDb, func(node zk.TreeNode) error {
 		return proofDb.Put(node.Hash()[:], node.CanonicalValue())
 	})
 }
@@ -129,4 +146,8 @@ func (z *ZkMerkleTrie) prove(key []byte, proofDb ethdb.KeyValueWriter, writeNode
 	}
 	// we put this special kv pair in db so we can distinguish the type and make suitable Proof
 	return proofDb.Put(magicHash, zktrie.ProofMagicBytes())
+}
+
+func (z *ZkMerkleTrie) Copy() *ZkMerkleTrie {
+	return &ZkMerkleTrie{z.MerkleTree.Copy(), z.db, z.logger, z.transformKey, z.transformProveKey}
 }

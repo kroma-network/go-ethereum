@@ -64,7 +64,7 @@ func TestRequestSorting(t *testing.T) {
 		paths = append(paths, f(x))
 		hashes = append(hashes, common.Hash{})
 	}
-	_, _, syncPaths, pathsets := sortByAccountPath(paths, hashes)
+	_, _, syncPaths, pathsets := sortByAccountPath(paths, hashes, false)
 	{
 		var b = new(bytes.Buffer)
 		for i := 0; i < len(syncPaths); i++ {

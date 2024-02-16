@@ -19,6 +19,7 @@ package trie
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -28,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/ethereum/go-ethereum/trie/zk"
 )
 
 // ErrNotRequested is returned by the trie sync when it's requested to process a
@@ -74,12 +76,18 @@ type SyncPath [][]byte
 
 // NewSyncPath converts an expanded trie path from nibble form into a compact
 // version that can be sent over the network.
-func NewSyncPath(path []byte) SyncPath {
+func NewSyncPath(path []byte, isZk bool) SyncPath {
 	// If the hash is from the account trie, append a single item, if it
 	// is from a storage trie, append a tuple. Note, the length 64 is
 	// clashing between account leaf and storage root. It's fine though
 	// because having a trie node at 64 depth means a hash collision was
 	// found and we're long dead.
+	if isZk {
+		if len(path) < 256 {
+			return SyncPath{hexToCompact(path)}
+		}
+		return SyncPath{path[:256], hexToCompact(path[256:])}
+	}
 	if len(path) < 64 {
 		return SyncPath{hexToCompact(path)}
 	}
@@ -177,6 +185,7 @@ type Sync struct {
 	codeReqs map[common.Hash]*codeRequest // Pending requests pertaining to a code hash
 	queue    *prque.Prque[int64, any]     // Priority queue with the pending requests
 	fetches  map[int]int                  // Number of active fetches per trie node depth
+	zk       bool
 }
 
 // NewSync creates a new trie data download scheduler.
@@ -189,6 +198,7 @@ func NewSync(root common.Hash, database ethdb.KeyValueReader, callback LeafCallb
 		codeReqs: make(map[common.Hash]*codeRequest),
 		queue:    prque.New[int64, any](nil), // Ugh, can contain both string and hash, whyyy
 		fetches:  make(map[int]int),
+		zk:       strings.HasSuffix(scheme, "Zk"),
 	}
 	ts.AddSubTrie(root, nil, common.Hash{}, nil, callback)
 	return ts
@@ -199,13 +209,13 @@ func NewSync(root common.Hash, database ethdb.KeyValueReader, callback LeafCallb
 // hex format and contain all the parent path if it's layered trie node.
 func (s *Sync) AddSubTrie(root common.Hash, path []byte, parent common.Hash, parentPath []byte, callback LeafCallback) {
 	// Short circuit if the trie is empty or already known
-	if root == types.EmptyRootHash {
+	if root == types.GetEmptyRootHash(s.zk) {
 		return
 	}
 	if s.membatch.hasNode(path) {
 		return
 	}
-	owner, inner := ResolvePath(path)
+	owner, inner := ResolvePath(path, s.zk)
 	if rawdb.HasTrieNode(s.database, owner, inner, root, s.scheme) {
 		return
 	}
@@ -328,6 +338,9 @@ func (s *Sync) ProcessCode(result CodeSyncResult) error {
 // there is no downside.
 func (s *Sync) ProcessNode(result NodeSyncResult) error {
 	// If the trie node was not requested or it's already processed, bail out
+	if s.zk {
+		return s.ProcessZkNode(result)
+	}
 	req := s.nodeReqs[result.Path]
 	if req == nil {
 		return ErrNotRequested
@@ -363,14 +376,14 @@ func (s *Sync) ProcessNode(result NodeSyncResult) error {
 func (s *Sync) Commit(dbw ethdb.Batch) error {
 	// Flush the pending node writes into database batch.
 	for path, value := range s.membatch.nodes {
-		owner, inner := ResolvePath([]byte(path))
+		owner, inner := ResolvePath([]byte(path), s.zk)
 		rawdb.WriteTrieNode(dbw, owner, inner, s.membatch.hashes[path], value, s.scheme)
 	}
 	// Flush the pending node deletes into the database batch.
 	// Please note that each written and deleted node has a
 	// unique path, ensuring no duplication occurs.
 	for path := range s.membatch.deletes {
-		owner, inner := ResolvePath([]byte(path))
+		owner, inner := ResolvePath([]byte(path), s.zk)
 		rawdb.DeleteTrieNode(dbw, owner, inner, common.Hash{} /* unused */, s.scheme)
 	}
 	// Flush the pending code writes into database batch.
@@ -460,7 +473,7 @@ func (s *Sync) children(req *nodeRequest, object node) ([]*nodeRequest, error) {
 		// This step is only necessary for path mode, as there is no deletion
 		// in hash mode at all.
 		if _, ok := node.Val.(hashNode); ok && s.scheme == rawdb.PathScheme {
-			owner, inner := ResolvePath(req.path)
+			owner, inner := ResolvePath(req.path, false)
 			for i := 1; i < len(key); i++ {
 				// While checking for a non-existent item in Pebble can be less efficient
 				// without a bloom filter, the relatively low frequency of lookups makes
@@ -527,7 +540,7 @@ func (s *Sync) children(req *nodeRequest, object node) ([]*nodeRequest, error) {
 				// and we hold the assumption that it's NOT legacy contract code.
 				var (
 					chash        = common.BytesToHash(node)
-					owner, inner = ResolvePath(child.path)
+					owner, inner = ResolvePath(child.path, false)
 				)
 				if rawdb.HasTrieNode(s.database, owner, inner, chash, s.scheme) {
 					return
@@ -615,11 +628,83 @@ func (s *Sync) commitCodeRequest(req *codeRequest) error {
 
 // ResolvePath resolves the provided composite node path by separating the
 // path in account trie if it's existent.
-func ResolvePath(path []byte) (common.Hash, []byte) {
+func ResolvePath(path []byte, isZk bool) (common.Hash, []byte) {
 	var owner common.Hash
+	if isZk {
+		if len(path) >= common.HashLength*8 {
+			owner = *zk.NewTreePath(path[:common.HashLength*8]).ToHash()
+			path = path[common.HashLength*8:]
+		}
+		return owner, path
+	}
 	if len(path) >= 2*common.HashLength {
 		owner = common.BytesToHash(hexToKeybytes(path[:2*common.HashLength]))
 		path = path[2*common.HashLength:]
 	}
 	return owner, path
+}
+
+func (s *Sync) ProcessZkNode(result NodeSyncResult) error {
+	// If the trie node was not requested or it's already processed, bail out
+	req := s.nodeReqs[result.Path]
+	if req == nil {
+		return ErrNotRequested
+	}
+	if req.data != nil {
+		return ErrAlreadyProcessed
+	}
+	// Decode the node data content and update the request
+	node, err := zk.NewTreeNodeFromBlob(result.Data)
+	if err != nil {
+		return err
+	}
+	req.data = result.Data
+
+	// Create and schedule a request for all the children nodes
+	requests := make([]*nodeRequest, 0, 2)
+	err = zk.VisitNode(node, func(node zk.TreeNode, path zk.TreePath) error {
+		switch n := node.(type) {
+		case *zk.ParentNode:
+		case *zk.LeafNode:
+			if req.callback == nil {
+				break
+			}
+			var paths [][]byte
+			if len(result.Path) >= 256 {
+				paths = append(paths, common.BigToHash(zk.NewTreePath([]byte(result.Path)[:256]).ToBigInt()).Bytes())
+			}
+			paths = append(paths, common.BigToHash(zk.NewTreePathFromBytes(n.Key).ToBigInt()).Bytes())
+			err = req.callback(paths, zk.NewTreePathFromBytes(n.Key), n.Data(), req.hash, req.path)
+			if err != nil {
+				return err
+			}
+		case *zk.EmptyNode:
+		case *zk.HashNode:
+			path := append([]byte(result.Path), path...)
+			hash := common.BytesToHash(n.Hash().Bytes())
+			if owner, inner := ResolvePath(path, true); rawdb.HasTrieNode(s.database, owner, inner, hash, s.scheme) {
+				return nil
+			}
+			requests = append(requests, &nodeRequest{
+				path:     path,
+				hash:     hash,
+				parent:   req,
+				callback: req.callback,
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	if len(requests) == 0 && req.deps == 0 {
+		s.commitNodeRequest(req)
+	} else {
+		req.deps += len(requests)
+		for _, child := range requests {
+			s.scheduleNodeRequest(child)
+		}
+	}
+	return nil
 }

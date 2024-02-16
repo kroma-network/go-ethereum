@@ -194,11 +194,6 @@ type Tree struct {
 //     a background thread.
 func New(config Config, diskdb ethdb.KeyValueStore, triedb *trie.Database, root common.Hash) (*Tree, error) {
 	// Create a new, empty snapshot tree
-	// [Scroll: START]
-	if triedb.IsZk() {
-		panic("zktrie does not support snapshot yet")
-	}
-	// [Scroll: END]
 	snap := &Tree{
 		config: config,
 		diskdb: diskdb,
@@ -647,6 +642,7 @@ func diffToDisk(bottom *diffLayer) *diskLayer {
 		triedb:     base.triedb,
 		genMarker:  base.genMarker,
 		genPending: base.genPending,
+		zk:         base.zk,
 	}
 	// If snapshot generation hasn't finished yet, port over all the starts and
 	// continue where the previous round left off.
@@ -788,12 +784,12 @@ func (t *Tree) Verify(root common.Hash) error {
 		}
 		defer storageIt.Release()
 
-		hash, err := generateTrieRoot(nil, "", storageIt, accountHash, stackTrieGenerate, nil, stat, false)
+		hash, err := generateTrieRoot(nil, "", storageIt, accountHash, stackTrieGenerate, nil, stat, false, t.triedb.IsZk())
 		if err != nil {
 			return common.Hash{}, err
 		}
 		return hash, nil
-	}, newGenerateStats(), true)
+	}, newGenerateStats(), true, t.triedb.IsZk())
 
 	if err != nil {
 		return err

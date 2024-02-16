@@ -76,7 +76,7 @@ func inspect(name string, order map[string]bool, reader ethdb.AncientReader) (fr
 }
 
 // inspectFreezers inspects all freezers registered in the system.
-func inspectFreezers(db ethdb.Database) ([]freezerInfo, error) {
+func inspectFreezers(db ethdb.Database, isZk bool) ([]freezerInfo, error) {
 	var infos []freezerInfo
 	for _, freezer := range freezers {
 		switch freezer {
@@ -88,7 +88,7 @@ func inspectFreezers(db ethdb.Database) ([]freezerInfo, error) {
 			infos = append(infos, info)
 
 		case stateFreezerName:
-			if ReadStateScheme(db) != PathScheme {
+			if ReadStateScheme(db, isZk) != PathScheme {
 				continue
 			}
 			datadir, err := db.AncientDatadir()
