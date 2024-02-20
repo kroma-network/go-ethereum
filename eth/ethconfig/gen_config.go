@@ -58,8 +58,10 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		OverrideCancun          *uint64 `toml:",omitempty"`
 		OverrideVerkle          *uint64 `toml:",omitempty"`
 		OverrideOptimismCanyon  *uint64 `toml:",omitempty"`
+		OverrideKromaBurgundy   *uint64 `toml:",omitempty"`
 		MPTWitness              int
 		CircuitParams           *params.CircuitParams
+		ExperimentalZkTree      bool
 	}
 	var enc Config
 	enc.Genesis = c.Genesis
@@ -102,8 +104,10 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.OverrideCancun = c.OverrideCancun
 	enc.OverrideVerkle = c.OverrideVerkle
 	enc.OverrideOptimismCanyon = c.OverrideOptimismCanyon
+	enc.OverrideKromaBurgundy = c.OverrideKromaBurgundy
 	enc.MPTWitness = c.MPTWitness
 	enc.CircuitParams = c.CircuitParams
+	enc.ExperimentalZkTree = c.ExperimentalZkTree
 	return &enc, nil
 }
 
@@ -150,8 +154,10 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		OverrideCancun          *uint64 `toml:",omitempty"`
 		OverrideVerkle          *uint64 `toml:",omitempty"`
 		OverrideOptimismCanyon  *uint64 `toml:",omitempty"`
+		OverrideKromaBurgundy   *uint64 `toml:",omitempty"`
 		MPTWitness              *int
 		CircuitParams           *params.CircuitParams
+		ExperimentalZkTree      *bool
 	}
 	var dec Config
 	if err := unmarshal(&dec); err != nil {
@@ -277,11 +283,17 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	if dec.OverrideOptimismCanyon != nil {
 		c.OverrideOptimismCanyon = dec.OverrideOptimismCanyon
 	}
+	if dec.OverrideKromaBurgundy != nil {
+		c.OverrideKromaBurgundy = dec.OverrideKromaBurgundy
+	}
 	if dec.MPTWitness != nil {
 		c.MPTWitness = *dec.MPTWitness
 	}
 	if dec.CircuitParams != nil {
 		c.CircuitParams = dec.CircuitParams
+	}
+	if dec.ExperimentalZkTree != nil {
+		c.ExperimentalZkTree = *dec.ExperimentalZkTree
 	}
 	return nil
 }

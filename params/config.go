@@ -340,6 +340,8 @@ type ChainConfig struct {
 	RegolithTime *uint64  `json:"regolithTime,omitempty"` // Regolith switch time (nil = no fork, 0 = already on optimism regolith)
 	CanyonTime   *uint64  `json:"canyonTime,omitempty"`   // Canyon switch time (nil = no fork, 0 = already on optimism canyon)
 
+	BurgundyTime *uint64 `json:"burgundyTime,omitempty"` // Burgundy switch time (nil = no fork, 0 = already on kroma burgundy)
+
 	// TerminalTotalDifficulty is the amount of total difficulty reached by
 	// the network that triggers the consensus upgrade.
 	TerminalTotalDifficulty *big.Int `json:"terminalTotalDifficulty,omitempty"`
@@ -497,6 +499,12 @@ func (c *ChainConfig) Description() string {
 	if c.CanyonTime != nil {
 		banner += fmt.Sprintf(" - Canyon:                      @%-10v\n", *c.CanyonTime)
 	}
+
+	// Create a list of Kroma specific forks
+	banner += "Kroma specific hard forks (timestamp based):\n"
+	if c.BurgundyTime != nil {
+		banner += fmt.Sprintf(" - Burgundy:                    @%-10v\n", *c.BurgundyTime)
+	}
 	return banner
 }
 
@@ -635,6 +643,17 @@ func (c *ChainConfig) IsOptimismPreBedrock(num *big.Int) bool {
 	return c.IsKroma() && !c.IsBedrock(num)
 }
 
+// [Kroma: START]
+
+func (c *ChainConfig) IsBurgundy(time uint64) bool {
+	return isTimestampForked(c.BurgundyTime, time)
+}
+
+func (c *ChainConfig) IsKromaBurgundy(time uint64) bool {
+	return c.IsKroma() && !c.IsBurgundy(time)
+}
+
+// [Kroma: END]
 // [Scroll: START]
 
 // IsValidTxCount returns whether the given block's transaction count is below the limit.
@@ -968,6 +987,7 @@ type Rules struct {
 	IsVerkle                                                bool
 	IsOptimismBedrock, IsOptimismRegolith                   bool
 	IsOptimismCanyon                                        bool
+	IsKromaBurgundy                                         bool
 }
 
 // Rules ensures c's ChainID is not nil.
@@ -997,6 +1017,8 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool, timestamp uint64) Rules 
 		IsOptimismBedrock:  c.IsOptimismBedrock(num),
 		IsOptimismRegolith: c.IsOptimismRegolith(timestamp),
 		IsOptimismCanyon:   c.IsOptimismCanyon(timestamp),
+		// Kroma
+		IsKromaBurgundy: c.IsKromaBurgundy(timestamp),
 	}
 }
 

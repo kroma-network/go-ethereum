@@ -270,6 +270,11 @@ var (
 		Usage:    "Manually specify the Optimsim Canyon fork timestamp, overriding the bundled setting",
 		Category: flags.EthCategory,
 	}
+	OverrideKromaBurgundy = &flags.BigFlag{
+		Name:     "override.burgundy",
+		Usage:    "Manually specify the Kroma Burgundy fork timestamp, overriding the bundled setting",
+		Category: flags.EthCategory,
+	}
 	SyncModeFlag = &flags.TextMarshalerFlag{
 		Name:     "syncmode",
 		Usage:    `Blockchain sync mode ("snap", "full" or "light")`,

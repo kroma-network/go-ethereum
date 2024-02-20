@@ -13,18 +13,22 @@ import (
 )
 
 type KromaChainConfig struct {
-	CanyonTime *uint64
+	CanyonTime   *uint64
+	BurgundyTime *uint64
 }
 
 var KromaChainConfigs = map[uint64]*KromaChainConfig{
 	KromaMainnetChainID: {
 		CanyonTime: uint64ptr(1708502400),
+		BurgundyTime: nil,
 	},
 	KromaSepoliaChainID: {
-		CanyonTime: uint64ptr(1707897600),
+		CanyonTime:   uint64ptr(1707897600),
+		BurgundyTime: nil,
 	},
 	KromaDevnetChainID: {
-		CanyonTime: uint64ptr(1707292800),
+		CanyonTime:   uint64ptr(1707292800),
+		BurgundyTime: nil,
 	},
 }
 
@@ -84,6 +88,7 @@ func LoadKromaChainConfig(chainID uint64) (*ChainConfig, error) {
 		BedrockBlock:                  common.Big0,
 		RegolithTime:                  &genesisActivation,
 		CanyonTime:                    kromaChainConfig.CanyonTime,
+		BurgundyTime:                  kromaChainConfig.BurgundyTime,
 		TerminalTotalDifficulty:       common.Big0,
 		TerminalTotalDifficultyPassed: true,
 		Ethash:                        nil,

@@ -184,6 +184,11 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 		cfg.Eth.OverrideOptimismCanyon = &v
 	}
 
+	if ctx.IsSet(utils.OverrideKromaBurgundy.Name) {
+		v := ctx.Uint64(utils.OverrideKromaBurgundy.Name)
+		cfg.Eth.OverrideKromaBurgundy = &v
+	}
+
 	if ctx.IsSet(utils.OverrideVerkle.Name) {
 		v := ctx.Uint64(utils.OverrideVerkle.Name)
 		cfg.Eth.OverrideVerkle = &v

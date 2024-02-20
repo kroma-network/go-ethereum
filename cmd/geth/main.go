@@ -70,6 +70,7 @@ var (
 		utils.OverrideCancun,
 		utils.OverrideVerkle,
 		utils.OverrideOptimismCanyon,
+		utils.OverrideKromaBurgundy,
 		utils.EnablePersonal,
 		utils.TxPoolLocalsFlag,
 		utils.TxPoolNoLocalsFlag,

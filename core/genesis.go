@@ -264,7 +264,8 @@ type ChainOverrides struct {
 	// ApplySuperchainUpgrades bool
 
 	// kroma
-	CircuitParams *params.CircuitParams
+	CircuitParams         *params.CircuitParams
+	OverrideKromaBurgundy *uint64
 }
 
 // SetupGenesisBlock writes or updates the genesis block in db.
@@ -342,6 +343,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 				if config.Kroma != nil && config.Kroma.EIP1559DenominatorCanyon == 0 {
 					config.Kroma.EIP1559DenominatorCanyon = 250
 				}
+			}
+			if overrides != nil && overrides.OverrideKromaBurgundy != nil {
+				config.BurgundyTime = overrides.OverrideKromaBurgundy
 			}
 
 			// [Kroma: START]

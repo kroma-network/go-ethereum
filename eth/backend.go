@@ -223,6 +223,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.OverrideOptimismCanyon != nil {
 		overrides.OverrideOptimismCanyon = config.OverrideOptimismCanyon
 	}
+	if config.OverrideKromaBurgundy != nil {
+		overrides.OverrideKromaBurgundy = config.OverrideKromaBurgundy
+	}
 	if config.CircuitParams != nil && config.CircuitParams.MaxTxs != nil {
 		overrides.CircuitParams.MaxTxs = config.CircuitParams.MaxTxs
 	}

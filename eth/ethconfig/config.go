@@ -172,6 +172,8 @@ type Config struct {
 
 	OverrideOptimismCanyon *uint64 `toml:",omitempty"`
 
+	OverrideKromaBurgundy *uint64 `toml:",omitempty"`
+
 	// [kroma unsupported]
 	// ApplySuperchainUpgrades requests the node to load chain-configuration from the superchain-registry.
 	// ApplySuperchainUpgrades bool `toml:",omitempty"`
