@@ -184,7 +184,7 @@ func NewTransactionData(tx *Transaction, blockNumber uint64, config *params.Chai
 
 	var gasPrice *big.Int
 	switch tx.Type() {
-	case LegacyTxType, AccessListTxType, DepositTxType:
+	case LegacyTxType, AccessListTxType, DepositTxType, MintTokenTxType:
 		gasPrice = tx.GasPrice()
 	case DynamicFeeTxType:
 		if baseFee != nil {

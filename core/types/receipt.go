@@ -293,7 +293,7 @@ func (r *Receipt) decodeTyped(b []byte) error {
 		return errShortTypedReceipt
 	}
 	switch b[0] {
-	case DynamicFeeTxType, AccessListTxType, BlobTxType:
+	case DynamicFeeTxType, AccessListTxType, BlobTxType, MintTokenTxType:
 		var data receiptRLP
 		err := rlp.DecodeBytes(b[1:], &data)
 		if err != nil {
@@ -428,7 +428,7 @@ func (rs Receipts) EncodeIndex(i int, w *bytes.Buffer) {
 	}
 	w.WriteByte(r.Type)
 	switch r.Type {
-	case AccessListTxType, DynamicFeeTxType, BlobTxType:
+	case AccessListTxType, DynamicFeeTxType, BlobTxType, MintTokenTxType:
 		rlp.Encode(w, data)
 	case DepositTxType:
 		if r.DepositReceiptVersion != nil {
@@ -510,7 +510,7 @@ func (rs Receipts) DeriveFields(config *params.ChainConfig, hash common.Hash, nu
 			fdivisor := new(big.Float).SetUint64(1_000_000)           // 10**6, i.e. 6 decimals
 			feeScalar := new(big.Float).Quo(fscalar, fdivisor)
 			for i := 0; i < len(rs); i++ {
-				if !txs[i].IsDepositTx() {
+				if !txs[i].IsDepositTx() && !txs[i].IsMintTokenTx() {
 					gas := txs[i].RollupDataGas().DataGas()
 					rs[i].L1GasPrice = l1Basefee
 					// GasUsed reported in receipt should include the overhead

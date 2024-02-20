@@ -148,6 +148,7 @@ type Message struct {
 	IsDepositTx   bool                // IsDepositTx indicates the message is force-included and can persist a mint.
 	Mint          *big.Int            // Mint is the amount to mint before EVM processing, or nil if there is no minting.
 	RollupDataGas types.RollupGasData // RollupDataGas indicates the rollup cost of the message, 0 if not a rollup or no cost.
+	IsMintTokenTx bool                // IsMintTokenTx indicates the message is minting a governance token.
 }
 
 // TransactionToMessage converts a transaction into a Message.
@@ -166,6 +167,7 @@ func TransactionToMessage(tx *types.Transaction, s types.Signer, baseFee *big.In
 		IsDepositTx:   tx.IsDepositTx(),
 		Mint:          tx.Mint(),
 		RollupDataGas: tx.RollupDataGas(),
+		IsMintTokenTx: tx.IsMintTokenTx(),
 
 		SkipAccountChecks: false,
 		BlobHashes:        tx.BlobHashes(),
@@ -244,7 +246,7 @@ func (st *StateTransition) buyGas() error {
 	mgval := new(big.Int).SetUint64(st.msg.GasLimit)
 	mgval = mgval.Mul(mgval, st.msg.GasPrice)
 	var l1Cost *big.Int
-	if st.evm.Context.L1CostFunc != nil && !st.msg.SkipAccountChecks {
+	if st.evm.Context.L1CostFunc != nil && !st.msg.SkipAccountChecks && !st.msg.IsMintTokenTx {
 		l1Cost = st.evm.Context.L1CostFunc(st.evm.Context.BlockNumber.Uint64(), st.msg.RollupDataGas, st.msg.IsDepositTx)
 	}
 	if l1Cost != nil {
@@ -286,7 +288,7 @@ func (st *StateTransition) buyGas() error {
 
 func (st *StateTransition) preCheck() error {
 	msg := st.msg
-	if msg.IsDepositTx {
+	if msg.IsDepositTx || msg.IsMintTokenTx {
 		// No fee fields to check, no nonce to check, and no need to check if EOA (L1 already verified it for us)
 		// Gas is free, but no refunds!
 		st.initialGas = msg.GasLimit
@@ -473,7 +475,7 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		// After EIP-3529: refunds are capped to gasUsed / 5
 		st.refundGas(params.RefundQuotientEIP3529)
 	}
-	if st.msg.IsDepositTx && rules.IsOptimismRegolith {
+	if st.msg.IsDepositTx && rules.IsOptimismRegolith || st.msg.IsMintTokenTx && rules.IsKromaBurgundy {
 		// Skip coinbase payments for deposit tx in Regolith
 		return &ExecutionResult{
 			UsedGas:    st.gasUsed(),

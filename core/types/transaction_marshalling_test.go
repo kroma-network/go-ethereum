@@ -5,8 +5,9 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 func TestTransactionUnmarshalJsonDeposit(t *testing.T) {
@@ -53,6 +54,35 @@ func TestTransactionUnmarshalJsonDepositWithNonce(t *testing.T) {
 	require.Equal(t, uint8(0x7e), got.Type())
 	require.Equal(t, uint64(0xf4240), got.Gas())
 	require.Equal(t, common.HexToHash("0x1234"), got.SourceHash())
+}
+
+func TestTransactionUnmarshalJsonMintToken(t *testing.T) {
+	json := []byte(`{
+		"type": "0x70",
+		"from": "0xdeaddeaddeaddeaddeaddeaddeaddeaddead0070",
+		"gas": "0xf4240",
+		"nonce": "0x3",
+		"input": "0x1249c58b"
+	}`)
+
+	got := &Transaction{}
+	err := got.UnmarshalJSON(json)
+	require.NoError(t, err, "Failed to unmarshal tx JSON")
+
+	_, ok := got.inner.(*MintTokenTx)
+	require.True(t, ok)
+
+	json, err = got.MarshalJSON()
+	require.NoError(t, err, "Failed to marshal tx JSON")
+
+	got = &Transaction{}
+	err = got.UnmarshalJSON(json)
+	require.NoError(t, err, "Failed to unmarshal tx JSON")
+	require.Equal(t, uint8(0x70), got.Type())
+	require.Equal(t, common.HexToAddress("0xdeaddeaddeaddeaddeaddeaddeaddeaddead0070"), got.inner.(*MintTokenTx).From)
+	require.Equal(t, uint64(0xf4240), got.Gas())
+	require.Equal(t, uint64(0x3), got.Nonce())
+	require.Equal(t, "1249c58b", common.Bytes2Hex(got.Data()))
 }
 
 func TestTransactionUnmarshalJSON(t *testing.T) {

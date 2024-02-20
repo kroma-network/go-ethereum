@@ -25,12 +25,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/holiman/uint256"
 	"github.com/kylelemons/godebug/diff"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 var (
@@ -141,15 +142,33 @@ var (
 		},
 		Type: DepositTxType,
 	}
+	mintTokenReceipt = &Receipt{
+		Status:            ReceiptStatusFailed,
+		CumulativeGasUsed: 1,
+		Logs: []*Log{
+			{
+				Address: common.BytesToAddress([]byte{0x11}),
+				Topics:  []common.Hash{common.HexToHash("dead"), common.HexToHash("beef")},
+				Data:    []byte{0x01, 0x00, 0xff},
+			},
+			{
+				Address: common.BytesToAddress([]byte{0x01, 0x11}),
+				Topics:  []common.Hash{common.HexToHash("dead"), common.HexToHash("beef")},
+				Data:    []byte{0x01, 0x00, 0xff},
+			},
+		},
+		Type: MintTokenTxType,
+	}
 
 	// Create a few transactions to have receipts for
-	to2 = common.HexToAddress("0x2")
-	to3 = common.HexToAddress("0x3")
-	to4 = common.HexToAddress("0x4")
-	to5 = common.HexToAddress("0x5")
-	to6 = common.HexToAddress("0x6")
-	to7 = common.HexToAddress("0x7")
-	txs = Transactions{
+	to2    = common.HexToAddress("0x2")
+	to3    = common.HexToAddress("0x3")
+	to4    = common.HexToAddress("0x4")
+	to5    = common.HexToAddress("0x5")
+	to6    = common.HexToAddress("0x6")
+	to7    = common.HexToAddress("0x7")
+	minter = common.HexToAddress("0xf1")
+	txs    = Transactions{
 		NewTx(&LegacyTx{
 			Nonce:    1,
 			Value:    big.NewInt(1),
@@ -217,6 +236,12 @@ var (
 			To:    nil, // contract creation
 			Value: big.NewInt(6),
 			Gas:   60,
+		}),
+		NewTx(&MintTokenTx{
+			From:  minter,
+			To:    &minter,
+			Gas:   70,
+			Nonce: 10,
 		}),
 	}
 	depNonce1                   = uint64(7)
@@ -435,6 +460,39 @@ var (
 			TransactionIndex:      8,
 			DepositNonce:          &depNonce2,
 			DepositReceiptVersion: &canyonDepositReceiptVersion,
+		},
+		&Receipt{
+			Type:              MintTokenTxType,
+			PostState:         common.Hash{5}.Bytes(),
+			CumulativeGasUsed: 70 + 60 + 50 + 28,
+			Logs: []*Log{
+				{
+					Address: common.BytesToAddress([]byte{0x33}),
+					Topics:  []common.Hash{common.HexToHash("dead"), common.HexToHash("beef")},
+					// derived fields:
+					BlockNumber: blockNumber.Uint64(),
+					TxHash:      txs[9].Hash(),
+					TxIndex:     9,
+					BlockHash:   blockHash,
+					Index:       8,
+				},
+				{
+					Address: common.BytesToAddress([]byte{0x03, 0x33}),
+					Topics:  []common.Hash{common.HexToHash("dead"), common.HexToHash("beef")},
+					// derived fields:
+					BlockNumber: blockNumber.Uint64(),
+					TxHash:      txs[9].Hash(),
+					TxIndex:     9,
+					BlockHash:   blockHash,
+					Index:       9,
+				},
+			},
+			TxHash:            txs[9].Hash(),
+			GasUsed:           70,
+			EffectiveGasPrice: big.NewInt(0),
+			BlockHash:         blockHash,
+			BlockNumber:       blockNumber,
+			TransactionIndex:  9,
 		},
 	}
 )
@@ -694,6 +752,12 @@ func TestDeriveKromaTxReceipt(t *testing.T) {
 			// System config with L1Scalar=2_000_000 (becomes 2 after division), L1Overhead=2500, L1BaseFee=5000
 			Data: common.Hex2Bytes("015d8eb900000000000000000000000000000000000000000000000026b39534042076f70000000000000000000000000000000000000000000000007e33b7c4995967580000000000000000000000000000000000000000000000000000000000001388547dea8ff339566349ed0ef6384876655d1b9b955e36ac165c6b8ab69b9af5cd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000123400000000000000000000000000000000000000000000000000000000000009c400000000000000000000000000000000000000000000000000000000001e8480"),
 		}),
+		NewTx(&MintTokenTx{
+			From: minter,
+			To:   &minter,
+			Gas:  70,
+			Data: common.Hex2Bytes("12345678"),
+		}),
 		NewTx(&DynamicFeeTx{
 			To:        &to4,
 			Nonce:     4,
@@ -744,17 +808,48 @@ func TestDeriveKromaTxReceipt(t *testing.T) {
 			DepositNonce:      &depNonce,
 		},
 		&Receipt{
+			Type:              MintTokenTxType,
+			PostState:         common.Hash{5}.Bytes(),
+			CumulativeGasUsed: 10 + 50 + 15,
+			Logs: []*Log{
+				{
+					Address: common.BytesToAddress([]byte{0x33}),
+					// derived fields:
+					BlockNumber: blockNumber.Uint64(),
+					TxHash:      txs[1].Hash(),
+					TxIndex:     1,
+					BlockHash:   blockHash,
+					Index:       2,
+				},
+				{
+					Address: common.BytesToAddress([]byte{0x03, 0x33}),
+					// derived fields:
+					BlockNumber: blockNumber.Uint64(),
+					TxHash:      txs[1].Hash(),
+					TxIndex:     1,
+					BlockHash:   blockHash,
+					Index:       3,
+				},
+			},
+			TxHash:            txs[1].Hash(),
+			GasUsed:           10,
+			EffectiveGasPrice: big.NewInt(0),
+			BlockHash:         blockHash,
+			BlockNumber:       blockNumber,
+			TransactionIndex:  1,
+		},
+		&Receipt{
 			Type:              DynamicFeeTxType,
 			PostState:         common.Hash{4}.Bytes(),
 			CumulativeGasUsed: 10,
 			Logs:              []*Log{},
 			// derived fields:
-			TxHash:            txs[1].Hash(),
-			GasUsed:           18446744073709551561,
+			TxHash:            txs[2].Hash(),
+			GasUsed:           18446744073709551551,
 			EffectiveGasPrice: big.NewInt(1044),
 			BlockHash:         blockHash,
 			BlockNumber:       blockNumber,
-			TransactionIndex:  1,
+			TransactionIndex:  2,
 			L1GasPrice:        big.NewInt(5000),
 			L1GasUsed:         big.NewInt(2888),
 			L1Fee:             big.NewInt(28880000),
@@ -786,7 +881,7 @@ func TestDeriveKromaTxReceipt(t *testing.T) {
 
 	// Check that we preserved the invariant: l1Fee = l1GasPrice * l1GasUsed * l1FeeScalar
 	// but with more difficult int math...
-	l2Rcpt := derivedReceipts[1]
+	l2Rcpt := derivedReceipts[2]
 	l1GasCost := new(big.Int).Mul(l2Rcpt.L1GasPrice, l2Rcpt.L1GasUsed)
 	l1Fee := new(big.Float).Mul(new(big.Float).SetInt(l1GasCost), l2Rcpt.FeeScalar)
 	require.Equal(t, new(big.Float).SetInt(l2Rcpt.L1Fee), l1Fee)
@@ -882,6 +977,7 @@ func TestRoundTripReceipt(t *testing.T) {
 		{name: "DepositNoNonce", rcpt: depositReceiptNoNonce},
 		{name: "DepositWithNonce", rcpt: depositReceiptWithNonce},
 		{name: "DepositWithNonceAndVersion", rcpt: depositReceiptWithNonceAndVersion},
+		{name: "MintTokenTx", rcpt: mintTokenReceipt},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -918,6 +1014,7 @@ func TestRoundTripReceiptForStorage(t *testing.T) {
 		{name: "DepositNoNonce", rcpt: depositReceiptNoNonce},
 		{name: "DepositWithNonce", rcpt: depositReceiptWithNonce},
 		{name: "DepositWithNonceAndVersion", rcpt: depositReceiptWithNonceAndVersion},
+		{name: "MintTokenTx", rcpt: mintTokenReceipt},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

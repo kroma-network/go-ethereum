@@ -209,6 +209,8 @@ func (tx *Transaction) decodeTyped(b []byte) (TxData, error) {
 		inner = new(BlobTx)
 	case DepositTxType:
 		inner = new(DepositTx)
+	case MintTokenTxType:
+		inner = new(MintTokenTx)
 	default:
 		return nil, ErrTxTypeNotSupported
 	}
@@ -350,6 +352,11 @@ func (tx *Transaction) IsDepositTx() bool {
 	return tx.Type() == DepositTxType
 }
 
+// IsMintTokenTx returns true if the transaction is a mint token tx type.
+func (tx *Transaction) IsMintTokenTx() bool {
+	return tx.Type() == MintTokenTxType
+}
+
 // Cost returns (gas * gasPrice) + (blobGas * blobGasPrice) + value.
 func (tx *Transaction) Cost() *big.Int {
 	total := new(big.Int).Mul(tx.GasPrice(), new(big.Int).SetUint64(tx.Gas()))
@@ -362,7 +369,7 @@ func (tx *Transaction) Cost() *big.Int {
 
 // RollupDataGas is the amount of gas it takes to confirm the tx on L1 as a rollup
 func (tx *Transaction) RollupDataGas() RollupGasData {
-	if tx.Type() == DepositTxType {
+	if tx.Type() == DepositTxType || tx.Type() == MintTokenTxType {
 		return RollupGasData{}
 	}
 	if v := tx.rollupGas.Load(); v != nil {
@@ -414,7 +421,7 @@ func (tx *Transaction) GasTipCapIntCmp(other *big.Int) int {
 // Note: if the effective gasTipCap is negative, this method returns both error
 // the actual negative value, _and_ ErrGasFeeCapTooLow
 func (tx *Transaction) EffectiveGasTip(baseFee *big.Int) (*big.Int, error) {
-	if tx.Type() == DepositTxType {
+	if tx.Type() == DepositTxType || tx.Type() == MintTokenTxType {
 		return new(big.Int), nil
 	}
 	if baseFee == nil {

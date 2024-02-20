@@ -22,10 +22,11 @@ import (
 	"io"
 	"math/big"
 
+	"github.com/holiman/uint256"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/holiman/uint256"
 )
 
 // txJSON is the JSON representation of transactions.
@@ -173,7 +174,12 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		if itx.Mint != nil {
 			enc.Mint = (*hexutil.Big)(itx.Mint)
 		}
-		// other fields will show up as null.
+	case *MintTokenTx:
+		enc.From = &itx.From
+		enc.To = tx.To()
+		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
+		enc.Nonce = (*hexutil.Uint64)(&itx.Nonce)
+		enc.Input = (*hexutil.Bytes)(&itx.Data)
 	}
 	return json.Marshal(&enc)
 }
@@ -479,6 +485,40 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 		if dec.Nonce != nil {
 			inner = &depositTxWithNonce{DepositTx: itx, EffectiveNonce: uint64(*dec.Nonce)}
 		}
+	case MintTokenTxType:
+		if dec.AccessList != nil || dec.MaxFeePerGas != nil ||
+			dec.MaxPriorityFeePerGas != nil {
+			return errors.New("unexpected field(s) in mint token transaction")
+		}
+		if dec.GasPrice != nil && dec.GasPrice.ToInt().Cmp(common.Big0) != 0 {
+			return errors.New("mint token transaction GasPrice must be 0")
+		}
+		if (dec.V != nil && dec.V.ToInt().Cmp(common.Big0) != 0) ||
+			(dec.R != nil && dec.R.ToInt().Cmp(common.Big0) != 0) ||
+			(dec.S != nil && dec.S.ToInt().Cmp(common.Big0) != 0) {
+			return errors.New("mint token transaction signature must be 0 or unset")
+		}
+		var itx MintTokenTx
+		inner = &itx
+		if dec.To != nil {
+			itx.To = dec.To
+		}
+		if dec.Gas == nil {
+			return errors.New("missing required field 'gas' for txdata")
+		}
+		itx.Gas = uint64(*dec.Gas)
+		if dec.Nonce == nil {
+			return errors.New("missing required field 'nonce' in transaction")
+		}
+		itx.Nonce = uint64(*dec.Nonce)
+		if dec.Input == nil {
+			return errors.New("missing required field 'input' in transaction")
+		}
+		itx.Data = *dec.Input
+		if dec.From == nil {
+			return errors.New("missing required field 'from' in transaction")
+		}
+		itx.From = *dec.From
 	default:
 		return ErrTxTypeNotSupported
 	}
