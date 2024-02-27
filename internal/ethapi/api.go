@@ -787,7 +787,7 @@ func (s *BlockChainAPI) GetProof(ctx context.Context, address common.Address, st
 }
 
 func (s *BlockChainAPI) newStateTrie(id *trie.ID, db *trie.Database) (state.Trie, error) {
-	if db.IsZkStateTrie() {
+	if db.IsKromaZK() {
 		return trie.NewZkMerkleStateTrie(id.Root, db)
 	}
 	if db.IsZk() {

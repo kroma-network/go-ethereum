@@ -190,7 +190,7 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 	}
 
 	cfg.Eth.CircuitParams = new(params.CircuitParams)
-	cfg.Eth.ExperimentalZkTree = ctx.Bool(utils.ExperimentalZkTrie.Name)
+	cfg.Eth.KromaZKTrie = ctx.Bool(utils.KromaZKTrie.Name)
 	if ctx.IsSet(utils.MaxTxsFlag.Name) {
 		maxTxs := ctx.Int(utils.MaxTxsFlag.Name)
 		cfg.Eth.CircuitParams.MaxTxs = &maxTxs
