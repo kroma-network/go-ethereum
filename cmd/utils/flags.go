@@ -1040,6 +1040,7 @@ Please note that --` + MetricsHTTPFlag.Name + ` must be set to start the server.
 		Name:     "KromaZKTrie",
 		Usage:    "use ZkMerkleStateTrie instead of ZkTrie in state.",
 		Category: flags.EthCategory,
+		Value:    true,
 	}
 )
 
