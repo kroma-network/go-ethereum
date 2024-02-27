@@ -1,6 +1,8 @@
 package zk
 
 import (
+	"math/big"
+
 	zkt "github.com/kroma-network/zktrie/types"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -13,6 +15,22 @@ const (
 	left  = byte(0)
 	right = byte(1)
 )
+
+func NewTreePathFromHashBig(hash common.Hash) TreePath {
+	return NewTreePathFromBig(hash.Big(), len(hash)*8)
+}
+
+func NewTreePathFromBig(key *big.Int, maxLevel int) TreePath {
+	result := make([]byte, maxLevel)
+	for i := 0; i < maxLevel; i++ {
+		bit := new(big.Int).Mod(key, common.Big2)
+		if bit.Uint64() == 1 {
+			result[maxLevel-1-i] = byte(bit.Int64())
+		}
+		key.Rsh(key, 1)
+	}
+	return result
+}
 
 func NewTreePathFromHash(hash common.Hash) TreePath {
 	return NewTreePathFromBytesAndMaxLevel(zkt.ReverseByteOrder(hash[:]), len(hash)*8)
@@ -64,4 +82,13 @@ func (p TreePath) toHexBytes() []byte {
 		bytes[i/8] = value
 	}
 	return bytes
+}
+
+func (p TreePath) ToBigInt() *big.Int {
+	result := new(big.Int)
+	lastIdx := len(p) - 1
+	for i, b := range p {
+		result.SetBit(result, lastIdx-i, uint(b))
+	}
+	return result
 }
