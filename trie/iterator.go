@@ -859,7 +859,7 @@ func zkMerkleTreeNodeBlobFunctions(findBlobByHash func(key []byte) ([]byte, erro
 				return &merkleTreeIteratorLeafNode{
 					hash: hash,
 					blob: n.Data(),
-					key:  zkt.ReverseByteOrder(n.Key),
+					key:  BytesToZkIteratorKey(n.Key).Bytes(),
 				}, nil
 			}
 			return nil, nil
@@ -899,7 +899,7 @@ func zktrieNodeBlobFunctions(t *zktrie.ZkTrie) (
 				return &merkleTreeIteratorLeafNode{
 					hash: hash,
 					blob: node.Data(),
-					key:  node.NodeKey.Bytes(),
+					key:  BytesToZkIteratorKey(node.NodeKey[:]).Bytes(),
 				}, nil
 			}
 			return nil, nil
@@ -933,6 +933,7 @@ func (it *merkleTreeIterator) seek(path []byte) {
 	if len(path) == 0 {
 		return
 	}
+	path = zk.NewTreePathFromHashBig(common.BytesToHash(path))
 
 	for _, p := range path {
 		if parent, ok := it.stack[len(it.stack)-1].(*merkleTreeIteratorParentNode); ok {

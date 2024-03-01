@@ -247,7 +247,7 @@ func (t *MerkleTree) MustDelete(key []byte) {
 // mt.ImportDumpedLeafs), but this will lose all the Root history of the MerkleTree
 func (t *MerkleTree) Delete(key []byte) error {
 	node, path, pathNodes := t.rootNode, t.newTreePath(key), *new([]*ParentNode)
-	for _, p := range path {
+	for lvl, p := range path {
 		switch n := node.(type) {
 		case *ParentNode:
 			pathNodes = append(pathNodes, n)
@@ -261,7 +261,7 @@ func (t *MerkleTree) Delete(key []byte) error {
 		case *EmptyNode:
 			return trie.ErrKeyNotFound
 		case *HashNode:
-			return trie.ErrKeyNotFound
+			return fmt.Errorf("Delete: encounter hash node. level %d, path %v", lvl, path[:lvl])
 		default:
 			return trie.ErrInvalidNodeFound
 		}
@@ -336,7 +336,8 @@ func (t *MerkleTree) Prove(key []byte, writeNode func(TreeNode) error) error {
 		return err
 	}
 	node := t.rootNode
-	for _, p := range t.newTreePath(key) {
+	path := t.newTreePath(key)
+	for lvl, p := range path {
 		// TODO: notice here we may have broken some implicit on the proofDb:
 		// the key is not keccak(value) and it even can not be derived from the value by any means without an actual decoding
 		if err := writeNode(node); err != nil {
@@ -350,7 +351,7 @@ func (t *MerkleTree) Prove(key []byte, writeNode func(TreeNode) error) error {
 		case *EmptyNode:
 			return nil
 		case *HashNode:
-			return nil
+			return fmt.Errorf("Prove: encounter hash node. level %d, path %v", lvl, path[:lvl])
 		default:
 			return trie.ErrInvalidNodeFound
 		}
