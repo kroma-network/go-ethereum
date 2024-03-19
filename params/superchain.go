@@ -12,7 +12,8 @@ import (
 )
 
 type KromaChainConfig struct {
-	CanyonTime *uint64
+	CanyonTime  *uint64
+	EcotoneTime *uint64
 }
 
 var KromaChainConfigs = map[uint64]*KromaChainConfig{
@@ -78,12 +79,12 @@ func LoadKromaChainConfig(chainID uint64) (*ChainConfig, error) {
 		GrayGlacierBlock:              common.Big0,
 		MergeNetsplitBlock:            common.Big0,
 		ShanghaiTime:                  kromaChainConfig.CanyonTime,  // Shanghai activates with Canyon
-		CancunTime:                    superchainConfig.Config.EcotoneTime, // Cancun activates with Ecotone
+		CancunTime:                    kromaChainConfig.EcotoneTime, // Cancun activates with Ecotone
 		PragueTime:                    nil,
 		BedrockBlock:                  common.Big0,
 		RegolithTime:                  &genesisActivation,
 		CanyonTime:                    kromaChainConfig.CanyonTime,
-		EcotoneTime:                   superchainConfig.Config.EcotoneTime,
+		EcotoneTime:                   kromaChainConfig.EcotoneTime,
 		TerminalTotalDifficulty:       common.Big0,
 		TerminalTotalDifficultyPassed: true,
 		Ethash:                        nil,
