@@ -259,9 +259,11 @@ type ChainOverrides struct {
 	OverrideCancun *uint64
 	OverrideVerkle *uint64
 	// optimism
-	OverrideOptimismCanyon *uint64
-	// [kroma unsupported]
+	OverrideOptimismCanyon  *uint64
+	OverrideOptimismEcotone *uint64
+	/* [kroma unsupported] */
 	// ApplySuperchainUpgrades bool
+	OverrideOptimismInterop *uint64
 
 	// kroma
 	CircuitParams *params.CircuitParams
@@ -290,27 +292,49 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 	}
 	applyOverrides := func(config *params.ChainConfig) {
 		if config != nil {
-			// [kroma unsupported]
+			/* [kroma unsupported]
 			// If applying the superchain-registry to a known OP-Stack chain,
 			// then override the local chain-config with that from the registry.
-			// if overrides != nil && overrides.ApplySuperchainUpgrades && config.IsOptimism() && config.ChainID != nil && config.ChainID.IsUint64() {
-			// 	if _, ok := superchain.OPChains[config.ChainID.Uint64()]; ok {
-			// 		conf, err := params.LoadOPStackChainConfig(config.ChainID.Uint64())
-			// 		if err != nil {
-			// 			log.Warn("failed to load chain config from superchain-registry, skipping override", "err", err, "chain_id", config.ChainID)
-			// 		} else {
-			// 			*config = *conf
-			// 		}
-			// 	}
-			// }
-			// if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(big.NewInt(params.OPGoerliChainID)) == 0 {
-			// 	// Apply Optimism Goerli regolith time
-			// 	config.RegolithTime = &params.OptimismGoerliRegolithTime
-			// }
-			// if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(big.NewInt(params.BaseGoerliChainID)) == 0 {
-			// 	// Apply Base Goerli regolith time
-			// 	config.RegolithTime = &params.BaseGoerliRegolithTime
-			// }
+			if overrides != nil && overrides.ApplySuperchainUpgrades && config.IsOptimism() && config.ChainID != nil && config.ChainID.IsUint64() {
+				if _, ok := superchain.OPChains[config.ChainID.Uint64()]; ok {
+					conf, err := params.LoadOPStackChainConfig(config.ChainID.Uint64())
+					if err != nil {
+						log.Warn("failed to load chain config from superchain-registry, skipping override", "err", err, "chain_id", config.ChainID)
+					} else {
+						*config = *conf
+					}
+				}
+			}
+
+			if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(big.NewInt(params.OPGoerliChainID)) == 0 {
+				// Apply Optimism Goerli regolith time
+				config.RegolithTime = &params.OptimismGoerliRegolithTime
+			}
+			if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(big.NewInt(params.BaseGoerliChainID)) == 0 {
+				// Apply Base Goerli regolith time
+				config.RegolithTime = &params.BaseGoerliRegolithTime
+			}
+			*/
+			if overrides != nil && overrides.OverrideCancun != nil {
+				config.CancunTime = overrides.OverrideCancun
+			}
+			if overrides != nil && overrides.OverrideVerkle != nil {
+				config.VerkleTime = overrides.OverrideVerkle
+			}
+			if overrides != nil && overrides.OverrideOptimismCanyon != nil {
+				config.CanyonTime = overrides.OverrideOptimismCanyon
+				config.ShanghaiTime = overrides.OverrideOptimismCanyon
+				if config.Kroma != nil && config.Kroma.EIP1559DenominatorCanyon == 0 {
+					config.Kroma.EIP1559DenominatorCanyon = 250
+				}
+			}
+			if overrides != nil && overrides.OverrideOptimismEcotone != nil {
+				config.EcotoneTime = overrides.OverrideOptimismEcotone
+				config.CancunTime = overrides.OverrideOptimismEcotone
+			}
+			if overrides != nil && overrides.OverrideOptimismInterop != nil {
+				config.InteropTime = overrides.OverrideOptimismInterop
+			}
 
 			// [Kroma: START]
 			if config.IsKroma() {
@@ -329,22 +353,6 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 				config.BedrockBlock = new(big.Int).SetUint64(zero)
 				config.RegolithTime = &zero
 			}
-			// [Kroma: END]
-			if overrides != nil && overrides.OverrideCancun != nil {
-				config.CancunTime = overrides.OverrideCancun
-			}
-			if overrides != nil && overrides.OverrideVerkle != nil {
-				config.VerkleTime = overrides.OverrideVerkle
-			}
-			if overrides != nil && overrides.OverrideOptimismCanyon != nil {
-				config.CanyonTime = overrides.OverrideOptimismCanyon
-				config.ShanghaiTime = overrides.OverrideOptimismCanyon
-				if config.Kroma != nil && config.Kroma.EIP1559DenominatorCanyon == 0 {
-					config.Kroma.EIP1559DenominatorCanyon = 250
-				}
-			}
-
-			// [Kroma: START]
 			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxTxs != nil {
 				config.MaxTxPerBlock = overrides.CircuitParams.MaxTxs
 			}
@@ -363,12 +371,12 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		} else {
 			log.Info("Writing custom genesis block")
 		}
+		applyOverrides(genesis.Config)
 		triedb.SetBackend(genesis.Config.Zktrie)
 		block, err := genesis.Commit(db, triedb)
 		if err != nil {
 			return genesis.Config, common.Hash{}, err
 		}
-		applyOverrides(genesis.Config)
 		return genesis.Config, block.Hash(), nil
 	}
 
@@ -391,6 +399,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		if genesis == nil {
 			genesis = DefaultGenesisBlock()
 		}
+		applyOverrides(genesis.Config)
 		// Ensure the stored genesis matches with the given one.
 		hash := genesis.ToBlock().Hash()
 		if hash != stored {
@@ -400,11 +409,11 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		if err != nil {
 			return genesis.Config, hash, err
 		}
-		applyOverrides(genesis.Config)
 		return genesis.Config, block.Hash(), nil
 	}
 	// Check whether the genesis block is already written.
 	if genesis != nil {
+		applyOverrides(genesis.Config)
 		hash := genesis.ToBlock().Hash()
 		if hash != stored {
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}

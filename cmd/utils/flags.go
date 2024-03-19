@@ -34,10 +34,6 @@ import (
 	"strings"
 	"time"
 
-	pcsclite "github.com/gballet/go-libpcsclite"
-	gopsutil "github.com/shirou/gopsutil/mem"
-	"github.com/urfave/cli/v2"
-
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
@@ -77,6 +73,9 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
 	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
+	pcsclite "github.com/gballet/go-libpcsclite"
+	gopsutil "github.com/shirou/gopsutil/mem"
+	"github.com/urfave/cli/v2"
 )
 
 // These are all the command line flags we support.
@@ -158,7 +157,7 @@ var (
 		Category: flags.EthCategory,
 	}
 
-	// [kroma unsupported]
+	/* [kroma unsupported] */
 	OPNetworkFlag = &cli.StringFlag{
 		Name:    "op-network",
 		Aliases: []string{"beta.op-network"},
@@ -265,9 +264,19 @@ var (
 		Usage:    "Manually specify the Verkle fork timestamp, overriding the bundled setting",
 		Category: flags.EthCategory,
 	}
-	OverrideOptimismCanyon = &flags.BigFlag{
+	OverrideOptimismCanyon = &cli.Uint64Flag{
 		Name:     "override.canyon",
-		Usage:    "Manually specify the Optimsim Canyon fork timestamp, overriding the bundled setting",
+		Usage:    "Manually specify the Optimism Canyon fork timestamp, overriding the bundled setting",
+		Category: flags.EthCategory,
+	}
+	OverrideOptimismEcotone = &cli.Uint64Flag{
+		Name:     "override.ecotone",
+		Usage:    "Manually specify the Optimism Ecotone fork timestamp, overriding the bundled setting",
+		Category: flags.EthCategory,
+	}
+	OverrideOptimismInterop = &cli.Uint64Flag{
+		Name:     "override.interop",
+		Usage:    "Manually specify the Optimsim Interop feature-set fork timestamp, overriding the bundled setting",
 		Category: flags.EthCategory,
 	}
 	SyncModeFlag = &flags.TextMarshalerFlag{
@@ -891,55 +900,57 @@ var (
 		Value:    ethconfig.Defaults.GPO.MinSuggestedPriorityFee.Int64(),
 		Category: flags.GasPriceCategory,
 	}
-
+	/* [kroma unsupported]
 	// Rollup Flags
-	// [kroma unsupported]
-	// RollupSequencerHTTPFlag = &cli.StringFlag{
-	// 	Name:     "rollup.sequencerhttp",
-	// 	Usage:    "HTTP endpoint for the sequencer mempool",
-	// 	Category: flags.RollupCategory,
-	// }
-	//
-	// RollupHistoricalRPCFlag = &cli.StringFlag{
-	// 	Name:     "rollup.historicalrpc",
-	// 	Usage:    "RPC endpoint for historical data.",
-	// 	Category: flags.RollupCategory,
-	// }
-	//
-	// RollupHistoricalRPCTimeoutFlag = &cli.StringFlag{
-	// 	Name:     "rollup.historicalrpctimeout",
-	// 	Usage:    "Timeout for historical RPC requests.",
-	// 	Value:    "5s",
-	// 	Category: flags.RollupCategory,
-	// }
-	//
-	// RollupDisableTxPoolGossipFlag = &cli.BoolFlag{
-	// 	Name:     "rollup.disabletxpoolgossip",
-	// 	Usage:    "Disable transaction pool gossip.",
-	// 	Category: flags.RollupCategory,
-	// }
-	// RollupEnableTxPoolAdmissionFlag = &cli.BoolFlag{
-	// 	Name:     "rollup.enabletxpooladmission",
-	// 	Usage:    "Add RPC-submitted transactions to the txpool (on by default if --rollup.sequencerhttp is not set).",
-	// 	Category: flags.RollupCategory,
-	// }
+	RollupSequencerHTTPFlag = &cli.StringFlag{
+		Name:     "rollup.sequencerhttp",
+		Usage:    "HTTP endpoint for the sequencer mempool",
+		Category: flags.RollupCategory,
+	}
+
+	RollupHistoricalRPCFlag = &cli.StringFlag{
+		Name:     "rollup.historicalrpc",
+		Usage:    "RPC endpoint for historical data.",
+		Category: flags.RollupCategory,
+	}
+
+	RollupHistoricalRPCTimeoutFlag = &cli.StringFlag{
+		Name:     "rollup.historicalrpctimeout",
+		Usage:    "Timeout for historical RPC requests.",
+		Value:    "5s",
+		Category: flags.RollupCategory,
+	}
+
+	RollupDisableTxPoolGossipFlag = &cli.BoolFlag{
+		Name:     "rollup.disabletxpoolgossip",
+		Usage:    "Disable transaction pool gossip.",
+		Category: flags.RollupCategory,
+	}
+	RollupEnableTxPoolAdmissionFlag = &cli.BoolFlag{
+		Name:     "rollup.enabletxpooladmission",
+		Usage:    "Add RPC-submitted transactions to the txpool (on by default if --rollup.sequencerhttp is not set).",
+		Category: flags.RollupCategory,
+	}
+	*/
 	RollupComputePendingBlock = &cli.BoolFlag{
 		Name:     "rollup.computependingblock",
 		Usage:    "By default the pending block equals the latest block to save resources and not leak txs from the tx-pool, this flag enables computing of the pending block from the tx-pool instead.",
 		Category: flags.RollupCategory,
 	}
-	// [kroma unsupported]
-	// RollupHaltOnIncompatibleProtocolVersionFlag = &cli.StringFlag{
-	// 	Name:     "rollup.halt",
-	// 	Usage:    "Opt-in option to halt on incompatible protocol version requirements of the given level (major/minor/patch/none), as signaled through the Engine API by the rollup node",
-	// 	Category: flags.RollupCategory,
-	// }
-	// RollupSuperchainUpgradesFlag = &cli.BoolFlag{
-	// 	Name:     "rollup.superchain-upgrades",
-	// 	Aliases:  []string{"beta.rollup.superchain-upgrades"},
-	// 	Usage:    "Apply superchain-registry config changes to the local chain-configuration",
-	// 	Category: flags.RollupCategory,
-	// }
+	/* [kroma unsupported]
+	RollupHaltOnIncompatibleProtocolVersionFlag = &cli.StringFlag{
+		Name:     "rollup.halt",
+		Usage:    "Opt-in option to halt on incompatible protocol version requirements of the given level (major/minor/patch/none), as signaled through the Engine API by the rollup node",
+		Category: flags.RollupCategory,
+	}
+	RollupSuperchainUpgradesFlag = &cli.BoolFlag{
+		Name:     "rollup.superchain-upgrades",
+		Aliases:  []string{"beta.rollup.superchain-upgrades"},
+		Usage:    "Apply superchain-registry config changes to the local chain-configuration",
+		Category: flags.RollupCategory,
+		Value:    true,
+	}
+	*/
 
 	// Metrics flags
 	MetricsEnabledFlag = &cli.BoolFlag{
@@ -1901,21 +1912,22 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 			cfg.EthDiscoveryURLs = SplitAndTrim(urls)
 		}
 	}
-	// [kroma unsupported]
+	/* [kroma unsupported]
 	// Only configure sequencer http flag if we're running in verifier mode i.e. --mine is disabled.
-	// if ctx.IsSet(RollupSequencerHTTPFlag.Name) && !ctx.IsSet(MiningEnabledFlag.Name) {
-	// 	cfg.RollupSequencerHTTP = ctx.String(RollupSequencerHTTPFlag.Name)
-	// }
-	// if ctx.IsSet(RollupHistoricalRPCFlag.Name) {
-	// 	cfg.RollupHistoricalRPC = ctx.String(RollupHistoricalRPCFlag.Name)
-	// }
-	// if ctx.IsSet(RollupHistoricalRPCTimeoutFlag.Name) {
-	// 	cfg.RollupHistoricalRPCTimeout = ctx.Duration(RollupHistoricalRPCTimeoutFlag.Name)
-	// }
-	// cfg.RollupDisableTxPoolGossip = ctx.Bool(RollupDisableTxPoolGossipFlag.Name)
-	// cfg.RollupDisableTxPoolAdmission = cfg.RollupSequencerHTTP != "" && !ctx.Bool(RollupEnableTxPoolAdmissionFlag.Name)
-	// cfg.RollupHaltOnIncompatibleProtocolVersion = ctx.String(RollupHaltOnIncompatibleProtocolVersionFlag.Name)
-	// cfg.ApplySuperchainUpgrades = ctx.Bool(RollupSuperchainUpgradesFlag.Name)
+	if ctx.IsSet(RollupSequencerHTTPFlag.Name) && !ctx.IsSet(MiningEnabledFlag.Name) {
+		cfg.RollupSequencerHTTP = ctx.String(RollupSequencerHTTPFlag.Name)
+	}
+	if ctx.IsSet(RollupHistoricalRPCFlag.Name) {
+		cfg.RollupHistoricalRPC = ctx.String(RollupHistoricalRPCFlag.Name)
+	}
+	if ctx.IsSet(RollupHistoricalRPCTimeoutFlag.Name) {
+		cfg.RollupHistoricalRPCTimeout = ctx.Duration(RollupHistoricalRPCTimeoutFlag.Name)
+	}
+	cfg.RollupDisableTxPoolGossip = ctx.Bool(RollupDisableTxPoolGossipFlag.Name)
+	cfg.RollupDisableTxPoolAdmission = cfg.RollupSequencerHTTP != "" && !ctx.Bool(RollupEnableTxPoolAdmissionFlag.Name)
+	cfg.RollupHaltOnIncompatibleProtocolVersion = ctx.String(RollupHaltOnIncompatibleProtocolVersionFlag.Name)
+	cfg.ApplySuperchainUpgrades = ctx.Bool(RollupSuperchainUpgradesFlag.Name)
+	*/
 	// Override any default configs for hard coded networks.
 	switch {
 	case ctx.Bool(MainnetFlag.Name):
@@ -2177,12 +2189,11 @@ func SplitTagsFlag(tagsFlag string) map[string]string {
 	return tagsMap
 }
 
-// MakeChainDatabase open an LevelDB using the flags passed to the client and will hard crash if it fails.
+// MakeChainDatabase opens a database using the flags passed to the client and will hard crash if it fails.
 func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly bool) ethdb.Database {
 	var (
 		cache   = ctx.Int(CacheFlag.Name) * ctx.Int(CacheDatabaseFlag.Name) / 100
 		handles = MakeDatabaseHandles(ctx.Int(FDLimitFlag.Name))
-
 		err     error
 		chainDb ethdb.Database
 	)
@@ -2262,18 +2273,19 @@ func MakeGenesis(ctx *cli.Context) *core.Genesis {
 	case ctx.Bool(GoerliFlag.Name):
 		genesis = core.DefaultGoerliGenesisBlock()
 	case ctx.IsSet(OPNetworkFlag.Name):
-		// [kroma unsupported]
-		// name := ctx.String(OPNetworkFlag.Name)
-		// ch, err := params.OPStackChainIDByName(name)
-		// if err != nil {
-		// 	Fatalf("failed to load OP-Stack chain %q: %v", name, err)
-		// }
-		// genesis, err := core.LoadOPStackGenesis(ch)
-		// if err != nil {
-		// 	Fatalf("failed to load genesis for OP-Stack chain %q (%d): %v", name, ch, err)
-		// }
-		// return genesis
 		Fatalf("kroma does not support %s flag", OPNetworkFlag.Name)
+		/* [kroma unsupported]
+		name := ctx.String(OPNetworkFlag.Name)
+		ch, err := params.OPStackChainIDByName(name)
+		if err != nil {
+			Fatalf("failed to load OP-Stack chain %q: %v", name, err)
+		}
+		genesis, err := core.LoadOPStackGenesis(ch)
+		if err != nil {
+			Fatalf("failed to load genesis for OP-Stack chain %q (%d): %v", name, ch, err)
+		}
+		return genesis
+		*/
 	case ctx.Bool(DeveloperFlag.Name):
 		Fatalf("Developer chains are ephemeral")
 	}

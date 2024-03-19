@@ -145,9 +145,9 @@ type Message struct {
 	SkipAccountChecks bool
 
 	// Kroma rollup fields
-	IsDepositTx   bool                // IsDepositTx indicates the message is force-included and can persist a mint.
-	Mint          *big.Int            // Mint is the amount to mint before EVM processing, or nil if there is no minting.
-	RollupDataGas types.RollupGasData // RollupDataGas indicates the rollup cost of the message, 0 if not a rollup or no cost.
+	IsDepositTx    bool                 // IsDepositTx indicates the message is force-included and can persist a mint.
+	Mint           *big.Int             // Mint is the amount to mint before EVM processing, or nil if there is no minting.
+	RollupCostData types.RollupCostData // RollupCostData caches data to compute the fee we charge for data availability
 }
 
 // TransactionToMessage converts a transaction into a Message.
@@ -163,9 +163,9 @@ func TransactionToMessage(tx *types.Transaction, s types.Signer, baseFee *big.In
 		Data:       tx.Data(),
 		AccessList: tx.AccessList(),
 		// Kroma rollup fields
-		IsDepositTx:   tx.IsDepositTx(),
-		Mint:          tx.Mint(),
-		RollupDataGas: tx.RollupDataGas(),
+		IsDepositTx:    tx.IsDepositTx(),
+		Mint:           tx.Mint(),
+		RollupCostData: tx.RollupCostData(),
 
 		SkipAccountChecks: false,
 		BlobHashes:        tx.BlobHashes(),
@@ -245,10 +245,10 @@ func (st *StateTransition) buyGas() error {
 	mgval = mgval.Mul(mgval, st.msg.GasPrice)
 	var l1Cost *big.Int
 	if st.evm.Context.L1CostFunc != nil && !st.msg.SkipAccountChecks {
-		l1Cost = st.evm.Context.L1CostFunc(st.evm.Context.BlockNumber.Uint64(), st.msg.RollupDataGas, st.msg.IsDepositTx)
-	}
-	if l1Cost != nil {
-		mgval = mgval.Add(mgval, l1Cost)
+		l1Cost = st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time)
+		if l1Cost != nil {
+			mgval = mgval.Add(mgval, l1Cost)
+		}
 	}
 	balanceCheck := new(big.Int).Set(mgval)
 	if st.msg.GasFeeCap != nil {
@@ -314,11 +314,11 @@ func (st *StateTransition) preCheck() error {
 				msg.From.Hex(), codeHash)
 		}
 	}
-
 	// Make sure that transaction gasFeeCap is greater than the baseFee (post london)
 	if st.evm.ChainConfig().IsLondon(st.evm.Context.BlockNumber) {
 		// Skip the checks if gas fields are zero and baseFee was explicitly disabled (eth_call)
-		if !st.evm.Config.NoBaseFee || msg.GasFeeCap.BitLen() > 0 || msg.GasTipCap.BitLen() > 0 {
+		skipCheck := st.evm.Config.NoBaseFee && msg.GasFeeCap.BitLen() == 0 && msg.GasTipCap.BitLen() == 0
+		if !skipCheck {
 			if l := msg.GasFeeCap.BitLen(); l > 256 {
 				return fmt.Errorf("%w: address %v, maxFeePerGas bit length: %d", ErrFeeCapVeryHigh,
 					msg.From.Hex(), l)
@@ -334,7 +334,7 @@ func (st *StateTransition) preCheck() error {
 			// This will panic if baseFee is nil, but basefee presence is verified
 			// as part of header validation.
 			if msg.GasFeeCap.Cmp(st.evm.Context.BaseFee) < 0 {
-				return fmt.Errorf("%w: address %v, maxFeePerGas: %s baseFee: %s", ErrFeeCapTooLow,
+				return fmt.Errorf("%w: address %v, maxFeePerGas: %s, baseFee: %s", ErrFeeCapTooLow,
 					msg.From.Hex(), msg.GasFeeCap, st.evm.Context.BaseFee)
 			}
 		}
@@ -351,17 +351,21 @@ func (st *StateTransition) preCheck() error {
 			}
 		}
 	}
-
+	// Check that the user is paying at least the current blob fee
 	if st.evm.ChainConfig().IsCancun(st.evm.Context.BlockNumber, st.evm.Context.Time) {
 		if st.blobGasUsed() > 0 {
-			// Check that the user is paying at least the current blob fee
-			blobFee := st.evm.Context.BlobBaseFee
-			if st.msg.BlobGasFeeCap.Cmp(blobFee) < 0 {
-				return fmt.Errorf("%w: address %v have %v want %v", ErrBlobFeeCapTooLow, st.msg.From.Hex(), st.msg.BlobGasFeeCap, blobFee)
+			// Skip the checks if gas fields are zero and blobBaseFee was explicitly disabled (eth_call)
+			skipCheck := st.evm.Config.NoBaseFee && msg.BlobGasFeeCap.BitLen() == 0
+			if !skipCheck {
+				// This will panic if blobBaseFee is nil, but blobBaseFee presence
+				// is verified as part of header validation.
+				if msg.BlobGasFeeCap.Cmp(st.evm.Context.BlobBaseFee) < 0 {
+					return fmt.Errorf("%w: address %v blobGasFeeCap: %v, blobBaseFee: %v", ErrBlobFeeCapTooLow,
+						msg.From.Hex(), msg.BlobGasFeeCap, st.evm.Context.BlobBaseFee)
+				}
 			}
 		}
 	}
-
 	return st.buyGas()
 }
 
@@ -493,21 +497,19 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		// Skip fee payment when NoBaseFee is set and the fee fields
 		// are 0. This avoids a negative effectiveTip being applied to
 		// the coinbase when simulating calls.
-	} else {
+	} else if kromaConfig != nil {
 		gasUsed := new(big.Int).SetUint64(st.gasUsed())
-		if kromaConfig != nil {
-			feeDist := st.evm.Context.FeeDistributionFunc(blockNum, gasUsed, st.evm.Context.BaseFee, effectiveTip)
-			st.state.AddBalance(params.KromaValidatorRewardVault, feeDist.Reward)
-			st.state.AddBalance(params.KromaProtocolVault, feeDist.Protocol)
-		} else {
-			fee := new(big.Int)
-			fee.Mul(gasUsed, effectiveTip)
-			st.state.AddBalance(st.evm.Context.Coinbase, fee)
-		}
+		feeDist := st.evm.Context.FeeDistributionFunc(blockNum, gasUsed, st.evm.Context.BaseFee, effectiveTip)
+		st.state.AddBalance(params.KromaValidatorRewardVault, feeDist.Reward)
+		st.state.AddBalance(params.KromaProtocolVault, feeDist.Protocol)
+	} else {
+		fee := new(big.Int).SetUint64(st.gasUsed())
+		fee.Mul(fee, effectiveTip)
+		st.state.AddBalance(st.evm.Context.Coinbase, fee)
 	}
 
-	if kromaConfig != nil {
-		if cost := st.evm.Context.L1CostFunc(blockNum, st.msg.RollupDataGas, st.msg.IsDepositTx); cost != nil {
+	if kromaConfig != nil && !st.msg.IsDepositTx {
+		if cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); cost != nil {
 			st.state.AddBalance(params.KromaProposerRewardVault, cost)
 		}
 	}
