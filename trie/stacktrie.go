@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/ethereum/go-ethereum/trie/zk"
 )
 
 var (
@@ -40,6 +41,9 @@ type StackTrieOptions struct {
 	SkipLeftBoundary  bool          // Flag whether the nodes on the left boundary are skipped for committing
 	SkipRightBoundary bool          // Flag whether the nodes on the right boundary are skipped for committing
 	boundaryGauge     metrics.Gauge // Gauge to track how many boundary nodes are met
+
+	zk           bool
+	zkNodeHasher zk.Hasher
 }
 
 // NewStackTrieOptions initializes an empty options for stackTrie.
@@ -64,6 +68,16 @@ func (o *StackTrieOptions) WithSkipBoundary(skipLeft, skipRight bool, gauge metr
 	o.SkipLeftBoundary = skipLeft
 	o.SkipRightBoundary = skipRight
 	o.boundaryGauge = gauge
+	return o
+}
+
+func (o *StackTrieOptions) WithZk(zk bool) *StackTrieOptions {
+	o.zk = zk
+	return o
+}
+
+func (o *StackTrieOptions) WithZkNodeHasher(zkNodeHasher zk.Hasher) *StackTrieOptions {
+	o.zkNodeHasher = zkNodeHasher
 	return o
 }
 

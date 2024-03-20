@@ -769,7 +769,8 @@ func (s *Syncer) loadSyncStatus() {
 					// Skip the right boundary if it's not the last range.
 					options = options.WithSkipBoundary(task.Next != (common.Hash{}), task.Last != common.MaxHash, boundaryAccountNodesGauge)
 				}
-				task.genTrie = trie.NewStackTrie(options)
+				options = options.WithZk(s.isZk()).WithZkNodeHasher(s.zkNodeHasher)
+				task.genTrie = trie.NewMerkleStackTrie(options)
 				for accountHash, subtasks := range task.SubTasks {
 					for _, subtask := range subtasks {
 						subtask := subtask // closure for subtask.genBatch in the stacktrie writer callback
@@ -796,7 +797,8 @@ func (s *Syncer) loadSyncStatus() {
 							// Skip the right boundary if it's not the last range.
 							options = options.WithSkipBoundary(subtask.Next != common.Hash{}, subtask.Last != common.MaxHash, boundaryStorageNodesGauge)
 						}
-						subtask.genTrie = trie.NewStackTrie(options)
+						options = options.WithZk(s.isZk()).WithZkNodeHasher(s.zkNodeHasher)
+						subtask.genTrie = trie.NewMerkleStackTrie(options)
 					}
 				}
 			}
@@ -863,12 +865,13 @@ func (s *Syncer) loadSyncStatus() {
 			// Skip the right boundary if it's not the last range.
 			options = options.WithSkipBoundary(next != common.Hash{}, last != common.MaxHash, boundaryAccountNodesGauge)
 		}
+		options = options.WithZk(s.isZk()).WithZkNodeHasher(s.zkNodeHasher)
 		s.tasks = append(s.tasks, &accountTask{
 			Next:     next,
 			Last:     last,
 			SubTasks: make(map[common.Hash][]*storageTask),
 			genBatch: batch,
-			genTrie:  trie.NewStackTrie(options),
+			genTrie:  trie.NewMerkleStackTrie(options),
 		})
 		log.Debug("Created account sync task", "from", next, "last", last)
 		next = common.BigToHash(new(big.Int).Add(last.Big(), common.Big1))
@@ -2078,12 +2081,13 @@ func (s *Syncer) processStorageResponse(res *storageResponse) {
 						// Skip the right boundary if it's not the last range.
 						options = options.WithSkipBoundary(false, r.End() != common.MaxHash, boundaryStorageNodesGauge)
 					}
+					options = options.WithZk(s.isZk()).WithZkNodeHasher(s.zkNodeHasher)
 					tasks = append(tasks, &storageTask{
 						Next:     common.Hash{},
 						Last:     r.End(),
 						root:     acc.Root,
 						genBatch: batch,
-						genTrie:  trie.NewStackTrie(options),
+						genTrie:  trie.NewMerkleStackTrie(options),
 					})
 					for r.Next() {
 						batch := ethdb.HookedBatch{
@@ -2107,12 +2111,13 @@ func (s *Syncer) processStorageResponse(res *storageResponse) {
 							// Skip the right boundary if it's not the last range.
 							options = options.WithSkipBoundary(true, r.End() != common.MaxHash, boundaryStorageNodesGauge)
 						}
+						options = options.WithZk(s.isZk()).WithZkNodeHasher(s.zkNodeHasher)
 						tasks = append(tasks, &storageTask{
 							Next:     r.Start(),
 							Last:     r.End(),
 							root:     acc.Root,
 							genBatch: batch,
-							genTrie:  trie.NewStackTrie(options),
+							genTrie:  trie.NewMerkleStackTrie(options),
 						})
 					}
 					for _, task := range tasks {
@@ -2173,7 +2178,8 @@ func (s *Syncer) processStorageResponse(res *storageResponse) {
 					s.cleanPath(batch, account, path)
 				})
 			}
-			tr := trie.NewStackTrie(options)
+			options = options.WithZk(s.isZk()).WithZkNodeHasher(s.zkNodeHasher)
+			tr := trie.NewMerkleStackTrie(options)
 			for j := 0; j < len(res.hashes[i]); j++ {
 				tr.Update(trie.IteratorKeyToHash(res.hashes[i][j][:], s.isZk())[:], res.slots[i][j])
 			}

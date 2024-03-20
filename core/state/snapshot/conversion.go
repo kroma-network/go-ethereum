@@ -375,21 +375,15 @@ func stackTrieGenerate(db ethdb.KeyValueWriter, scheme string, owner common.Hash
 }
 
 func zkTrieGenerate(db ethdb.KeyValueWriter, scheme string, owner common.Hash, in chan trieKV, out chan common.Hash) {
-	var nodeWriter trie.NodeWriteFunc
+	options := trie.NewStackTrieOptions().WithZk(true)
 	if db != nil {
-		nodeWriter = func(path []byte, hash common.Hash, blob []byte) {
+		options = options.WithWriter(func(path []byte, hash common.Hash, blob []byte) {
 			rawdb.WriteTrieNode(db, owner, path, hash, blob, scheme)
-		}
+		})
 	}
-	t := trie.NewZkStackTrie(nodeWriter, nil)
+	t := trie.NewZkStackTrie(options)
 	for leaf := range in {
 		t.Update(trie.ZkIteratorKeyToHash(leaf.key).Bytes(), leaf.value)
 	}
-	var root common.Hash
-	if db == nil {
-		root = t.Hash()
-	} else {
-		root, _ = t.Commit()
-	}
-	out <- root
+	out <- t.Commit()
 }

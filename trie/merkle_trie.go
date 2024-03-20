@@ -58,15 +58,15 @@ func NewEmptyMerkleTrie(db *Database) MerkleTrie {
 
 type MerkleStackTrie interface {
 	Update([]byte, []byte) error
-	Commit() (h common.Hash, err error)
+	Commit() common.Hash
 	Hash() common.Hash
 }
 
-func NewMerkleStackTrie(writeFn NodeWriteFunc, isZk bool, zkNodeHasher zk.Hasher) MerkleStackTrie {
-	if isZk {
-		return NewZkStackTrie(writeFn, zkNodeHasher)
+func NewMerkleStackTrie(options *StackTrieOptions) MerkleStackTrie {
+	if options.zk {
+		return NewZkStackTrie(options)
 	}
-	return NewStackTrie(writeFn)
+	return NewStackTrie(options)
 }
 
 // MerkleStateTrie Interface to make StateTrie and ZkTrie and ZkMerkleStateTrie compatible.
