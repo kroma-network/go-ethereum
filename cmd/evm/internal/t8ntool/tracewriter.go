@@ -56,6 +56,10 @@ func (t *traceWriter) CaptureTxEnd(restGas uint64) {
 	}
 }
 
+func (t *traceWriter) CaptureStateAfter(pc uint64, op vm.OpCode, gas, cost uint64, scope *vm.ScopeContext, rData []byte, depth int, err error) {
+	t.inner.CaptureStateAfter(pc, op, gas, cost, scope, rData, depth, err)
+}
+
 func (t *traceWriter) CaptureTxStart(gasLimit uint64) { t.inner.CaptureTxStart(gasLimit) }
 func (t *traceWriter) CaptureStart(env *vm.EVM, from common.Address, to common.Address, create bool, input []byte, gas uint64, value *big.Int) {
 	t.inner.CaptureStart(env, from, to, create, input, gas, value)
