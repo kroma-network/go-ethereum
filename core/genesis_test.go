@@ -234,7 +234,7 @@ func TestReadWriteGenesisAlloc(t *testing.T) {
 			{2}: {Balance: big.NewInt(2), Storage: map[common.Hash]common.Hash{{2}: {2}}},
 		}
 		// [Scroll: START]
-		hash, _ = alloc.hash(false)
+		hash, _ = alloc.hash(false, false)
 		// [Scroll: END]
 	)
 	blob, _ := json.Marshal(alloc)

@@ -131,7 +131,7 @@ func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
 }
 
 // hash computes the state root according to the genesis specification.
-func (ga *GenesisAlloc) hash(isVerkle bool) (common.Hash, error) {
+func (ga *GenesisAlloc) hash(isVerkle bool, isZk bool) (common.Hash, error) {
 	// If a genesis-time verkle trie is requested, create a trie config
 	// with the verkle trie enabled so that the tree can be initialized
 	// as such.
@@ -142,10 +142,13 @@ func (ga *GenesisAlloc) hash(isVerkle bool) (common.Hash, error) {
 			IsVerkle: true,
 		}
 	}
+	if isZk {
+		config = &trie.Config{Zktrie: true}
+	}
 	// Create an ephemeral in-memory database for computing hash,
 	// all the derived states will be discarded to not pollute disk.
 	db := state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), config)
-	statedb, err := state.New(types.EmptyRootHash, db, nil)
+	statedb, err := state.New(types.GetEmptyRootHash(isZk), db, nil)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -518,21 +521,21 @@ func (g *Genesis) IsVerkle() bool {
 	return g.Config.IsVerkle(new(big.Int).SetUint64(g.Number), g.Timestamp)
 }
 
+func (g *Genesis) IsZk() bool {
+	return g.Config != nil && g.Config.Zktrie
+}
+
 // ToBlock returns the genesis block according to genesis specification.
 func (g *Genesis) ToBlock() *types.Block {
-	var trieCfg *trie.Config
 	var root common.Hash
 	var err error
-	if g.Config != nil {
-		trieCfg = &trie.Config{Zktrie: g.Config.Zktrie}
-	}
 	if g.StateHash != nil {
 		if len(g.Alloc) > 0 {
 			panic(fmt.Errorf("cannot both have genesis hash %s "+
 				"and non-empty state-allocation", *g.StateHash))
 		}
 		root = *g.StateHash
-	} else if root, err = g.Alloc.hash(g.IsVerkle()); err != nil {
+	} else if root, err = g.Alloc.hash(g.IsVerkle(), g.IsZk()); err != nil {
 		panic(err)
 	}
 	head := &types.Header{
