@@ -37,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
 )
 
 //go:generate go run github.com/fjl/gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
@@ -130,15 +131,21 @@ func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
 }
 
 // hash computes the state root according to the genesis specification.
-// [Scroll: START]
-func (ga *GenesisAlloc) hash(trieCfg *trie.Config) (common.Hash, error) {
-	// [Scroll: END]
+func (ga *GenesisAlloc) hash(isVerkle bool) (common.Hash, error) {
+	// If a genesis-time verkle trie is requested, create a trie config
+	// with the verkle trie enabled so that the tree can be initialized
+	// as such.
+	var config *trie.Config
+	if isVerkle {
+		config = &trie.Config{
+			PathDB:   pathdb.Defaults,
+			IsVerkle: true,
+		}
+	}
 	// Create an ephemeral in-memory database for computing hash,
 	// all the derived states will be discarded to not pollute disk.
-	// [Scroll: START]
-	db := state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), trieCfg)
-	// [Scroll: END]
-	statedb, err := state.New(types.GetEmptyRootHash(trieCfg != nil && trieCfg.Zktrie), db, nil)
+	db := state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), config)
+	statedb, err := state.New(types.EmptyRootHash, db, nil)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -505,6 +512,12 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	}
 }
 
+// IsVerkle indicates whether the state is already stored in a verkle
+// tree at genesis time.
+func (g *Genesis) IsVerkle() bool {
+	return g.Config.IsVerkle(new(big.Int).SetUint64(g.Number), g.Timestamp)
+}
+
 // ToBlock returns the genesis block according to genesis specification.
 func (g *Genesis) ToBlock() *types.Block {
 	var trieCfg *trie.Config
@@ -519,7 +532,7 @@ func (g *Genesis) ToBlock() *types.Block {
 				"and non-empty state-allocation", *g.StateHash))
 		}
 		root = *g.StateHash
-	} else if root, err = g.Alloc.hash(trieCfg); err != nil {
+	} else if root, err = g.Alloc.hash(g.IsVerkle()); err != nil {
 		panic(err)
 	}
 	head := &types.Header{
@@ -670,16 +683,16 @@ func DefaultHoleskyGenesisBlock() *Genesis {
 }
 
 // DeveloperGenesisBlock returns the 'geth --dev' genesis block.
-func DeveloperGenesisBlock(gasLimit uint64, faucet common.Address) *Genesis {
+func DeveloperGenesisBlock(gasLimit uint64, faucet *common.Address) *Genesis {
 	// Override the default period to the user requested one
 	config := *params.AllDevChainProtocolChanges
 
 	// Assemble and return the genesis with the precompiles and faucet pre-funded
-	return &Genesis{
+	genesis := &Genesis{
 		Config:     &config,
 		GasLimit:   gasLimit,
 		BaseFee:    big.NewInt(params.InitialBaseFee),
-		Difficulty: big.NewInt(0),
+		Difficulty: big.NewInt(1),
 		Alloc: map[common.Address]GenesisAccount{
 			common.BytesToAddress([]byte{1}): {Balance: big.NewInt(1)}, // ECRecover
 			common.BytesToAddress([]byte{2}): {Balance: big.NewInt(1)}, // SHA256
@@ -690,12 +703,15 @@ func DeveloperGenesisBlock(gasLimit uint64, faucet common.Address) *Genesis {
 			common.BytesToAddress([]byte{7}): {Balance: big.NewInt(1)}, // ECScalarMul
 			common.BytesToAddress([]byte{8}): {Balance: big.NewInt(1)}, // ECPairing
 			common.BytesToAddress([]byte{9}): {Balance: big.NewInt(1)}, // BLAKE2b
-			// [Scroll: START]
-			// LSH 250 due to finite field limitation
-			faucet: {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 250), big.NewInt(9))},
-			// [Scroll: END]
 		},
 	}
+	if faucet != nil {
+		// [Scroll: START]
+		// LSH 250 due to finite field limitation
+		genesis.Alloc[*faucet] = GenesisAccount{Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 250), big.NewInt(9))}
+		// [Scroll: END]
+	}
+	return genesis
 }
 
 func decodePrealloc(data string) GenesisAlloc {

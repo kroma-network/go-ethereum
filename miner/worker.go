@@ -740,16 +740,17 @@ func (w *worker) makeEnv(parent *types.Header, header *types.Header, coinbase co
 	// Retrieve the parent state to execute on top and start a prefetcher for
 	// the miner to speed block sealing up a bit.
 	state, err := w.chain.StateAt(parent.Root)
-	// [kroma unsupported]
-	// if err != nil && w.chainConfig.Optimism != nil { // Allow the miner to reorg its own chain arbitrarily deep
-	// 	if historicalBackend, ok := w.eth.(BackendWithHistoricalState); ok {
-	// 		var release tracers.StateReleaseFunc
-	// 		parentBlock := w.eth.BlockChain().GetBlockByHash(parent.Hash())
-	// 		state, release, err = historicalBackend.StateAtBlock(context.Background(), parentBlock, ^uint64(0), nil, false, false)
-	// 		state = state.Copy()
-	// 		release()
-	// 	}
-	// }
+	/* [kroma unsupported]
+	if err != nil && w.chainConfig.Optimism != nil { // Allow the miner to reorg its own chain arbitrarily deep
+		if historicalBackend, ok := w.eth.(BackendWithHistoricalState); ok {
+			var release tracers.StateReleaseFunc
+			parentBlock := w.eth.BlockChain().GetBlockByHash(parent.Hash())
+			state, release, err = historicalBackend.StateAtBlock(context.Background(), parentBlock, ^uint64(0), nil, false, false)
+			state = state.Copy()
+			release()
+		}
+	}
+	*/
 	if err != nil {
 		return nil, err
 	}
@@ -1200,7 +1201,7 @@ func (w *worker) commitWork(interrupt *atomic.Int32, timestamp int64) {
 	case err == nil:
 		// The entire block is filled, decrease resubmit interval in case
 		// of current interval is larger than the user-specified one.
-		w.resubmitAdjustCh <- &intervalAdjust{inc: false}
+		w.adjustResubmitInterval(&intervalAdjust{inc: false})
 
 	case errors.Is(err, errBlockInterruptedByRecommit):
 		// Notify resubmit loop to increase resubmitting interval if the
@@ -1210,10 +1211,10 @@ func (w *worker) commitWork(interrupt *atomic.Int32, timestamp int64) {
 		if ratio < 0.1 {
 			ratio = 0.1
 		}
-		w.resubmitAdjustCh <- &intervalAdjust{
+		w.adjustResubmitInterval(&intervalAdjust{
 			ratio: ratio,
 			inc:   true,
-		}
+		})
 
 	case errors.Is(err, errBlockInterruptedByNewHead):
 		// If the block building is interrupted by newhead event, discard it
@@ -1293,6 +1294,15 @@ func (w *worker) getSealingBlock(params *generateParams) *newPayloadResult {
 func (w *worker) isTTDReached(header *types.Header) bool {
 	td, ttd := w.chain.GetTd(header.ParentHash, header.Number.Uint64()-1), w.chain.Config().TerminalTotalDifficulty
 	return td != nil && ttd != nil && td.Cmp(ttd) >= 0
+}
+
+// adjustResubmitInterval adjusts the resubmit interval.
+func (w *worker) adjustResubmitInterval(message *intervalAdjust) {
+	select {
+	case w.resubmitAdjustCh <- message:
+	default:
+		log.Warn("the resubmitAdjustCh is full, discard the message")
+	}
 }
 
 // copyReceipts makes a deep copy of the given receipts.

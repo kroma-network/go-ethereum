@@ -28,7 +28,7 @@ var KromaChainConfigs = map[uint64]*KromaChainConfig{
 	},
 }
 
-var OPStackSupport = ProtocolVersionV0{Build: [8]byte{}, Major: 6, Minor: 0, Patch: 0, PreRelease: 2}.Encode()
+var OPStackSupport = ProtocolVersionV0{Build: [8]byte{}, Major: 6, Minor: 0, Patch: 0, PreRelease: 3}.Encode()
 
 func init() {
 	NetworkNames[fmt.Sprintf("%d", KromaMainnetChainID)] = "KromaMainnet"

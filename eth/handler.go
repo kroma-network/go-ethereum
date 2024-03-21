@@ -93,8 +93,9 @@ type handlerConfig struct {
 	BloomCache     uint64                 // Megabytes to alloc for snap sync bloom
 	EventMux       *event.TypeMux         // Legacy event mux, deprecate for `feed`
 	RequiredBlocks map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
-	// [kroma unsupported]
-	// NoTxGossip     bool                   // Disable P2P transaction gossip
+	/* [kroma unsupported]
+	NoTxGossip     bool                   // Disable P2P transaction gossip
+	*/
 }
 
 type handler struct {
@@ -109,8 +110,9 @@ type handler struct {
 	chain    *core.BlockChain
 	maxPeers int
 
-	// [kroma unsupported]
-	// noTxGossip bool
+	/* [kroma unsupported]
+	noTxGossip bool
+	*/
 
 	downloader   *downloader.Downloader
 	blockFetcher *fetcher.BlockFetcher
@@ -185,6 +187,10 @@ func newHandler(config *handlerConfig) (*handler, error) {
 			h.snapSync.Store(true)
 			log.Info("Enabled snap sync", "head", head.Number, "hash", head.Hash())
 		}
+	}
+	// If snap sync is requested but snapshots are disabled, fail loudly
+	if h.snapSync.Load() && config.Chain.Snapshots() == nil {
+		return nil, errors.New("snap sync not supported with snapshots disabled")
 	}
 	// Construct the downloader (long sync)
 	h.downloader = downloader.New(config.Database, h.eventMux, h.chain, nil, h.removePeer, h.enableSyncedFeatures)
