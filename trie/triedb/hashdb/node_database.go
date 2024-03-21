@@ -6,5 +6,4 @@ type NodeDatabase interface {
 	Cap(limit common.StorageSize) error
 	Reference(root common.Hash, parent common.Hash)
 	Dereference(root common.Hash)
-	Node(hash common.Hash) ([]byte, error)
 }
