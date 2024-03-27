@@ -302,6 +302,31 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 	}
 	applyOverrides := func(config *params.ChainConfig) {
 		if config != nil {
+			// [Kroma: START]
+			if config.IsKroma() {
+				// Load the chain-config for the given chain id, and overrides it if it exists.
+				if config.ChainID != nil && config.ChainID.IsUint64() {
+					conf, err := params.LoadKromaChainConfig(config.ChainID.Uint64())
+					if err != nil {
+						log.Warn("failed to load chain config from registry, skipping override", "err", err, "chain_id", config.ChainID)
+					} else {
+						*config = *conf
+					}
+				}
+
+				// NOTE: kroma always post-regolith
+				zero := uint64(0)
+				config.BedrockBlock = new(big.Int).SetUint64(zero)
+				config.RegolithTime = &zero
+			}
+			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxTxs != nil {
+				config.MaxTxPerBlock = overrides.CircuitParams.MaxTxs
+			}
+			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxCalldata != nil {
+				config.MaxTxPayloadBytesPerBlock = overrides.CircuitParams.MaxCalldata
+			}
+			// [Kroma: END]
+
 			/* [kroma unsupported]
 			// If applying the superchain-registry to a known OP-Stack chain,
 			// then override the local chain-config with that from the registry.
@@ -345,31 +370,6 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 			if overrides != nil && overrides.OverrideOptimismInterop != nil {
 				config.InteropTime = overrides.OverrideOptimismInterop
 			}
-
-			// [Kroma: START]
-			if config.IsKroma() {
-				// Load the chain-config for the given chain id, and overrides it if it exists.
-				if config.ChainID != nil && config.ChainID.IsUint64() {
-					conf, err := params.LoadKromaChainConfig(config.ChainID.Uint64())
-					if err != nil {
-						log.Warn("failed to load chain config from registry, skipping override", "err", err, "chain_id", config.ChainID)
-					} else {
-						*config = *conf
-					}
-				}
-
-				// NOTE: kroma always post-regolith
-				zero := uint64(0)
-				config.BedrockBlock = new(big.Int).SetUint64(zero)
-				config.RegolithTime = &zero
-			}
-			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxTxs != nil {
-				config.MaxTxPerBlock = overrides.CircuitParams.MaxTxs
-			}
-			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxCalldata != nil {
-				config.MaxTxPayloadBytesPerBlock = overrides.CircuitParams.MaxCalldata
-			}
-			// [Kroma: END]
 		}
 	}
 	// Just commit the new block if there is no stored genesis block.
