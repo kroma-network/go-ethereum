@@ -275,10 +275,7 @@ func (t *MerkleTree) rmAndUpload(path TreePath, pathNodes []*ParentNode) {
 	switch len(pathNodes) {
 	case 0: // The leaf node you want to remove is root node.
 		t.rootNode = EmptyNodeValue
-	case 1:
-		// root (ParentNode) --- LeafNode or ParentNode (promoted to root node)
-		//                    |- LeafNode (deleted)
-		t.rootNode = t.getChild(pathNodes[0], path.GetOther(0))
+	//case 1: incorrect tree update caused a hard fork. see https://github.com/kroma-network/kroma/pull/272
 	default:
 		lastSibling := t.getChild(pathNodes[len(pathNodes)-1], path.GetOther(len(pathNodes)-1))
 		defer func() {
@@ -361,7 +358,7 @@ func (t *MerkleTree) Prove(key []byte, writeNode func(TreeNode) error) error {
 
 func (t *MerkleTree) Copy() *MerkleTree {
 	return &MerkleTree{
-		rootNode:       t.rootNode,
+		rootNode:       copyNode(t.rootNode),
 		maxLevels:      t.maxLevels,
 		findBlobByHash: t.findBlobByHash,
 	}
