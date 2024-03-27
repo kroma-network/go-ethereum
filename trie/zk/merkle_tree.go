@@ -358,7 +358,7 @@ func (t *MerkleTree) Prove(key []byte, writeNode func(TreeNode) error) error {
 
 func (t *MerkleTree) Copy() *MerkleTree {
 	return &MerkleTree{
-		rootNode:       t.rootNode,
+		rootNode:       copyNode(t.rootNode),
 		maxLevels:      t.maxLevels,
 		findBlobByHash: t.findBlobByHash,
 	}

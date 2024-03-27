@@ -92,8 +92,8 @@ func (n *ParentNode) SetChild(path byte, child TreeNode) {
 	} else {
 		n.childL = child
 	}
-	if _, ok := oldChild.(*HashNode); ok && child.Hash() != nil && bytes.Equal(oldChild.Hash()[:], child.Hash()[:]) {
-		// This is a case of converting a HashNode to the original TreeNode. Does not clear the hash.
+	if oldChild != nil && oldChild.Hash() != nil && child.Hash() != nil && bytes.Equal(oldChild.Hash()[:], child.Hash()[:]) {
+		// The child hash has not changed. Does not clear the hash.
 		return
 	}
 	n.hash = nil
