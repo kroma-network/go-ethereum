@@ -16,9 +16,6 @@
 
 package rawdb
 
-/*
-TODO(chokobole): Reenable this test. See https://github.com/kroma-network/go-ethereum/issues/21.
-
 import (
 	"bytes"
 	"encoding/binary"
@@ -853,7 +850,6 @@ func checkRetrieveError(t *testing.T, f *freezerTable, items map[uint64]error) {
 		}
 	}
 }
-*/
 
 // Gets a chunk of data, filled with 'b'
 func getChunk(size int, b int) []byte {
@@ -864,9 +860,6 @@ func getChunk(size int, b int) []byte {
 	return data
 }
 
-/*
-TODO(chokobole): Reenable this test. See https://github.com/kroma-network/go-ethereum/issues/21.
-// TODO (?)
 // - test that if we remove several head-files, aswell as data last data-file,
 //   the index is truncated accordingly
 // Right now, the freezer would fail on these conditions:
@@ -1340,4 +1333,3 @@ func TestRandom(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-*/
