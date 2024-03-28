@@ -56,7 +56,7 @@ func OPStackChainNames() (out []string) {
 func LoadKromaChainConfig(chainID uint64) (*ChainConfig, error) {
 	kromaChainConfig, ok := KromaChainConfigs[chainID]
 	if !ok {
-		return nil, fmt.Errorf("unknown chain id %q", chainID)
+		return nil, fmt.Errorf("unknown chain id %d", chainID)
 	}
 
 	genesisActivation := uint64(0)
