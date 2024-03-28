@@ -157,7 +157,7 @@ var (
 		// [kroma unsupported]
 		// utils.RollupHaltOnIncompatibleProtocolVersionFlag,
 		// utils.RollupSuperchainUpgradesFlag,
-		utils.ExperimentalZkTrie,
+		utils.KromaZKTrie,
 		configFileFlag,
 	}, utils.NetworkFlags, utils.DatabaseFlags)
 

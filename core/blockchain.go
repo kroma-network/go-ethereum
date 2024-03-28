@@ -151,12 +151,12 @@ type CacheConfig struct {
 	SnapshotNoBuild bool // Whether the background generation is allowed
 	SnapshotWait    bool // Wait for snapshot construction on startup. TODO(karalabe): This is a dirty hack for testing, nuke it
 
-	ExperimentalZkTrie bool // use ZkMerkleStateTrie instead of ZkTrie
+	KromaZKTrie bool // use ZkMerkleStateTrie instead of ZkTrie
 }
 
 // triedbConfig derives the configures for trie database.
 func (c *CacheConfig) triedbConfig() *trie.Config {
-	config := &trie.Config{Preimages: c.Preimages, ExperimentalZkTrie: c.ExperimentalZkTrie}
+	config := &trie.Config{Preimages: c.Preimages, KromaZKTrie: c.KromaZKTrie}
 	if c.StateScheme == rawdb.HashScheme {
 		config.HashDB = &hashdb.Config{
 			CleanCacheSize: c.TrieCleanLimit * 1024 * 1024,

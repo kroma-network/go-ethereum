@@ -24,7 +24,7 @@ func NewTreePathFromHashBig(hash common.Hash) TreePath {
 func NewTreePathFromBig(key *big.Int, maxLevel int) TreePath {
 	result := make([]byte, maxLevel)
 	for i := 0; i < maxLevel; i++ {
-		bit := new(big.Int).Mod(key, big.NewInt(2))
+		bit := new(big.Int).Mod(key, common.Big2)
 		if bit.Uint64() == 1 {
 			result[maxLevel-1-i] = byte(bit.Int64())
 		}
@@ -85,6 +85,15 @@ func (p TreePath) toHexBytes() []byte {
 	return bytes
 }
 
+func (p TreePath) ToBigInt() *big.Int {
+	result := new(big.Int)
+	lastIdx := len(p) - 1
+	for i, b := range p {
+		result.SetBit(result, lastIdx-i, uint(b))
+	}
+	return result
+}
+
 func (p TreePath) NextPath() TreePath {
 	for i := len(p) - 1; i >= 0; i-- {
 		if p[i] == 0x0 {
@@ -111,13 +120,4 @@ func (p TreePath) PrevPath() TreePath {
 		}
 	}
 	return p
-}
-
-func (p TreePath) ToBigInt() *big.Int {
-	result := new(big.Int)
-	lastIdx := len(p) - 1
-	for i, b := range p {
-		result.SetBit(result, lastIdx-i, uint(b))
-	}
-	return result
 }

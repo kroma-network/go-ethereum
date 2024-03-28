@@ -84,7 +84,7 @@ type MerkleStateTrie interface {
 }
 
 func NewMerkleStateTrie(id *ID, db *Database) (MerkleStateTrie, error) {
-	if db.IsZkStateTrie() {
+	if db.IsKromaZK() {
 		return NewZkMerkleStateTrie(id.Root, db)
 	}
 	if db.IsZk() {
