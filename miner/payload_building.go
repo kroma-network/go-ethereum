@@ -234,7 +234,13 @@ func (w *worker) buildPayload(args *BuildPayloadArgs) (*Payload, error) {
 		// Setup the timer for terminating the process if SECONDS_PER_SLOT (12s in
 		// the Mainnet configuration) have passed since the point in time identified
 		// by the timestamp parameter.
-		endTimer := time.NewTimer(time.Second * 12)
+
+		// KROMA has a blocktime of 2 seconds, so we fixed it.
+		endTime := time.Second * 2
+		if w.chainConfig.Kroma == nil {
+			endTime = time.Second * 12
+		}
+		endTimer := time.NewTimer(endTime)
 
 		fullParams := &generateParams{
 			timestamp:   args.Timestamp,

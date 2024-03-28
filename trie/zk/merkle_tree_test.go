@@ -64,7 +64,33 @@ func TestDelete(t *testing.T) {
 				t.Errorf("root mismatch!")
 			}
 		})
+		t.Run(fmt.Sprintf("leaf count %d delete all", leafCount), func(t *testing.T) {
+			zktree := NewEmptyMerkleTree()
+			input := newTestInputFixedCount(leafCount).applyZkTrees(zktree)
+			for _, key := range input.keys {
+				zktree.MustDelete(MustNewSecureHash([]byte(key))[:])
+			}
+			if !bytes.Equal(HashZero[:], zktree.Hash()[:]) {
+				t.Errorf("root mismatch!")
+			}
+		})
 	}
+	t.Run("level 1 left LeafNode, right ParentNode. delete LeafNode", func(t *testing.T) {
+		tree := NewEmptyMerkleTree().WithMaxLevels(8)
+		for i := byte(0); i < 128; i += 16 {
+			tree.MustUpdate([]byte{i, 0, 0, 0, 0, 0, 0, 0}, []byte("a"))
+		}
+
+		tree.MustUpdate([]byte{1, 0, 0, 0, 0, 0, 0, 0}, []byte("a"))
+		tree.MustDelete([]byte{1, 0, 0, 0, 0, 0, 0, 0})
+
+		for i := byte(0); i < 128; i += 16 {
+			v := tree.MustGet([]byte{i, 0, 0, 0, 0, 0, 0, 0})
+			if !bytes.Equal(common.TrimLeftZeroes(v), []byte("a")) {
+				t.Fail()
+			}
+		}
+	})
 }
 
 func TestPushLeaf(t *testing.T) {
