@@ -93,8 +93,9 @@ type handlerConfig struct {
 	BloomCache     uint64                 // Megabytes to alloc for snap sync bloom
 	EventMux       *event.TypeMux         // Legacy event mux, deprecate for `feed`
 	RequiredBlocks map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
-	// [kroma unsupported]
-	// NoTxGossip     bool                   // Disable P2P transaction gossip
+	/* [kroma unsupported]
+	NoTxGossip     bool                   // Disable P2P transaction gossip
+	*/
 }
 
 type handler struct {
@@ -109,8 +110,9 @@ type handler struct {
 	chain    *core.BlockChain
 	maxPeers int
 
-	// [kroma unsupported]
-	// noTxGossip bool
+	/* [kroma unsupported]
+	noTxGossip bool
+	*/
 
 	downloader   *downloader.Downloader
 	blockFetcher *fetcher.BlockFetcher
@@ -186,8 +188,18 @@ func newHandler(config *handlerConfig) (*handler, error) {
 			log.Info("Enabled snap sync", "head", head.Number, "hash", head.Hash())
 		}
 	}
+	// If snap sync is requested but snapshots are disabled, fail loudly
+	if h.snapSync.Load() && config.Chain.Snapshots() == nil {
+		return nil, errors.New("snap sync not supported with snapshots disabled")
+	}
+	// if the chainID is set, pass it to the downloader for use in sync
+	// this might not be set in tests
+	var chainID uint64
+	if cid := h.chain.Config().ChainID; cid != nil {
+		chainID = cid.Uint64()
+	}
 	// Construct the downloader (long sync)
-	h.downloader = downloader.New(config.Database, h.eventMux, h.chain, nil, h.removePeer, h.enableSyncedFeatures)
+	h.downloader = downloader.New(config.Database, h.eventMux, h.chain, nil, h.removePeer, h.enableSyncedFeatures, chainID)
 	if ttd := h.chain.Config().TerminalTotalDifficulty; ttd != nil {
 		if h.chain.Config().TerminalTotalDifficultyPassed {
 			log.Info("Chain post-merge, sync via beacon client")

@@ -67,7 +67,7 @@ func (l *JSONLogger) CaptureState(pc uint64, op OpCode, gas, cost uint64, scope 
 	}
 	if l.cfg.EnableMemory {
 		// [Scroll: START]
-		log.Memory.Write(memory.Data())
+		log.Memory = memory.Data()
 		// [Scroll: END]
 	}
 	if !l.cfg.DisableStack {
@@ -75,7 +75,7 @@ func (l *JSONLogger) CaptureState(pc uint64, op OpCode, gas, cost uint64, scope 
 	}
 	if l.cfg.EnableReturnData {
 		// [Scroll: START]
-		log.ReturnData.Write(rData)
+		log.ReturnData = rData
 		// [Scroll: END]
 	}
 	l.encoder.Encode(log)

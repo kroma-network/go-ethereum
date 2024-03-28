@@ -229,9 +229,11 @@ func (dl *diskLayer) proveRange(ctx *generatorContext, trieId *trie.ID, prefix [
 	// The snap state is exhausted, pass the entire key/val set for verification
 	root := trieId.Root
 	if origin == nil && !diskMore {
-		stackTr := trie.NewMerkleStackTrie(nil, dl.zk, nil)
+		stackTr := trie.NewMerkleStackTrie(trie.NewStackTrieOptions().WithZk(dl.zk))
 		for i, key := range keys {
-			stackTr.Update(trie.IteratorKeyToHash(key, dl.zk)[:], vals[i])
+			if err := stackTr.Update(trie.IteratorKeyToHash(key, dl.zk)[:], vals[i]); err != nil {
+				return nil, err
+			}
 		}
 		if gotRoot := stackTr.Hash(); gotRoot != root {
 			return &proofResult{
@@ -450,7 +452,7 @@ func (dl *diskLayer) generateRange(ctx *generatorContext, trieId *trie.ID, prefi
 		// Trie errors should never happen. Still, in case of a bug, expose the
 		// error here, as the outer code will presume errors are interrupts, not
 		// some deeper issues.
-		log.Error("State snapshotter failed to iterate trie", "err", err)
+		log.Error("State snapshotter failed to iterate trie", "err", iter.Err)
 		return false, nil, iter.Err
 	}
 	// Delete all stale snapshot states remaining

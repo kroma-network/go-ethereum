@@ -29,9 +29,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/holiman/billy"
-	"github.com/holiman/uint256"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
@@ -44,6 +41,8 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/holiman/billy"
+	"github.com/holiman/uint256"
 )
 
 const (
@@ -739,7 +738,7 @@ func (p *BlobPool) offload(addr common.Address, nonce uint64, id uint64, inclusi
 }
 
 // Reset implements txpool.SubPool, allowing the blob pool's internal state to be
-// kept in sync with the main transacion pool's internal state.
+// kept in sync with the main transaction pool's internal state.
 func (p *BlobPool) Reset(oldHead, newHead *types.Header) {
 	waitStart := time.Now()
 	p.lock.Lock()
@@ -973,7 +972,7 @@ func (p *BlobPool) reinject(addr common.Address, txhash common.Hash) error {
 }
 
 // SetGasTip implements txpool.SubPool, allowing the blob pool's gas requirements
-// to be kept in sync with the main transacion pool's gas requirements.
+// to be kept in sync with the main transaction pool's gas requirements.
 func (p *BlobPool) SetGasTip(tip *big.Int) {
 	p.lock.Lock()
 	defer p.lock.Unlock()

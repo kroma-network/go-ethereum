@@ -47,20 +47,10 @@ var FullNodeGPO = gasprice.Config{
 	MinSuggestedPriorityFee: gasprice.DefaultMinSuggestedPriorityFee,
 }
 
-// LightClientGPO contains default gasprice oracle settings for light client.
-var LightClientGPO = gasprice.Config{
-	Blocks:           2,
-	Percentile:       60,
-	MaxHeaderHistory: 300,
-	MaxBlockHistory:  5,
-	MaxPrice:         gasprice.DefaultMaxPrice,
-	IgnorePrice:      gasprice.DefaultIgnorePrice,
-}
-
 // Defaults contains default settings for use on the Ethereum main net.
 var Defaults = Config{
 	SyncMode:           downloader.SnapSync,
-	NetworkId:          1,
+	NetworkId:          0, // enable auto configuration of networkID == chainID
 	TxLookupLimit:      2350000,
 	TransactionHistory: 2350000,
 	StateHistory:       params.FullImmutabilityThreshold,
@@ -88,8 +78,9 @@ type Config struct {
 	// If nil, the Ethereum main net block is used.
 	Genesis *core.Genesis `toml:",omitempty"`
 
-	// Protocol options
-	NetworkId uint64 // Network ID to use for selecting peers to connect to
+	// Network ID separates blockchains on the peer-to-peer networking level. When left
+	// zero, the chain ID is used as network ID.
+	NetworkId uint64
 	SyncMode  downloader.SyncMode
 
 	// This can be set to list of enrtree:// URLs which will be queried for
@@ -172,18 +163,20 @@ type Config struct {
 
 	OverrideOptimismCanyon *uint64 `toml:",omitempty"`
 
-	// [kroma unsupported]
+	OverrideOptimismEcotone *uint64 `toml:",omitempty"`
+
+	OverrideOptimismInterop *uint64 `toml:",omitempty"`
+	/* [kroma unsupported]
 	// ApplySuperchainUpgrades requests the node to load chain-configuration from the superchain-registry.
-	// ApplySuperchainUpgrades bool `toml:",omitempty"`
+	ApplySuperchainUpgrades bool `toml:",omitempty"`
 
-	// [kroma unsupported]
-	// RollupSequencerHTTP                     string
-	// RollupHistoricalRPC                     string
-	// RollupHistoricalRPCTimeout              time.Duration
-	// RollupDisableTxPoolGossip               bool
-	// RollupDisableTxPoolAdmission            bool
-	// RollupHaltOnIncompatibleProtocolVersion string
-
+	RollupSequencerHTTP                     string
+	RollupHistoricalRPC                     string
+	RollupHistoricalRPCTimeout              time.Duration
+	RollupDisableTxPoolGossip               bool
+	RollupDisableTxPoolAdmission            bool
+	RollupHaltOnIncompatibleProtocolVersion string
+	*/
 	// [Scroll: START]
 	// Trace option
 	MPTWitness int
@@ -197,6 +190,9 @@ type Config struct {
 // Clique is allowed for now to live standalone, but ethash is forbidden and can
 // only exist on already merged networks.
 func CreateConsensusEngine(config *params.ChainConfig, db ethdb.Database) (consensus.Engine, error) {
+	if config.Kroma != nil {
+		return beacon.New(&beacon.OpLegacy{}), nil
+	}
 	// If proof-of-authority is requested, set it up
 	if config.Clique != nil {
 		return beacon.New(clique.New(config.Clique, db)), nil

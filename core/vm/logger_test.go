@@ -17,7 +17,6 @@
 package vm
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"math/big"
@@ -91,22 +90,21 @@ func TestStructLogMarshalingOmitEmpty(t *testing.T) {
 	}{
 		{"empty err and no fields", &StructLog{},
 			// [Scroll: START]
-			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"opName":"STOP","error":""}`},
+			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"extraData":null,"opName":"STOP"}`},
 		// [Scroll: END]
 		{"with err", &StructLog{Err: errors.New("this failed")},
 			// [Scroll: START]
-			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"opName":"STOP","error":"this failed"}`},
+			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"extraData":null,"opName":"STOP","error":"this failed"}`},
 		// [Scroll: END]
-		{"with mem", &StructLog{Memory: *bytes.NewBuffer(make([]byte, 2)), MemorySize: 2},
+		{"with mem", &StructLog{Memory: make([]byte, 2), MemorySize: 2},
 			// [Scroll: START]
-			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memory":"0x0000","memSize":2,"stack":null,"depth":0,"refund":0,"opName":"STOP","error":""}`},
+			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memory":"0x0000","memSize":2,"stack":null,"depth":0,"refund":0,"extraData":null,"opName":"STOP"}`},
 		// [Scroll: END]
-		{"with 0-size mem", &StructLog{Memory: *bytes.NewBuffer(make([]byte, 0))},
+		{"with 0-size mem", &StructLog{Memory: make([]byte, 0)},
 			// [Scroll: START]
-			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"opName":"STOP","error":""}`},
+			`{"pc":0,"op":0,"gas":"0x0","gasCost":"0x0","memSize":0,"stack":null,"depth":0,"refund":0,"extraData":null,"opName":"STOP"}`},
 		// [Scroll: END]
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			blob, err := json.Marshal(tt.log)

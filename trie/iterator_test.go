@@ -622,6 +622,18 @@ func isTrieNode(scheme string, key, val []byte) (bool, []byte, common.Hash) {
 	return true, path, hash
 }
 
+func BenchmarkIterator(b *testing.B) {
+	diskDb, srcDb, tr, _ := makeTestTrie(rawdb.HashScheme)
+	root := tr.Hash()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := checkTrieConsistency(diskDb, srcDb.Scheme(), root, false); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func TestMerkleTreeIterator(t *testing.T) {
 	testIterator := func(t *testing.T, db *memorydb.Database, it NodeIterator) (count int, leafCount int) {
 		for ; it.Next(false); count++ {
