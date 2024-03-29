@@ -161,6 +161,9 @@ func getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScal
 	data = append(data, blobBaseFee.FillBytes(uint256)...)
 	data = append(data, ignored.FillBytes(uint256)...)
 	data = append(data, ignored.FillBytes(uint256)...)
+	// [Kroma: START]
+	data = append(data, ignored.FillBytes(uint256)...)
+	// [Kroma: END]
 	return data
 }
 

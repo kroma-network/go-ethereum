@@ -247,8 +247,8 @@ func extractL1GasParams(config *params.ChainConfig, time uint64, data []byte) (l
 // extractEcotoneL1GasParams extracts the gas parameters necessary to compute gas from L1 attribute
 // info calldata after the Ecotone upgrade, but not for the very first Ecotone block.
 func extractL1GasParamsEcotone(data []byte) (l1BaseFee *big.Int, costFunc l1CostFunc, err error) {
-	if len(data) != 164 {
-		return nil, nil, fmt.Errorf("expected 164 L1 info bytes, got %d", len(data))
+	if len(data) != 196 {
+		return nil, nil, fmt.Errorf("expected 196 L1 info bytes, got %d", len(data))
 	}
 	// data layout assumed for Ecotone:
 	// offset type varname
@@ -260,8 +260,9 @@ func extractL1GasParamsEcotone(data []byte) (l1BaseFee *big.Int, costFunc l1Cost
 	// 28    uint64 _l1BlockNumber
 	// 36    uint256 _basefee,
 	// 68    uint256 _blobBaseFee,
-	// 100    bytes32 _hash,
+	// 100   bytes32 _hash,
 	// 132   bytes32 _batcherHash,
+	// 164   uint256 _validatorRewardScalar
 	l1BaseFee = new(big.Int).SetBytes(data[36:68])
 	l1BlobBaseFee := new(big.Int).SetBytes(data[68:100])
 	l1BaseFeeScalar := new(big.Int).SetBytes(data[4:8])
