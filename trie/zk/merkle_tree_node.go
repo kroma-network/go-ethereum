@@ -106,8 +106,8 @@ func (n *ParentNode) SetChild(path byte, child TreeNode) {
 	} else {
 		n.childL = child
 	}
-	if _, ok := oldChild.(*HashNode); ok && child.Hash() != nil && bytes.Equal(oldChild.Hash()[:], child.Hash()[:]) {
-		// This is a case of converting a HashNode to the original TreeNode. Does not clear the hash.
+	if oldChild != nil && oldChild.Hash() != nil && child.Hash() != nil && bytes.Equal(oldChild.Hash()[:], child.Hash()[:]) {
+		// The child hash has not changed. Does not clear the hash.
 		return
 	}
 	n.hash = nil
@@ -174,7 +174,7 @@ func (n *LeafNode) Hash() *zkt.Hash { return n.hash }
 
 // CanonicalValue [type, Key[0], ..., Key[31], mark[0], ..., mark[3], Data[0], ..., Data[32*len(ValuePreimage)], key preimage len]
 // Leaf node does not provide key preimage, so set the length to 0.
-// If you can provide the key preimage, change the last 0 and add the key preimage afterwards. See ZkMerkleStateTrie.Prove
+// If you can provide the key preimage, change the last 0 and add the key preimage afterwards. See CanonicalValueWithKeyPreimage
 func (n *LeafNode) CanonicalValue() []byte {
 	key := make([]byte, 32)
 	copy(key[:], zkt.ReverseByteOrder(n.Key))
@@ -185,6 +185,18 @@ func (n *LeafNode) CanonicalValue() []byte {
 	buf.Write(n.Data())
 	buf.WriteByte(0) // key preimage len
 	return buf.Bytes()
+}
+
+func (n *LeafNode) CanonicalValueWithKeyPreimage(keyPreimage []byte) []byte {
+	value := n.CanonicalValue()
+	if len(keyPreimage) != 0 {
+		byte32 := &zkt.Byte32{}
+		copy(byte32[:], keyPreimage)
+
+		value[len(value)-1] = byte(len(byte32))
+		value = append(value, byte32[:]...)
+	}
+	return value
 }
 
 func (n *LeafNode) Data() []byte {

@@ -208,7 +208,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			// [Scroll: START]
 			MPTWitness: config.MPTWitness,
 			// [Scroll: END]
-			ExperimentalZkTrie: config.ExperimentalZkTree,
+			KromaZKTrie: config.KromaZKTrie,
 		}
 	)
 	// Override the chain config with provided settings.
