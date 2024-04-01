@@ -163,6 +163,34 @@ func TestProof(t *testing.T) {
 	}
 }
 
+func TestCanonicalValueWithKeyPreimage(t *testing.T) {
+	convertLeafNodeInput := func(key, value string) (*Hash, uint32, []Byte32) {
+		hash := NewHashFromBytes([]byte(key))
+		flag, values, err := MarshalBytes([]byte(value))
+		if err != nil {
+			t.Errorf("fail to MarshalBytes %v", value)
+		}
+		return hash, flag, values
+	}
+
+	assertEqual := func(scroll, kroma []byte) {
+		if !bytes.Equal(scroll, kroma) {
+			t.Errorf("\nscroll: %v\nkroma : %v", scroll, kroma)
+		}
+	}
+
+	hash, flag, values := convertLeafNodeInput("key1", "value1")
+
+	scrolLeaf := trie.NewLeafNode(hash, flag, values)
+	kromaLeaf := &LeafNode{Key: hash[:], ValuePreimage: values, CompressedFlags: flag}
+
+	assertEqual(scrolLeaf.CanonicalValue(), kromaLeaf.CanonicalValue())
+	assertEqual(scrolLeaf.Value(), kromaLeaf.CanonicalValueWithKeyPreimage(nil))
+
+	scrolLeaf.KeyPreimage = NewByte32FromBytes(scrolLeaf.NodeKey.Bytes())
+	assertEqual(scrolLeaf.Value(), kromaLeaf.CanonicalValueWithKeyPreimage(scrolLeaf.NodeKey.Bytes()))
+}
+
 func BenchmarkUpdateAndHash(b *testing.B) {
 	type testTree struct {
 		Update func(k, v []byte) error
