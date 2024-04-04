@@ -52,6 +52,14 @@ func MustNewSecureHash(b []byte) *zkt.Hash {
 	return hash
 }
 
+func copyNode(n TreeNode) TreeNode {
+	switch node := n.(type) {
+	case *ParentNode:
+		return &ParentNode{childL: copyNode(node.childL), childR: copyNode(node.childR), hash: node.hash}
+	}
+	return n
+}
+
 func clearNodeHash(n TreeNode) {
 	switch node := n.(type) {
 	case *ParentNode:
