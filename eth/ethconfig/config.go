@@ -183,7 +183,7 @@ type Config struct {
 	// [Scroll: END]
 	CircuitParams *params.CircuitParams
 
-	ExperimentalZkTree bool
+	KromaZKTrie bool
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain config.

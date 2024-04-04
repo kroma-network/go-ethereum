@@ -12,6 +12,7 @@
   - update ValidatorRewardScalar to L1Block contract [#36](https://github.com/kroma-network/go-ethereum/pull/36).
   - change transaction fee distribution logic [#36](https://github.com/kroma-network/go-ethereum/pull/36).
   - use zktrie instead of merkle patricia trie
+  - use KromaZKTrie instead of scroll zktrie
 
 ## scroll-geth
 

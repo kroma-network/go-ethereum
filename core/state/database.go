@@ -184,7 +184,7 @@ type cachingDB struct {
 
 // OpenTrie opens the main account trie at a specific root hash.
 func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
-	if db.triedb.IsZkStateTrie() {
+	if db.triedb.IsKromaZK() {
 		return trie.NewZkMerkleStateTrie(root, db.triedb)
 	}
 	// [Scroll: START]
@@ -208,7 +208,7 @@ func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
 
 // OpenStorageTrie opens the storage trie of an account.
 func (db *cachingDB) OpenStorageTrie(stateRoot common.Hash, address common.Address, root common.Hash, self Trie) (Trie, error) {
-	if db.triedb.IsZkStateTrie() {
+	if db.triedb.IsKromaZK() {
 		return trie.NewZkMerkleStateTrie(root, db.triedb)
 	}
 	// [Scroll: START]

@@ -1012,10 +1012,11 @@ Please note that --` + MetricsHTTPFlag.Name + ` must be set to start the server.
 		Category: flags.MetricsCategory,
 	}
 
-	ExperimentalZkTrie = &cli.BoolFlag{
-		Name:     "zkstatetrie",
-		Usage:    "use ZkMerkleStateTrie instead of ZkTrie in state. This is an experimental flag.",
+	KromaZKTrie = &cli.BoolFlag{
+		Name:     "KromaZKTrie",
+		Usage:    "use ZkMerkleStateTrie instead of ZkTrie in state.",
 		Category: flags.EthCategory,
+		Value:    true,
 	}
 )
 

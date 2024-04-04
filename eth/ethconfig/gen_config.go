@@ -62,7 +62,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		OverrideOptimismInterop *uint64 `toml:",omitempty"`
 		MPTWitness              int
 		CircuitParams           *params.CircuitParams
-		ExperimentalZkTree      bool
+		KromaZKTrie             bool
 	}
 	var enc Config
 	enc.Genesis = c.Genesis
@@ -109,7 +109,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.OverrideOptimismInterop = c.OverrideOptimismInterop
 	enc.MPTWitness = c.MPTWitness
 	enc.CircuitParams = c.CircuitParams
-	enc.ExperimentalZkTree = c.ExperimentalZkTree
+	enc.KromaZKTrie = c.KromaZKTrie
 	return &enc, nil
 }
 
@@ -160,7 +160,7 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		OverrideOptimismInterop *uint64 `toml:",omitempty"`
 		MPTWitness              *int
 		CircuitParams           *params.CircuitParams
-		ExperimentalZkTree      *bool
+		KromaZKTrie             *bool
 	}
 	var dec Config
 	if err := unmarshal(&dec); err != nil {
@@ -298,8 +298,8 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	if dec.CircuitParams != nil {
 		c.CircuitParams = dec.CircuitParams
 	}
-	if dec.ExperimentalZkTree != nil {
-		c.ExperimentalZkTree = *dec.ExperimentalZkTree
+	if dec.KromaZKTrie != nil {
+		c.KromaZKTrie = *dec.KromaZKTrie
 	}
 	return nil
 }

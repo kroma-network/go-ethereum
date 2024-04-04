@@ -28,17 +28,18 @@ func NewEmptyZkMerkleStateTrie(db *Database) *ZkMerkleStateTrie {
 }
 
 func newZkMerkleStateTrie(tree *zk.MerkleTree, db *Database) *ZkMerkleStateTrie {
-	trie := NewZkMerkleTrie(tree, db)
+	trie := &ZkMerkleStateTrie{ZkMerkleTrie: NewZkMerkleTrie(tree, db), preimage: db.preimages}
 	trie.logger = log.New("trie", "ZkMerkleStateTrie")
 	trie.transformKey = func(key []byte) ([]byte, error) {
 		sanityCheckByte32Key(key)
-		hash, err := zk.NewSecureHash(key)
+		secureKey, err := zkt.ToSecureKey(key)
 		if err != nil {
 			return nil, err
 		}
-		return hash[:], nil
+		trie.db.UpdatePreimage(key, secureKey)
+		return zkt.NewHashFromBigInt(secureKey)[:], nil
 	}
-	return &ZkMerkleStateTrie{ZkMerkleTrie: trie, preimage: db.preimages}
+	return trie
 }
 
 func (z *ZkMerkleStateTrie) GetKey(kHashBytes []byte) []byte {
@@ -48,10 +49,10 @@ func (z *ZkMerkleStateTrie) GetKey(kHashBytes []byte) []byte {
 		z.logger.Error("failed to GetKey", "error", err)
 		return nil
 	}
-	if z.db.preimages == nil {
+	if z.preimage == nil {
 		return nil
 	}
-	return z.db.preimages.preimage(common.BytesToHash(k.Bytes()))
+	return z.preimage.preimage(common.BytesToHash(k.Bytes()))
 }
 
 func (z *ZkMerkleStateTrie) GetAccountByHash(addrHash common.Hash) (*types.StateAccount, error) {
@@ -96,14 +97,14 @@ func (z *ZkMerkleStateTrie) DeleteAccount(address common.Address) error       { 
 
 func (z *ZkMerkleStateTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {
 	return z.prove(common.ReverseBytes(key), proofDb, func(node zk.TreeNode) error {
-		value := node.CanonicalValue()
 		if leaf, ok := node.(*zk.LeafNode); ok {
-			if preImage := z.GetKey(common.ReverseBytes(leaf.Key)); len(preImage) > 0 {
-				value[len(value)-1] = byte(len(preImage))
-				value = append(value, preImage[:]...)
+			keyPreimage := z.GetKey(common.ReverseBytes(leaf.Key))
+			if len(keyPreimage) == 0 {
+				keyPreimage = key
 			}
+			return proofDb.Put(node.Hash()[:], leaf.CanonicalValueWithKeyPreimage(keyPreimage))
 		}
-		return proofDb.Put(node.Hash()[:], value)
+		return proofDb.Put(node.Hash()[:], node.CanonicalValue())
 	})
 }
 
