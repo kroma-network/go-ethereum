@@ -61,9 +61,12 @@ var (
 	OverheadSlot  = common.BigToHash(big.NewInt(5))
 	ScalarSlot    = common.BigToHash(big.NewInt(6))
 
+	// [Kroma: START]
+	// The addition of validatorRewardScalar pushes slot back by one space
 	// L2BlobBaseFeeSlot was added with the Ecotone upgrade and stores the blobBaseFee L1 gas
 	// attribute.
-	L1BlobBaseFeeSlot = common.BigToHash(big.NewInt(7))
+	L1BlobBaseFeeSlot = common.BigToHash(big.NewInt(8))
+	// [Kroma: END]
 	// L1FeeScalarsSlot as of the Ecotone upgrade stores the 32-bit basefeeScalar and
 	// blobBaseFeeScalar L1 gas attributes at offsets `BaseFeeScalarSlotOffset` and
 	// `BlobBaseFeeScalarSlotOffset` respectively.
