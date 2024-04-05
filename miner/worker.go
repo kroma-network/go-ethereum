@@ -1126,6 +1126,10 @@ func (w *worker) generateWork(genParams *generateParams) *newPayloadResult {
 
 	misc.EnsureCreate2Deployer(w.chainConfig, work.header.Time, work.state)
 
+	// [Kroma: START]
+	misc.EnsureMulticall3(w.chainConfig, work.header.Time, work.state)
+	// [Kroma: END]
+
 	for _, tx := range genParams.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
