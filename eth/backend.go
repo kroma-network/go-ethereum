@@ -76,9 +76,10 @@ type Ethereum struct {
 	snapDialCandidates enode.Iterator
 	merger             *consensus.Merger
 
-	// [kroma unsupported]
-	// seqRPCService        *rpc.Client
-	// historicalRPCService *rpc.Client
+	/* [kroma unsupported]
+	seqRPCService        *rpc.Client
+	historicalRPCService *rpc.Client
+	*/
 
 	// DB interfaces
 	chainDb ethdb.Database // Block chain database
@@ -114,7 +115,7 @@ type Ethereum struct {
 func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// Ensure configuration values are compatible and sane
 	if config.SyncMode == downloader.LightSync {
-		return nil, errors.New("can't run eth.Ethereum in light sync mode, use les.LightEthereum")
+		return nil, errors.New("can't run eth.Ethereum in light sync mode, light mode has been deprecated")
 	}
 	if !config.SyncMode.IsValid() {
 		return nil, fmt.Errorf("invalid sync mode %d", config.SyncMode)
@@ -158,6 +159,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
+	networkID := config.NetworkId
+	if networkID == 0 {
+		networkID = chainConfig.ChainID.Uint64()
+	}
 	eth := &Ethereum{
 		config:            config,
 		merger:            consensus.NewMerger(chainDb),
@@ -166,7 +171,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		accountManager:    stack.AccountManager(),
 		engine:            engine,
 		closeBloomHandler: make(chan struct{}),
-		networkID:         config.NetworkId,
+		networkID:         networkID,
 		gasPrice:          config.Miner.GasPrice,
 		etherbase:         config.Miner.Etherbase,
 		bloomRequests:     make(chan chan *bloombits.Retrieval),
@@ -176,7 +181,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		nodeCloser:        stack.Close,
 	}
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
-	var dbVer = "<nil>"
+	dbVer := "<nil>"
 	if bcVersion != nil {
 		dbVer = fmt.Sprintf("%d", *bcVersion)
 	}
@@ -214,6 +219,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// Override the chain config with provided settings.
 	var overrides core.ChainOverrides
 	overrides.CircuitParams = new(params.CircuitParams)
+	if config.CircuitParams != nil && config.CircuitParams.MaxTxs != nil {
+		overrides.CircuitParams.MaxTxs = config.CircuitParams.MaxTxs
+	}
+	if config.CircuitParams != nil && config.CircuitParams.MaxCalldata != nil {
+		overrides.CircuitParams.MaxCalldata = config.CircuitParams.MaxCalldata
+	}
 	if config.OverrideCancun != nil {
 		overrides.OverrideCancun = config.OverrideCancun
 	}
@@ -223,14 +234,15 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.OverrideOptimismCanyon != nil {
 		overrides.OverrideOptimismCanyon = config.OverrideOptimismCanyon
 	}
-	if config.CircuitParams != nil && config.CircuitParams.MaxTxs != nil {
-		overrides.CircuitParams.MaxTxs = config.CircuitParams.MaxTxs
+	if config.OverrideOptimismEcotone != nil {
+		overrides.OverrideOptimismEcotone = config.OverrideOptimismEcotone
 	}
-	if config.CircuitParams != nil && config.CircuitParams.MaxCalldata != nil {
-		overrides.CircuitParams.MaxCalldata = config.CircuitParams.MaxCalldata
+	if config.OverrideOptimismInterop != nil {
+		overrides.OverrideOptimismInterop = config.OverrideOptimismInterop
 	}
-	// [kroma unsupported]
-	// overrides.ApplySuperchainUpgrades = config.ApplySuperchainUpgrades
+	/* [kroma unsupported]
+	overrides.ApplySuperchainUpgrades = config.ApplySuperchainUpgrades
+	*/
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TransactionHistory)
 	if err != nil {
 		return nil, err
@@ -250,14 +262,18 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.BlobPool.Datadir != "" {
 		config.BlobPool.Datadir = stack.ResolvePath(config.BlobPool.Datadir)
 	}
-	blobPool := blobpool.New(config.BlobPool, eth.blockchain)
 
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
 	}
 	legacyPool := legacypool.New(config.TxPool, eth.blockchain)
 
-	eth.txPool, err = txpool.New(new(big.Int).SetUint64(config.TxPool.PriceLimit), eth.blockchain, []txpool.SubPool{legacyPool, blobPool})
+	txPools := []txpool.SubPool{legacyPool}
+	if !eth.BlockChain().Config().IsKroma() {
+		blobPool := blobpool.New(config.BlobPool, eth.blockchain)
+		txPools = append(txPools, blobPool)
+	}
+	eth.txPool, err = txpool.New(new(big.Int).SetUint64(config.TxPool.PriceLimit), eth.blockchain, txPools)
 	if err != nil {
 		return nil, err
 	}
@@ -268,13 +284,14 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		Chain:          eth.blockchain,
 		TxPool:         eth.txPool,
 		Merger:         eth.merger,
-		Network:        config.NetworkId,
+		Network:        networkID,
 		Sync:           config.SyncMode,
 		BloomCache:     uint64(cacheLimit),
 		EventMux:       eth.eventMux,
 		RequiredBlocks: config.RequiredBlocks,
-		// [kroma unsupported]
-		// NoTxGossip:     config.RollupDisableTxPoolGossip,
+		/* [kroma unsupported]
+		NoTxGossip:     config.RollupDisableTxPoolGossip,
+		*/
 	}); err != nil {
 		return nil, err
 	}
@@ -303,29 +320,29 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	// [kroma unsupported]
-	// if config.RollupSequencerHTTP != "" {
-	// 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	// 	client, err := rpc.DialContext(ctx, config.RollupSequencerHTTP)
-	// 	cancel()
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	eth.seqRPCService = client
-	// }
-	//
-	// if config.RollupHistoricalRPC != "" {
-	// 	ctx, cancel := context.WithTimeout(context.Background(), config.RollupHistoricalRPCTimeout)
-	// 	client, err := rpc.DialContext(ctx, config.RollupHistoricalRPC)
-	// 	cancel()
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	eth.historicalRPCService = client
-	// }
+	/* [kroma unsupported]
+	if config.RollupSequencerHTTP != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		client, err := rpc.DialContext(ctx, config.RollupSequencerHTTP)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+		eth.seqRPCService = client
+	}
 
+	if config.RollupHistoricalRPC != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), config.RollupHistoricalRPCTimeout)
+		client, err := rpc.DialContext(ctx, config.RollupHistoricalRPC)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+		eth.historicalRPCService = client
+	}
+	*/
 	// Start the RPC service
-	eth.netRPCService = ethapi.NewNetAPI(eth.p2pServer, config.NetworkId)
+	eth.netRPCService = ethapi.NewNetAPI(eth.p2pServer, networkID)
 
 	// Register the backend on the node
 	stack.RegisterAPIs(eth.APIs())
@@ -592,13 +609,14 @@ func (s *Ethereum) Stop() error {
 	s.miner.Close()
 	s.blockchain.Stop()
 	s.engine.Close()
-	// [kroma unsupported]
-	// if s.seqRPCService != nil {
-	// 	s.seqRPCService.Close()
-	// }
-	// if s.historicalRPCService != nil {
-	// 	s.historicalRPCService.Close()
-	// }
+	/* [kroma unsupported]
+	if s.seqRPCService != nil {
+		s.seqRPCService.Close()
+	}
+	if s.historicalRPCService != nil {
+		s.historicalRPCService.Close()
+	}
+	*/
 
 	// Clean shutdown marker as the last thing before closing db
 	s.shutdownTracker.Stop()
@@ -609,33 +627,34 @@ func (s *Ethereum) Stop() error {
 	return nil
 }
 
-// [kroma unsupported]
+/* [kroma unsupported]
 // HandleRequiredProtocolVersion handles the protocol version signal. This implements opt-in halting,
 // the protocol version data is already logged and metered when signaled through the Engine API.
-// func (s *Ethereum) HandleRequiredProtocolVersion(required params.ProtocolVersion) error {
-// 	var needLevel int
-// 	switch s.config.RollupHaltOnIncompatibleProtocolVersion {
-// 	case "major":
-// 		needLevel = 3
-// 	case "minor":
-// 		needLevel = 2
-// 	case "patch":
-// 		needLevel = 1
-// 	default:
-// 		return nil // do not consider halting if not configured to
-// 	}
-// 	haveLevel := 0
-// 	switch params.OPStackSupport.Compare(required) {
-// 	case params.OutdatedMajor:
-// 		haveLevel = 3
-// 	case params.OutdatedMinor:
-// 		haveLevel = 2
-// 	case params.OutdatedPatch:
-// 		haveLevel = 1
-// 	}
-// 	if haveLevel >= needLevel { // halt if we opted in to do so at this granularity
-// 		log.Error("Opted to halt, unprepared for protocol change", "required", required, "local", params.OPStackSupport)
-// 		return s.nodeCloser()
-// 	}
-// 	return nil
-// }
+func (s *Ethereum) HandleRequiredProtocolVersion(required params.ProtocolVersion) error {
+	var needLevel int
+	switch s.config.RollupHaltOnIncompatibleProtocolVersion {
+	case "major":
+		needLevel = 3
+	case "minor":
+		needLevel = 2
+	case "patch":
+		needLevel = 1
+	default:
+		return nil // do not consider halting if not configured to
+	}
+	haveLevel := 0
+	switch params.OPStackSupport.Compare(required) {
+	case params.OutdatedMajor:
+		haveLevel = 3
+	case params.OutdatedMinor:
+		haveLevel = 2
+	case params.OutdatedPatch:
+		haveLevel = 1
+	}
+	if haveLevel >= needLevel { // halt if we opted in to do so at this granularity
+		log.Error("Opted to halt, unprepared for protocol change", "required", required, "local", params.OPStackSupport)
+		return s.nodeCloser()
+	}
+	return nil
+}
+*/

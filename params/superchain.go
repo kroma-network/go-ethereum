@@ -8,12 +8,12 @@ import (
 	"strings"
 
 	"github.com/ethereum-optimism/superchain-registry/superchain"
-
 	"github.com/ethereum/go-ethereum/common"
 )
 
 type KromaChainConfig struct {
-	CanyonTime *uint64
+	CanyonTime  *uint64
+	EcotoneTime *uint64
 }
 
 var KromaChainConfigs = map[uint64]*KromaChainConfig{
@@ -28,7 +28,7 @@ var KromaChainConfigs = map[uint64]*KromaChainConfig{
 	},
 }
 
-var OPStackSupport = ProtocolVersionV0{Build: [8]byte{}, Major: 4, Minor: 0, Patch: 0, PreRelease: 1}.Encode()
+var OPStackSupport = ProtocolVersionV0{Build: [8]byte{}, Major: 6, Minor: 0, Patch: 0, PreRelease: 0}.Encode()
 
 func init() {
 	NetworkNames[fmt.Sprintf("%d", KromaMainnetChainID)] = "KromaMainnet"
@@ -56,7 +56,7 @@ func OPStackChainNames() (out []string) {
 func LoadKromaChainConfig(chainID uint64) (*ChainConfig, error) {
 	kromaChainConfig, ok := KromaChainConfigs[chainID]
 	if !ok {
-		return nil, fmt.Errorf("unknown chain id %q", chainID)
+		return nil, fmt.Errorf("unknown chain id %d", chainID)
 	}
 
 	genesisActivation := uint64(0)
@@ -78,12 +78,13 @@ func LoadKromaChainConfig(chainID uint64) (*ChainConfig, error) {
 		ArrowGlacierBlock:             common.Big0,
 		GrayGlacierBlock:              common.Big0,
 		MergeNetsplitBlock:            common.Big0,
-		ShanghaiTime:                  kromaChainConfig.CanyonTime, // Shanghai activates with Canyon
-		CancunTime:                    nil,
+		ShanghaiTime:                  kromaChainConfig.CanyonTime,  // Shanghai activates with Canyon
+		CancunTime:                    kromaChainConfig.EcotoneTime, // Cancun activates with Ecotone
 		PragueTime:                    nil,
 		BedrockBlock:                  common.Big0,
 		RegolithTime:                  &genesisActivation,
 		CanyonTime:                    kromaChainConfig.CanyonTime,
+		EcotoneTime:                   kromaChainConfig.EcotoneTime,
 		TerminalTotalDifficulty:       common.Big0,
 		TerminalTotalDifficultyPassed: true,
 		Ethash:                        nil,

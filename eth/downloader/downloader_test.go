@@ -85,7 +85,7 @@ func newTesterWithNotification(t *testing.T, success func()) *downloadTester {
 		peers:   make(map[string]*downloadTesterPeer),
 		zk:      testingx.IsZk(t),
 	}
-	tester.downloader = New(db, new(event.TypeMux), tester.chain, nil, tester.dropPeer, success)
+	tester.downloader = New(db, new(event.TypeMux), tester.chain, nil, tester.dropPeer, success, 0)
 	return tester
 }
 

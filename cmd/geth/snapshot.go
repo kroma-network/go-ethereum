@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
@@ -84,8 +85,8 @@ In other words, this command does the snapshot to trie conversion.
 				Action:    checkDanglingStorage,
 				Flags:     flags.Merge(utils.NetworkFlags, utils.DatabaseFlags),
 				Description: `
-geth snapshot check-dangling-storage <state-root> traverses the snap storage 
-data, and verifies that all snapshot storage data has a corresponding account. 
+geth snapshot check-dangling-storage <state-root> traverses the snap storage
+data, and verifies that all snapshot storage data has a corresponding account.
 `,
 			},
 			{
@@ -96,7 +97,7 @@ data, and verifies that all snapshot storage data has a corresponding account.
 				Flags:     flags.Merge(utils.NetworkFlags, utils.DatabaseFlags),
 				Description: `
 geth snapshot inspect-account <address | hash> checks all snapshot layers and prints out
-information about the specified address. 
+information about the specified address.
 `,
 			},
 			{
@@ -147,6 +148,17 @@ as the backend data source, making this command a lot faster.
 
 The argument is interpreted as block number or hash. If none is provided, the latest
 block is used.
+`,
+			},
+			{
+				Action:    snapshotExportPreimages,
+				Name:      "export-preimages",
+				Usage:     "Export the preimage in snapshot enumeration order",
+				ArgsUsage: "<dumpfile> [<root>]",
+				Flags:     utils.DatabaseFlags,
+				Description: `
+The export-preimages command exports hash preimages to a flat file, in exactly
+the expected order for the overlay tree migration.
 `,
 			},
 		},
@@ -205,7 +217,7 @@ func verifyState(ctx *cli.Context) error {
 		log.Error("Failed to load head block")
 		return errors.New("no head block")
 	}
-	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true, cfg.Eth.Genesis.Config.Zktrie)
+	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true, false, cfg.Eth.Genesis.Config.Zktrie)
 	defer triedb.Close()
 
 	snapConfig := snapshot.Config{
@@ -260,7 +272,7 @@ func traverseState(ctx *cli.Context) error {
 	chaindb := utils.MakeChainDatabase(ctx, stack, true)
 	defer chaindb.Close()
 
-	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true, cfg.Eth.Genesis.Config.Zktrie)
+	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true, false, cfg.Eth.Genesis.Config.Zktrie)
 	defer triedb.Close()
 
 	headBlock := rawdb.ReadHeadBlock(chaindb)
@@ -369,7 +381,7 @@ func traverseRawState(ctx *cli.Context) error {
 	chaindb := utils.MakeChainDatabase(ctx, stack, true)
 	defer chaindb.Close()
 
-	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true, cfg.Eth.Genesis.Config.Zktrie)
+	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true, false, cfg.Eth.Genesis.Config.Zktrie)
 	defer triedb.Close()
 
 	headBlock := rawdb.ReadHeadBlock(chaindb)
@@ -533,7 +545,7 @@ func dumpState(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	triedb := utils.MakeTrieDatabase(ctx, db, false, true, cfg.Eth.Genesis.Config.Zktrie)
+	triedb := utils.MakeTrieDatabase(ctx, db, false, true, false, cfg.Eth.Genesis.Config.Zktrie)
 	defer triedb.Close()
 
 	snapConfig := snapshot.Config{
@@ -568,11 +580,11 @@ func dumpState(ctx *cli.Context) error {
 			return err
 		}
 		da := &state.DumpAccount{
-			Balance:   account.Balance.String(),
-			Nonce:     account.Nonce,
-			Root:      account.Root.Bytes(),
-			CodeHash:  account.CodeHash,
-			SecureKey: accIt.Hash().Bytes(),
+			Balance:     account.Balance.String(),
+			Nonce:       account.Nonce,
+			Root:        account.Root.Bytes(),
+			CodeHash:    account.CodeHash,
+			AddressHash: accIt.Hash().Bytes(),
 		}
 		if !conf.SkipCode && !bytes.Equal(account.CodeHash, types.EmptyCodeHash.Bytes()) {
 			da.Code = rawdb.ReadCode(db, common.BytesToHash(account.CodeHash))
@@ -602,6 +614,48 @@ func dumpState(ctx *cli.Context) error {
 	log.Info("Snapshot dumping complete", "accounts", accounts,
 		"elapsed", common.PrettyDuration(time.Since(start)))
 	return nil
+}
+
+// snapshotExportPreimages dumps the preimage data to a flat file.
+func snapshotExportPreimages(ctx *cli.Context) error {
+	if ctx.NArg() < 1 {
+		utils.Fatalf("This command requires an argument.")
+	}
+	stack, cfg := makeConfigNode(ctx)
+	defer stack.Close()
+
+	chaindb := utils.MakeChainDatabase(ctx, stack, true)
+	defer chaindb.Close()
+
+	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true, false, cfg.Eth.Genesis.Config.Zktrie)
+	defer triedb.Close()
+
+	var root common.Hash
+	if ctx.NArg() > 1 {
+		rootBytes := common.FromHex(ctx.Args().Get(1))
+		if len(rootBytes) != common.HashLength {
+			return fmt.Errorf("invalid hash: %s", ctx.Args().Get(1))
+		}
+		root = common.BytesToHash(rootBytes)
+	} else {
+		headBlock := rawdb.ReadHeadBlock(chaindb)
+		if headBlock == nil {
+			log.Error("Failed to load head block")
+			return errors.New("no head block")
+		}
+		root = headBlock.Root()
+	}
+	snapConfig := snapshot.Config{
+		CacheSize:  256,
+		Recovery:   false,
+		NoBuild:    true,
+		AsyncBuild: false,
+	}
+	snaptree, err := snapshot.New(snapConfig, chaindb, triedb, root)
+	if err != nil {
+		return err
+	}
+	return utils.ExportSnapshotPreimages(chaindb, snaptree, ctx.Args().First(), root)
 }
 
 // checkAccount iterates the snap data layers, and looks up the given account
