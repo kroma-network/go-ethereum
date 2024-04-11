@@ -74,9 +74,13 @@ type MerkleStateTrie interface {
 	Hash() common.Hash
 	GetNode(path []byte) ([]byte, int, error)
 	MustGet(key []byte) []byte
+	GetAccount(address common.Address) (*types.StateAccount, error)
 	GetAccountByHash(addrHash common.Hash) (*types.StateAccount, error)
 	UpdateAccount(address common.Address, account *types.StateAccount) error
+	DeleteAccount(address common.Address) error
 	MustUpdate(key, value []byte)
+	GetStorage(addr common.Address, key []byte) ([]byte, error)
+	DeleteStorage(address common.Address, key []byte) error
 	MustDelete(key []byte)
 	MustNodeIterator(start []byte) NodeIterator
 	Commit(collectLeaf bool) (common.Hash, *trienode.NodeSet, error)
