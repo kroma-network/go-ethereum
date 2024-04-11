@@ -509,7 +509,7 @@ func (l *StructLogger) MaybeAddL1BlockInfo(tx *types.Transaction) {
 	}
 	if contractAddress := *tx.To(); bytes.Equal(contractAddress[:], types.L1BlockAddr[:]) {
 		l.storage[contractAddress][types.OverheadSlot] = l.env.StateDB.GetState(contractAddress, types.OverheadSlot)
-		l.storage[contractAddress][types.L1FeeScalarsSlot] = l.env.StateDB.GetState(contractAddress, types.L1FeeScalarsSlot)
+		l.storage[contractAddress][types.ScalarSlot] = l.env.StateDB.GetState(contractAddress, types.ScalarSlot)
 	}
 }
 
