@@ -504,6 +504,9 @@ func (l *StructLogger) MaybeAddFeeRecipientsToStatesAffected(tx *types.Transacti
 }
 
 func (l *StructLogger) MaybeAddL1BlockInfo(tx *types.Transaction) {
+	if tx.To() == nil {
+		return
+	}
 	if contractAddress := *tx.To(); bytes.Equal(contractAddress[:], types.L1BlockAddr[:]) {
 		l.storage[contractAddress][types.OverheadSlot] = l.env.StateDB.GetState(contractAddress, types.OverheadSlot)
 		l.storage[contractAddress][types.L1FeeScalarsSlot] = l.env.StateDB.GetState(contractAddress, types.L1FeeScalarsSlot)
