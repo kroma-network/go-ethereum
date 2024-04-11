@@ -90,6 +90,6 @@ func (s *stateDb) GetCodeSize(_ common.Address) int {
 	return 0
 }
 
-func (s *stateDb) SetCode(_ common.Address, _ []byte) {
-	s.codeSet = true
+func (s *stateDb) SetCode(_ common.Address, code []byte) {
+	s.codeSet = len(code) > 0
 }
