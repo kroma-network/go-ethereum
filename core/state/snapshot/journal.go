@@ -137,6 +137,7 @@ func loadSnapshot(diskdb ethdb.KeyValueStore, triedb *trie.Database, root common
 		triedb: triedb,
 		cache:  fastcache.New(cache * 1024 * 1024),
 		root:   baseRoot,
+		zk:     triedb.IsZk(),
 	}
 	snapshot, generator, err := loadAndParseJournal(diskdb, base)
 	if err != nil {

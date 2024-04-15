@@ -58,8 +58,11 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		OverrideCancun          *uint64 `toml:",omitempty"`
 		OverrideVerkle          *uint64 `toml:",omitempty"`
 		OverrideOptimismCanyon  *uint64 `toml:",omitempty"`
+		OverrideOptimismEcotone *uint64 `toml:",omitempty"`
+		OverrideOptimismInterop *uint64 `toml:",omitempty"`
 		MPTWitness              int
 		CircuitParams           *params.CircuitParams
+		KromaZKTrie             bool
 	}
 	var enc Config
 	enc.Genesis = c.Genesis
@@ -102,8 +105,11 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.OverrideCancun = c.OverrideCancun
 	enc.OverrideVerkle = c.OverrideVerkle
 	enc.OverrideOptimismCanyon = c.OverrideOptimismCanyon
+	enc.OverrideOptimismEcotone = c.OverrideOptimismEcotone
+	enc.OverrideOptimismInterop = c.OverrideOptimismInterop
 	enc.MPTWitness = c.MPTWitness
 	enc.CircuitParams = c.CircuitParams
+	enc.KromaZKTrie = c.KromaZKTrie
 	return &enc, nil
 }
 
@@ -150,8 +156,11 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		OverrideCancun          *uint64 `toml:",omitempty"`
 		OverrideVerkle          *uint64 `toml:",omitempty"`
 		OverrideOptimismCanyon  *uint64 `toml:",omitempty"`
+		OverrideOptimismEcotone *uint64 `toml:",omitempty"`
+		OverrideOptimismInterop *uint64 `toml:",omitempty"`
 		MPTWitness              *int
 		CircuitParams           *params.CircuitParams
+		KromaZKTrie             *bool
 	}
 	var dec Config
 	if err := unmarshal(&dec); err != nil {
@@ -277,11 +286,20 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	if dec.OverrideOptimismCanyon != nil {
 		c.OverrideOptimismCanyon = dec.OverrideOptimismCanyon
 	}
+	if dec.OverrideOptimismEcotone != nil {
+		c.OverrideOptimismEcotone = dec.OverrideOptimismEcotone
+	}
+	if dec.OverrideOptimismInterop != nil {
+		c.OverrideOptimismInterop = dec.OverrideOptimismInterop
+	}
 	if dec.MPTWitness != nil {
 		c.MPTWitness = *dec.MPTWitness
 	}
 	if dec.CircuitParams != nil {
 		c.CircuitParams = dec.CircuitParams
+	}
+	if dec.KromaZKTrie != nil {
+		c.KromaZKTrie = *dec.KromaZKTrie
 	}
 	return nil
 }

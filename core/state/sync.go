@@ -17,10 +17,11 @@
 package state
 
 import (
+	"strings"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -42,8 +43,8 @@ func NewStateSync(root common.Hash, database ethdb.KeyValueReader, onLeaf func(k
 				return err
 			}
 		}
-		var obj types.StateAccount
-		if err := rlp.DecodeBytes(leaf, &obj); err != nil {
+		obj, err := types.NewStateAccount(leaf, strings.HasSuffix(scheme, "Zk"))
+		if err != nil {
 			return err
 		}
 		syncer.AddSubTrie(obj.Root, path, parent, parentPath, onSlot)

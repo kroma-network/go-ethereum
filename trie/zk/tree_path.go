@@ -1,6 +1,7 @@
 package zk
 
 import (
+	"log"
 	"math/big"
 
 	zkt "github.com/kroma-network/zktrie/types"
@@ -91,4 +92,32 @@ func (p TreePath) ToBigInt() *big.Int {
 		result.SetBit(result, lastIdx-i, uint(b))
 	}
 	return result
+}
+
+func (p TreePath) NextPath() TreePath {
+	for i := len(p) - 1; i >= 0; i-- {
+		if p[i] == 0x0 {
+			p[i] = 0x1
+			break
+		} else if p[i] == 0x1 {
+			p[i] = 0x0
+		} else {
+			log.Panicf("invalid tree path %v\n", p)
+		}
+	}
+	return p
+}
+
+func (p TreePath) PrevPath() TreePath {
+	for i := len(p) - 1; i >= 0; i-- {
+		if p[i] == 0x0 {
+			p[i] = 0x1
+		} else if p[i] == 0x1 {
+			p[i] = 0x0
+			break
+		} else {
+			log.Panicf("invalid tree path %v\n", p)
+		}
+	}
+	return p
 }

@@ -25,7 +25,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -43,6 +42,17 @@ type diskLayer struct {
 	genAbort   chan chan *generatorStats // Notification channel to abort generating the snapshot in this layer
 
 	lock sync.RWMutex
+	zk   bool
+}
+
+// Release releases underlying resources; specifically the fastcache requires
+// Reset() in order to not leak memory.
+// OBS: It does not invoke Close on the diskdb
+func (dl *diskLayer) Release() error {
+	if dl.cache != nil {
+		dl.cache.Reset()
+	}
+	return nil
 }
 
 // Root returns  root hash for which this snapshot was made.
@@ -74,8 +84,8 @@ func (dl *diskLayer) Account(hash common.Hash) (*types.SlimAccount, error) {
 	if len(data) == 0 { // can be both nil and []byte{}
 		return nil, nil
 	}
-	account := new(types.SlimAccount)
-	if err := rlp.DecodeBytes(data, account); err != nil {
+	account, err := types.NewSlimAccount(data, dl.zk)
+	if err != nil {
 		panic(err)
 	}
 	return account, nil

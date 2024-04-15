@@ -37,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
 )
 
 //go:generate go run github.com/fjl/gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
@@ -130,15 +131,24 @@ func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
 }
 
 // hash computes the state root according to the genesis specification.
-// [Scroll: START]
-func (ga *GenesisAlloc) hash(trieCfg *trie.Config) (common.Hash, error) {
-	// [Scroll: END]
+func (ga *GenesisAlloc) hash(isVerkle bool, isZk bool) (common.Hash, error) {
+	// If a genesis-time verkle trie is requested, create a trie config
+	// with the verkle trie enabled so that the tree can be initialized
+	// as such.
+	var config *trie.Config
+	if isVerkle {
+		config = &trie.Config{
+			PathDB:   pathdb.Defaults,
+			IsVerkle: true,
+		}
+	}
+	if isZk {
+		config = &trie.Config{Zktrie: true}
+	}
 	// Create an ephemeral in-memory database for computing hash,
 	// all the derived states will be discarded to not pollute disk.
-	// [Scroll: START]
-	db := state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), trieCfg)
-	// [Scroll: END]
-	statedb, err := state.New(types.GetEmptyRootHash(trieCfg != nil && trieCfg.Zktrie), db, nil)
+	db := state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), config)
+	statedb, err := state.New(types.GetEmptyRootHash(isZk), db, nil)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -259,9 +269,11 @@ type ChainOverrides struct {
 	OverrideCancun *uint64
 	OverrideVerkle *uint64
 	// optimism
-	OverrideOptimismCanyon *uint64
-	// [kroma unsupported]
+	OverrideOptimismCanyon  *uint64
+	OverrideOptimismEcotone *uint64
+	/* [kroma unsupported] */
 	// ApplySuperchainUpgrades bool
+	OverrideOptimismInterop *uint64
 
 	// kroma
 	CircuitParams *params.CircuitParams
@@ -290,28 +302,6 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 	}
 	applyOverrides := func(config *params.ChainConfig) {
 		if config != nil {
-			// [kroma unsupported]
-			// If applying the superchain-registry to a known OP-Stack chain,
-			// then override the local chain-config with that from the registry.
-			// if overrides != nil && overrides.ApplySuperchainUpgrades && config.IsOptimism() && config.ChainID != nil && config.ChainID.IsUint64() {
-			// 	if _, ok := superchain.OPChains[config.ChainID.Uint64()]; ok {
-			// 		conf, err := params.LoadOPStackChainConfig(config.ChainID.Uint64())
-			// 		if err != nil {
-			// 			log.Warn("failed to load chain config from superchain-registry, skipping override", "err", err, "chain_id", config.ChainID)
-			// 		} else {
-			// 			*config = *conf
-			// 		}
-			// 	}
-			// }
-			// if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(big.NewInt(params.OPGoerliChainID)) == 0 {
-			// 	// Apply Optimism Goerli regolith time
-			// 	config.RegolithTime = &params.OptimismGoerliRegolithTime
-			// }
-			// if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(big.NewInt(params.BaseGoerliChainID)) == 0 {
-			// 	// Apply Base Goerli regolith time
-			// 	config.RegolithTime = &params.BaseGoerliRegolithTime
-			// }
-
 			// [Kroma: START]
 			if config.IsKroma() {
 				// Load the chain-config for the given chain id, and overrides it if it exists.
@@ -329,7 +319,37 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 				config.BedrockBlock = new(big.Int).SetUint64(zero)
 				config.RegolithTime = &zero
 			}
+			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxTxs != nil {
+				config.MaxTxPerBlock = overrides.CircuitParams.MaxTxs
+			}
+			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxCalldata != nil {
+				config.MaxTxPayloadBytesPerBlock = overrides.CircuitParams.MaxCalldata
+			}
 			// [Kroma: END]
+
+			/* [kroma unsupported]
+			// If applying the superchain-registry to a known OP-Stack chain,
+			// then override the local chain-config with that from the registry.
+			if overrides != nil && overrides.ApplySuperchainUpgrades && config.IsOptimism() && config.ChainID != nil && config.ChainID.IsUint64() {
+				if _, ok := superchain.OPChains[config.ChainID.Uint64()]; ok {
+					conf, err := params.LoadOPStackChainConfig(config.ChainID.Uint64())
+					if err != nil {
+						log.Warn("failed to load chain config from superchain-registry, skipping override", "err", err, "chain_id", config.ChainID)
+					} else {
+						*config = *conf
+					}
+				}
+			}
+
+			if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(big.NewInt(params.OPGoerliChainID)) == 0 {
+				// Apply Optimism Goerli regolith time
+				config.RegolithTime = &params.OptimismGoerliRegolithTime
+			}
+			if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(big.NewInt(params.BaseGoerliChainID)) == 0 {
+				// Apply Base Goerli regolith time
+				config.RegolithTime = &params.BaseGoerliRegolithTime
+			}
+			*/
 			if overrides != nil && overrides.OverrideCancun != nil {
 				config.CancunTime = overrides.OverrideCancun
 			}
@@ -343,15 +363,13 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 					config.Kroma.EIP1559DenominatorCanyon = 250
 				}
 			}
-
-			// [Kroma: START]
-			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxTxs != nil {
-				config.MaxTxPerBlock = overrides.CircuitParams.MaxTxs
+			if overrides != nil && overrides.OverrideOptimismEcotone != nil {
+				config.EcotoneTime = overrides.OverrideOptimismEcotone
+				config.CancunTime = overrides.OverrideOptimismEcotone
 			}
-			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxCalldata != nil {
-				config.MaxTxPayloadBytesPerBlock = overrides.CircuitParams.MaxCalldata
+			if overrides != nil && overrides.OverrideOptimismInterop != nil {
+				config.InteropTime = overrides.OverrideOptimismInterop
 			}
-			// [Kroma: END]
 		}
 	}
 	// Just commit the new block if there is no stored genesis block.
@@ -363,12 +381,12 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		} else {
 			log.Info("Writing custom genesis block")
 		}
+		applyOverrides(genesis.Config)
 		triedb.SetBackend(genesis.Config.Zktrie)
 		block, err := genesis.Commit(db, triedb)
 		if err != nil {
 			return genesis.Config, common.Hash{}, err
 		}
-		applyOverrides(genesis.Config)
 		return genesis.Config, block.Hash(), nil
 	}
 
@@ -386,11 +404,17 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 	// state database is not initialized yet. It can happen that the node
 	// is initialized with an external ancient store. Commit genesis state
 	// in this case.
+	// If the bedrock block is not 0, that implies that the network was migrated at the bedrock block.
+	// In this case the genesis state may not be in the state database (e.g. op-geth is performing a snap
+	// sync without an existing datadir) & even if it were, would not be useful as op-geth is not able to
+	// execute the pre-bedrock STF.
 	header := rawdb.ReadHeader(db, stored, 0)
-	if header.Root != triedb.EmptyRoot() && !triedb.Initialized(header.Root) {
+	transitionedNetwork := genesis != nil && genesis.Config != nil && genesis.Config.BedrockBlock != nil && genesis.Config.BedrockBlock.Uint64() != 0
+	if header.Root != triedb.EmptyRoot() && !triedb.Initialized(header.Root) && !transitionedNetwork {
 		if genesis == nil {
 			genesis = DefaultGenesisBlock()
 		}
+		applyOverrides(genesis.Config)
 		// Ensure the stored genesis matches with the given one.
 		hash := genesis.ToBlock().Hash()
 		if hash != stored {
@@ -400,11 +424,11 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		if err != nil {
 			return genesis.Config, hash, err
 		}
-		applyOverrides(genesis.Config)
 		return genesis.Config, block.Hash(), nil
 	}
 	// Check whether the genesis block is already written.
 	if genesis != nil {
+		applyOverrides(genesis.Config)
 		hash := genesis.ToBlock().Hash()
 		if hash != stored {
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}
@@ -496,21 +520,27 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	}
 }
 
+// IsVerkle indicates whether the state is already stored in a verkle
+// tree at genesis time.
+func (g *Genesis) IsVerkle() bool {
+	return g.Config.IsVerkle(new(big.Int).SetUint64(g.Number), g.Timestamp)
+}
+
+func (g *Genesis) IsZk() bool {
+	return g.Config != nil && g.Config.Zktrie
+}
+
 // ToBlock returns the genesis block according to genesis specification.
 func (g *Genesis) ToBlock() *types.Block {
-	var trieCfg *trie.Config
 	var root common.Hash
 	var err error
-	if g.Config != nil {
-		trieCfg = &trie.Config{Zktrie: g.Config.Zktrie}
-	}
 	if g.StateHash != nil {
 		if len(g.Alloc) > 0 {
 			panic(fmt.Errorf("cannot both have genesis hash %s "+
 				"and non-empty state-allocation", *g.StateHash))
 		}
 		root = *g.StateHash
-	} else if root, err = g.Alloc.hash(trieCfg); err != nil {
+	} else if root, err = g.Alloc.hash(g.IsVerkle(), g.IsZk()); err != nil {
 		panic(err)
 	}
 	head := &types.Header{
@@ -661,16 +691,16 @@ func DefaultHoleskyGenesisBlock() *Genesis {
 }
 
 // DeveloperGenesisBlock returns the 'geth --dev' genesis block.
-func DeveloperGenesisBlock(gasLimit uint64, faucet common.Address) *Genesis {
+func DeveloperGenesisBlock(gasLimit uint64, faucet *common.Address) *Genesis {
 	// Override the default period to the user requested one
 	config := *params.AllDevChainProtocolChanges
 
 	// Assemble and return the genesis with the precompiles and faucet pre-funded
-	return &Genesis{
+	genesis := &Genesis{
 		Config:     &config,
 		GasLimit:   gasLimit,
 		BaseFee:    big.NewInt(params.InitialBaseFee),
-		Difficulty: big.NewInt(0),
+		Difficulty: big.NewInt(1),
 		Alloc: map[common.Address]GenesisAccount{
 			common.BytesToAddress([]byte{1}): {Balance: big.NewInt(1)}, // ECRecover
 			common.BytesToAddress([]byte{2}): {Balance: big.NewInt(1)}, // SHA256
@@ -681,12 +711,15 @@ func DeveloperGenesisBlock(gasLimit uint64, faucet common.Address) *Genesis {
 			common.BytesToAddress([]byte{7}): {Balance: big.NewInt(1)}, // ECScalarMul
 			common.BytesToAddress([]byte{8}): {Balance: big.NewInt(1)}, // ECPairing
 			common.BytesToAddress([]byte{9}): {Balance: big.NewInt(1)}, // BLAKE2b
-			// [Scroll: START]
-			// LSH 250 due to finite field limitation
-			faucet: {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 250), big.NewInt(9))},
-			// [Scroll: END]
 		},
 	}
+	if faucet != nil {
+		// [Scroll: START]
+		// LSH 250 due to finite field limitation
+		genesis.Alloc[*faucet] = GenesisAccount{Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 250), big.NewInt(9))}
+		// [Scroll: END]
+	}
+	return genesis
 }
 
 func decodePrealloc(data string) GenesisAlloc {

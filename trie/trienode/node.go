@@ -39,7 +39,7 @@ func (n *Node) Size() int {
 
 // IsDeleted returns the indicator if the node is marked as deleted.
 func (n *Node) IsDeleted() bool {
-	return n.Hash == (common.Hash{})
+	return len(n.Blob) == 0
 }
 
 // New constructs a node with provided node information.
@@ -181,6 +181,9 @@ func NewWithNodeSet(set *NodeSet) *MergedNodeSet {
 // Merge merges the provided dirty nodes of a trie into the set. The assumption
 // is held that no duplicated set belonging to the same trie will be merged twice.
 func (set *MergedNodeSet) Merge(other *NodeSet) error {
+	if other == nil {
+		return nil
+	}
 	subset, present := set.Sets[other.Owner]
 	if present {
 		return subset.Merge(other.Owner, other.Nodes)

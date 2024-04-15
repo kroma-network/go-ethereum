@@ -20,6 +20,20 @@ type TreeNode interface {
 	CanonicalValue() []byte
 }
 
+func NewTreeNodeFromHash(
+	hash *zkt.Hash,
+	findBlobByHash func(key []byte) ([]byte, error),
+) (TreeNode, error) {
+	if blob, err := findBlobByHash(hash[:]); err != nil {
+		return nil, err
+	} else if node, err := NewTreeNodeFromBlob(blob); err != nil {
+		return nil, err
+	} else {
+		setNodeHash(node, hash)
+		return node, nil
+	}
+}
+
 func NewTreeNodeFromBlob(b []byte) (TreeNode, error) {
 	node, _, err := NewTreeNodeWithKeyPreimageFromBlob(b)
 	return node, err

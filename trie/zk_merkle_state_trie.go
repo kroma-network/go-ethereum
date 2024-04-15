@@ -1,6 +1,9 @@
 package trie
 
 import (
+	"errors"
+
+	"github.com/kroma-network/zktrie/trie"
 	zkt "github.com/kroma-network/zktrie/types"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -55,6 +58,14 @@ func (z *ZkMerkleStateTrie) GetKey(kHashBytes []byte) []byte {
 	return z.preimage.preimage(common.BytesToHash(k.Bytes()))
 }
 
+func (z *ZkMerkleStateTrie) GetAccountByHash(addrHash common.Hash) (*types.StateAccount, error) {
+	if blob, err := z.MerkleTree.Get(common.ReverseBytes(addrHash[:])); blob == nil || err != nil {
+		return nil, err
+	} else {
+		return types.UnmarshalStateAccount(blob)
+	}
+}
+
 func (z *ZkMerkleStateTrie) GetStorage(_ common.Address, key []byte) ([]byte, error) {
 	return z.Get(key)
 }
@@ -84,8 +95,16 @@ func (z *ZkMerkleStateTrie) UpdateContractCode(_ common.Address, _ common.Hash, 
 	return nil
 }
 
-func (z *ZkMerkleStateTrie) DeleteStorage(_ common.Address, key []byte) error { return z.Delete(key) }
-func (z *ZkMerkleStateTrie) DeleteAccount(address common.Address) error       { return z.Delete(address[:]) }
+func (z *ZkMerkleStateTrie) DeleteStorage(_ common.Address, key []byte) error { return z.delete(key) }
+func (z *ZkMerkleStateTrie) DeleteAccount(address common.Address) error       { return z.delete(address[:]) }
+
+func (z *ZkMerkleStateTrie) delete(key []byte) error {
+	if err := z.Delete(key); err != nil && errors.Is(err, trie.ErrKeyNotFound) {
+		return nil
+	} else {
+		return err
+	}
+}
 
 func (z *ZkMerkleStateTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {
 	return z.prove(common.ReverseBytes(key), proofDb, func(node zk.TreeNode) error {

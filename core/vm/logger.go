@@ -66,19 +66,16 @@ type LogConfig struct {
 
 // StructLog is emitted to the EVM each cycle and lists information about the current internal state
 // prior to the execution of the statement.
+// [kroma] : An error occurred when going:generate, so use the old code to restore it. StructLog.Memory, StructLog.ReturnData
 type StructLog struct {
-	Pc      uint64 `json:"pc"`
-	Op      OpCode `json:"op"`
-	Gas     uint64 `json:"gas"`
-	GasCost uint64 `json:"gasCost"`
-	// [Scroll: START]
-	Memory bytes.Buffer `json:"memory,omitempty"`
-	// [Scroll: END]
-	MemorySize int           `json:"memSize"`
-	Stack      []uint256.Int `json:"stack"`
-	// [Scroll: START]
-	ReturnData bytes.Buffer `json:"returnData,omitempty"`
-	// [Scroll: END]
+	Pc            uint64                      `json:"pc"`
+	Op            OpCode                      `json:"op"`
+	Gas           uint64                      `json:"gas"`
+	GasCost       uint64                      `json:"gasCost"`
+	Memory        []byte                      `json:"memory,omitempty"`
+	MemorySize    int                         `json:"memSize"`
+	Stack         []uint256.Int               `json:"stack"`
+	ReturnData    []byte                      `json:"returnData,omitempty"`
 	Storage       map[common.Hash]common.Hash `json:"-"`
 	Depth         int                         `json:"depth"`
 	RefundCounter uint64                      `json:"refund"`
@@ -112,9 +109,7 @@ func NewStructlog(pc uint64, op OpCode, gas, cost uint64, depth int, err error) 
 }
 
 func (s *StructLog) clean() {
-	s.Memory.Reset()
 	s.Stack = s.Stack[:0]
-	s.ReturnData.Reset()
 	s.Storage = nil
 	s.ExtraData = nil
 	s.Err = nil
@@ -277,7 +272,7 @@ func (l *StructLogger) CaptureState(pc uint64, op OpCode, gas, cost uint64, scop
 	// Copy a snapshot of the current memory state to a new buffer
 	if l.cfg.EnableMemory {
 		// [Scroll: START]
-		structlog.Memory.Write(memory.Data())
+		copy(structlog.Memory, memory.Data())
 		structlog.MemorySize = memory.Len()
 		// [Scroll: END]
 	}
@@ -326,7 +321,7 @@ func (l *StructLogger) CaptureState(pc uint64, op OpCode, gas, cost uint64, scop
 	// [Scroll: END]
 	if l.cfg.EnableReturnData {
 		// [Scroll: START]
-		structlog.ReturnData.Write(rData)
+		copy(structlog.ReturnData, rData)
 		// [Scroll: END]
 	}
 	// [Scroll: START]
@@ -508,6 +503,16 @@ func (l *StructLogger) MaybeAddFeeRecipientsToStatesAffected(tx *types.Transacti
 	}
 }
 
+func (l *StructLogger) MaybeAddL1BlockInfo(tx *types.Transaction) {
+	if tx.To() == nil {
+		return
+	}
+	if contractAddress := *tx.To(); bytes.Equal(contractAddress[:], types.L1BlockAddr[:]) {
+		l.storage[contractAddress][types.OverheadSlot] = l.env.StateDB.GetState(contractAddress, types.OverheadSlot)
+		l.storage[contractAddress][types.ScalarSlot] = l.env.StateDB.GetState(contractAddress, types.ScalarSlot)
+	}
+}
+
 // WriteTrace writes a formatted trace to the given writer
 // [Scroll: START]
 func WriteTrace(writer io.Writer, logs []*StructLog) {
@@ -526,9 +531,9 @@ func WriteTrace(writer io.Writer, logs []*StructLog) {
 			}
 		}
 		// [Scroll: START]
-		if log.Memory.Len() > 0 {
+		if len(log.Memory) > 0 {
 			fmt.Fprintln(writer, "Memory:")
-			fmt.Fprint(writer, hex.Dump(log.Memory.Bytes()))
+			fmt.Fprint(writer, hex.Dump(log.Memory))
 		}
 		// [Scroll: END]
 		if len(log.Storage) > 0 {
@@ -538,9 +543,9 @@ func WriteTrace(writer io.Writer, logs []*StructLog) {
 			}
 		}
 		// [Scroll: START]
-		if log.ReturnData.Len() > 0 {
+		if len(log.ReturnData) > 0 {
 			fmt.Fprintln(writer, "ReturnData:")
-			fmt.Fprint(writer, hex.Dump(log.ReturnData.Bytes()))
+			fmt.Fprint(writer, hex.Dump(log.ReturnData))
 		}
 		// [Scroll: END]
 		fmt.Fprintln(writer)
@@ -651,8 +656,8 @@ func FormatLogs(logs []*StructLog) []*types.StructLogRes {
 		for _, stackValue := range trace.Stack {
 			logRes.Stack = append(logRes.Stack, stackValue.Hex())
 		}
-		for i := 0; i+32 <= trace.Memory.Len(); i += 32 {
-			logRes.Memory = append(logRes.Memory, common.Bytes2Hex(trace.Memory.Bytes()[i:i+32]))
+		for i := 0; i+32 <= len(trace.Memory); i += 32 {
+			logRes.Memory = append(logRes.Memory, common.Bytes2Hex(trace.Memory[i:i+32]))
 		}
 		if len(trace.Storage) != 0 {
 			storage := make(map[string]string)

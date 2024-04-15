@@ -23,7 +23,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -111,19 +110,24 @@ func (it *nodeIterator) step() error {
 		return nil
 	}
 	// Otherwise we've reached an account node, initiate data iteration
-	var account types.StateAccount
-	if err := rlp.DecodeBytes(it.stateIt.LeafBlob(), &account); err != nil {
+	account, err := types.NewStateAccount(it.stateIt.LeafBlob(), it.state.IsZktrie())
+	if err != nil {
 		return err
 	}
+
 	// Lookup the preimage of account hash
-	preimage := it.state.trie.GetKey(it.stateIt.LeafKey())
+	key := it.stateIt.LeafKey()
+	if it.state.IsZktrie() {
+		key = trie.ZkIteratorKeyToZkHash(common.BytesToHash(key)).Bytes()
+	}
+	preimage := it.state.trie.GetKey(key)
 	if preimage == nil {
 		return errors.New("account address is not available")
 	}
 	address := common.BytesToAddress(preimage)
 
 	// Traverse the storage slots belong to the account
-	dataTrie, err := it.state.db.OpenStorageTrie(it.state.originalRoot, address, account.Root)
+	dataTrie, err := it.state.db.OpenStorageTrie(it.state.originalRoot, address, account.Root, it.state.trie)
 	if err != nil {
 		return err
 	}

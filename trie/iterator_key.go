@@ -17,10 +17,40 @@ import (
 // However, zktrie does not, so unless we introduce a new key concept, we need to modify the core source code quite a bit.
 // Therefore, we introduced the concept of iteratorKey, which satisfies the above condition, and implemented functions to convert key and iteratorKey.
 
+func HashToIteratorKey(hash common.Hash, isZk bool) common.Hash {
+	if isZk {
+		return HashToZkIteratorKey(hash)
+	}
+	return hash
+}
+
+func HashToZkIteratorKey(hash common.Hash) common.Hash {
+	return common.BigToHash(zk.NewTreePathFromHash(hash).ToBigInt())
+}
+
+func BytesToIteratorKey(data []byte, isZk bool) common.Hash {
+	if isZk {
+		return BytesToZkIteratorKey(data)
+	}
+	return common.BytesToHash(data)
+}
+
 func BytesToZkIteratorKey(data []byte) common.Hash {
 	return common.BigToHash(zk.NewTreePathFromBytes(data).ToBigInt())
 }
 
-func ZkIteratorKeyToZkHash(key common.Hash) zkt.Hash {
-	return *zk.NewTreePathFromHashBig(key).ToZkHash()
+func IteratorKeyToHash(key []byte, isZk bool) *common.Hash {
+	if isZk {
+		return zk.NewTreePathFromHashBig(common.BytesToHash(key)).ToHash()
+	}
+	hash := common.BytesToHash(key)
+	return &hash
+}
+
+func ZkIteratorKeyToHash(key common.Hash) common.Hash {
+	return *zk.NewTreePathFromHashBig(key).ToHash()
+}
+
+func ZkIteratorKeyToZkHash(key common.Hash) *zkt.Hash {
+	return zk.NewTreePathFromHashBig(key).ToZkHash()
 }

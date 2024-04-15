@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -45,7 +46,7 @@ func NewZk(diskdb ethdb.Database, config *Config) *ZktrieDatabase {
 	}
 }
 
-func (db *ZktrieDatabase) Scheme() string { return rawdb.HashScheme }
+func (db *ZktrieDatabase) Scheme() string { return rawdb.ZkHashScheme }
 
 func (db *ZktrieDatabase) Initialized(genesisRoot common.Hash) bool {
 	return rawdb.HasLegacyTrieNode(db.diskdb, common.BytesToHash(zkt.ReverseByteOrder(genesisRoot[:])))
@@ -115,7 +116,33 @@ func (db *ZktrieDatabase) Close() error { return nil }
 func (db *ZktrieDatabase) Cap(_ common.StorageSize) error         { return nil }
 func (db *ZktrieDatabase) Reference(_ common.Hash, _ common.Hash) {}
 func (db *ZktrieDatabase) Dereference(_ common.Hash)              {}
-func (db *ZktrieDatabase) Node(_ common.Hash) ([]byte, error)     { return nil, nil }
+func (db *ZktrieDatabase) Node(hash common.Hash) ([]byte, error) {
+	hashBytes := common.ReverseBytes(hash[:])
+	if db.cleans != nil {
+		if enc := db.cleans.Get(nil, hashBytes); enc != nil {
+			memcacheCleanHitMeter.Mark(1)
+			memcacheCleanReadMeter.Mark(int64(len(enc)))
+			return enc, nil
+		}
+	}
+
+	if dirty, ok := db.mutexGetDirtyByKey(hashBytes); ok {
+		memcacheDirtyHitMeter.Mark(1)
+		memcacheDirtyReadMeter.Mark(int64(len(dirty.val)))
+		return dirty.val, nil
+	}
+
+	// Content unavailable in memory, attempt to retrieve from disk
+	if enc := rawdb.ReadLegacyTrieNode(db.diskdb, common.BytesToHash(hashBytes)); len(enc) != 0 {
+		if db.cleans != nil {
+			db.cleans.Set(hashBytes, enc)
+			memcacheCleanMissMeter.Mark(1)
+			memcacheCleanWriteMeter.Mark(int64(len(enc)))
+		}
+		return enc, nil
+	}
+	return nil, errors.New("not found")
+}
 
 // Put saves a key:value into the Storage
 func (db *ZktrieDatabase) Put(k, v []byte) error {
@@ -192,3 +219,16 @@ type dirty struct {
 func newDirty(k []byte, v []byte) *dirty { return &dirty{key: k, val: v} }
 
 func (d dirty) size() int { return len(d.key) + len(d.val) }
+
+func (db *ZktrieDatabase) Reader(root common.Hash) (*zkReader, error) {
+	if _, err := db.Node(root); err != nil {
+		return nil, fmt.Errorf("state %#x is not available, %v", root, err)
+	}
+	return &zkReader{db: db}, nil
+}
+
+type zkReader struct{ db *ZktrieDatabase }
+
+func (z zkReader) Node(_ common.Hash, _ []byte, hash common.Hash) ([]byte, error) {
+	return z.db.Node(hash)
+}

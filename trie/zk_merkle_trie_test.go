@@ -14,6 +14,25 @@ import (
 	"github.com/ethereum/go-ethereum/trie/zk"
 )
 
+func TestZkTrieNoExistKey(t *testing.T) {
+	testMerkleStateTrieNoExistKey(t, newEmptyZkTrie())
+	testMerkleStateTrieNoExistKey(t, NewEmptyZkMerkleStateTrie(NewZkDatabase(rawdb.NewMemoryDatabase())))
+}
+
+func testMerkleStateTrieNoExistKey(t *testing.T, trie MerkleStateTrie) {
+	address := common.HexToAddress("0xffffffffffffffffffffffffffffffffffffffff")
+	if acc, err := trie.GetAccount(address); acc != nil || err != nil {
+		t.Errorf("GetAccount return acc : %v, err : %v", acc, err)
+	}
+	assert.NoError(t, trie.DeleteAccount(address))
+
+	storageKey := common.LeftPadBytes([]byte{1}, 20)
+	if val, err := trie.GetStorage(address, storageKey); len(val) > 0 || err != nil {
+		t.Errorf("GetStorage return acc : %v, err : %v", val, err)
+	}
+	assert.NoError(t, trie.DeleteStorage(address, storageKey))
+}
+
 func TestProve(t *testing.T) {
 	t.Run("without preimage", func(t *testing.T) {
 		scrolldb, kromadb := NewZkDatabase(rawdb.NewMemoryDatabase()), NewZkDatabase(rawdb.NewMemoryDatabase())

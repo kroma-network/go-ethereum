@@ -27,6 +27,8 @@ They are compatible as follows
 // ZkTrie is not compatible with MerkleTrie because it always hashes keys.
 type MerkleTrie interface {
 	Hash() common.Hash
+	GetNode(path []byte) ([]byte, int, error)
+	MustGet(key []byte) []byte
 	Get(key []byte) ([]byte, error)
 	MustUpdate(key, value []byte)
 	Update(key, value []byte) error
@@ -56,23 +58,29 @@ func NewEmptyMerkleTrie(db *Database) MerkleTrie {
 
 type MerkleStackTrie interface {
 	Update([]byte, []byte) error
-	Commit() (h common.Hash, err error)
+	Commit() common.Hash
 	Hash() common.Hash
 }
 
-func NewMerkleStackTrie(writeFn NodeWriteFunc, isZk bool) MerkleStackTrie {
-	if isZk {
-		return NewZkStackTrie(writeFn)
+func NewMerkleStackTrie(options *StackTrieOptions) MerkleStackTrie {
+	if options.zk {
+		return NewZkStackTrie(options)
 	}
-	return NewStackTrie(writeFn)
+	return NewStackTrie(options)
 }
 
 // MerkleStateTrie Interface to make StateTrie and ZkTrie and ZkMerkleStateTrie compatible.
 type MerkleStateTrie interface {
 	Hash() common.Hash
+	GetNode(path []byte) ([]byte, int, error)
 	MustGet(key []byte) []byte
+	GetAccount(address common.Address) (*types.StateAccount, error)
+	GetAccountByHash(addrHash common.Hash) (*types.StateAccount, error)
 	UpdateAccount(address common.Address, account *types.StateAccount) error
+	DeleteAccount(address common.Address) error
 	MustUpdate(key, value []byte)
+	GetStorage(addr common.Address, key []byte) ([]byte, error)
+	DeleteStorage(address common.Address, key []byte) error
 	MustDelete(key []byte)
 	MustNodeIterator(start []byte) NodeIterator
 	Commit(collectLeaf bool) (common.Hash, *trienode.NodeSet, error)
