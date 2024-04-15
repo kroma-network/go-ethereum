@@ -272,6 +272,7 @@ func (l *StructLogger) CaptureState(pc uint64, op OpCode, gas, cost uint64, scop
 	// Copy a snapshot of the current memory state to a new buffer
 	if l.cfg.EnableMemory {
 		// [Scroll: START]
+		structlog.Memory = make([]byte, len(memory.Data()))
 		copy(structlog.Memory, memory.Data())
 		structlog.MemorySize = memory.Len()
 		// [Scroll: END]
@@ -321,6 +322,7 @@ func (l *StructLogger) CaptureState(pc uint64, op OpCode, gas, cost uint64, scop
 	// [Scroll: END]
 	if l.cfg.EnableReturnData {
 		// [Scroll: START]
+		structlog.ReturnData = make([]byte, len(rData))
 		copy(structlog.ReturnData, rData)
 		// [Scroll: END]
 	}
