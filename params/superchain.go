@@ -19,7 +19,7 @@ type KromaChainConfig struct {
 var KromaChainConfigs = map[uint64]*KromaChainConfig{
 	KromaMainnetChainID: {
 		CanyonTime:  uint64ptr(1708502400),
-		EcotoneTime: nil,
+		EcotoneTime: uint64ptr(1713772800),
 	},
 	KromaSepoliaChainID: {
 		CanyonTime:  uint64ptr(1707897600),
