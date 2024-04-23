@@ -17,7 +17,6 @@
 package vm
 
 import (
-	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -502,16 +501,6 @@ func (l *StructLogger) MaybeAddFeeRecipientsToStatesAffected(tx *types.Transacti
 		l.statesAffected[params.KromaProtocolVault] = struct{}{}
 		l.statesAffected[params.KromaProposerRewardVault] = struct{}{}
 		l.statesAffected[params.KromaValidatorRewardVault] = struct{}{}
-	}
-}
-
-func (l *StructLogger) MaybeAddL1BlockInfo(tx *types.Transaction) {
-	if tx.To() == nil {
-		return
-	}
-	if contractAddress := *tx.To(); bytes.Equal(contractAddress[:], types.L1BlockAddr[:]) {
-		l.storage[contractAddress][types.OverheadSlot] = l.env.StateDB.GetState(contractAddress, types.OverheadSlot)
-		l.storage[contractAddress][types.ScalarSlot] = l.env.StateDB.GetState(contractAddress, types.ScalarSlot)
 	}
 }
 
