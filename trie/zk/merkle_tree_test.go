@@ -191,6 +191,16 @@ func TestCanonicalValueWithKeyPreimage(t *testing.T) {
 	assertEqual(scrolLeaf.Value(), kromaLeaf.CanonicalValueWithKeyPreimage(scrolLeaf.NodeKey.Bytes()))
 }
 
+func TestCopyNode(t *testing.T) {
+	leaf := must(NewLeafNode([]byte("key"), []byte{1}))
+	leafCopy := copyNode(leaf).(*LeafNode)
+
+	leaf.Data()[0] = 10
+	if bytes.Equal(leaf.Data(), leafCopy.Data()) {
+		t.Errorf("shallow copy detected.")
+	}
+}
+
 func BenchmarkUpdateAndHash(b *testing.B) {
 	type testTree struct {
 		Update func(k, v []byte) error
