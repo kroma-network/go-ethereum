@@ -262,7 +262,6 @@ func (api *API) getTxResult(env *traceEnv, state *state.StateDB, index int, bloc
 	}
 
 	tracer.MaybeAddFeeRecipientsToStatesAffected(tx)
-	tracer.MaybeAddL1BlockInfo(tx)
 
 	// merge required proof data
 	proofAccounts := tracer.UpdatedAccounts()
