@@ -56,6 +56,21 @@ func copyNode(n TreeNode) TreeNode {
 	switch node := n.(type) {
 	case *ParentNode:
 		return &ParentNode{childL: copyNode(node.childL), childR: copyNode(node.childR), hash: node.hash}
+	case *LeafNode:
+		valuePreimages := make([]zkt.Byte32, len(node.ValuePreimage))
+		for i, value := range node.ValuePreimage {
+			valuePreimages[i] = *zkt.NewByte32FromBytes(value.Bytes())
+		}
+		var hash *zkt.Hash
+		if node.hash != nil {
+			hash = zkt.NewHashFromBytes(node.hash.Bytes())
+		}
+		return &LeafNode{
+			Key:             common.CopyBytes(node.Key),
+			ValuePreimage:   valuePreimages,
+			CompressedFlags: node.CompressedFlags,
+			hash:            hash,
+		}
 	}
 	return n
 }
