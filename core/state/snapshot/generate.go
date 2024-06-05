@@ -695,6 +695,7 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 		if aerr, ok := err.(*abortErr); ok {
 			abort = aerr.abort
 		}
+		fmt.Println(err)
 		// Aborted by internal error, wait the signal
 		if abort == nil {
 			abort = <-dl.genAbort
