@@ -17,8 +17,11 @@
 package snapshot
 
 import (
+	"time"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // holdableIterator is a wrapper of underlying database iterator. It extends
@@ -29,6 +32,8 @@ type holdableIterator struct {
 	key    []byte
 	val    []byte
 	atHeld bool
+	uuid   string
+	start  time.Time
 }
 
 // newHoldableIterator initializes the holdableIterator with the given iterator.
@@ -60,7 +65,9 @@ func (it *holdableIterator) Next() bool {
 	if it.key != nil {
 		return true // shifted to locally held value
 	}
-	return it.it.Next()
+	r := it.it.Next()
+	log.Debug("[test] holdableIterator next", "uuid", it.uuid, "duration", time.Since(it.start))
+	return r
 }
 
 // Error returns any accumulated error. Exhausting all the key/value pairs

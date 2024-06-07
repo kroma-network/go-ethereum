@@ -171,10 +171,12 @@ func (dl *diskLayer) proveRange(ctx *generatorContext, trieId *trie.ID, prefix [
 		start    = time.Now()
 		min      = append(prefix, origin...)
 	)
-	uuid := uuid.New()
+	iter.uuid = uuid.New().String()
+	iter.start = start
 	c := 0
-	log.Debug("start snapshot iteration", "uuid", uuid.String())
+	log.Debug("[test] start snapshot iteration", "uuid", iter.uuid)
 	for iter.Next() {
+		log.Debug("[test] iterate..", "uuid", iter.uuid, "count", c, "duration", time.Since(start))
 		c++
 		// Ensure the iterated item is always equal or larger than the given origin.
 		key := iter.Key()
@@ -217,7 +219,7 @@ func (dl *diskLayer) proveRange(ctx *generatorContext, trieId *trie.ID, prefix [
 			}
 		}
 	}
-	log.Debug("end snapshot iteration", "uuid", uuid, "count", c, "duration", time.Since(start))
+	log.Debug("[test] end snapshot iteration", "uuid", iter.uuid, "count", c, "duration", time.Since(start))
 	// Update metrics for database iteration and merkle proving
 	if kind == snapStorage {
 		snapStorageSnapReadCounter.Inc(time.Since(start).Nanoseconds())
