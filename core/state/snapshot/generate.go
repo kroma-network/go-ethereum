@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/trienode"
+	"github.com/google/uuid"
 )
 
 var (
@@ -170,7 +171,11 @@ func (dl *diskLayer) proveRange(ctx *generatorContext, trieId *trie.ID, prefix [
 		start    = time.Now()
 		min      = append(prefix, origin...)
 	)
+	uuid := uuid.New()
+	c := 0
+	fmt.Println("start snapshot iteration", uuid.String())
 	for iter.Next() {
+		c++
 		// Ensure the iterated item is always equal or larger than the given origin.
 		key := iter.Key()
 		if bytes.Compare(key, min) < 0 {
@@ -212,6 +217,7 @@ func (dl *diskLayer) proveRange(ctx *generatorContext, trieId *trie.ID, prefix [
 			}
 		}
 	}
+	fmt.Println("end snapshot iteration", uuid, c)
 	// Update metrics for database iteration and merkle proving
 	if kind == snapStorage {
 		snapStorageSnapReadCounter.Inc(time.Since(start).Nanoseconds())
