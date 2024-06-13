@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth"
@@ -311,11 +312,19 @@ func (api *ConsensusAPI) forkchoiceUpdated(update engine.ForkchoiceStateV1, payl
 			PayloadID:     id,
 		}
 	}
+	// [Kroma: ZKT to MPT]
+	kromaMptTime := api.eth.BlockChain().Config().KromaMptTime
 	if rawdb.ReadCanonicalHash(api.eth.ChainDb(), block.NumberU64()) != update.HeadBlockHash {
 		// Block is not canonical, set head.
 		if latestValid, err := api.eth.BlockChain().SetCanonical(block); err != nil {
 			return engine.ForkChoiceResponse{PayloadStatus: engine.PayloadStatusV1{Status: engine.INVALID, LatestValidHash: &latestValid}}, err
 		}
+		// [Kroma: ZKT to MPT]
+		if api.eth.StateMigrator() != nil && kromaMptTime != nil && *kromaMptTime == block.Time() {
+			api.eth.StateMigrator().FinalizeTransition(block)
+			log.Info("State migrated to MPT")
+		}
+		// [Kroma: END]
 	} else if api.eth.BlockChain().CurrentBlock().Hash() == update.HeadBlockHash {
 		// If the specified head matches with our local head, do nothing and keep
 		// generating the payload. It's a special corner case that a few slots are
@@ -360,6 +369,7 @@ func (api *ConsensusAPI) forkchoiceUpdated(update engine.ForkchoiceStateV1, payl
 		// Set the safe block
 		api.eth.BlockChain().SetSafe(safeBlock.Header())
 	}
+
 	// If payload generation was requested, create a new block to be potentially
 	// sealed by the beacon client. The payload will be requested later, and we
 	// will replace it arbitrarily many times in between.
@@ -392,6 +402,19 @@ func (api *ConsensusAPI) forkchoiceUpdated(update engine.ForkchoiceStateV1, payl
 		if api.localBlocks.has(id) {
 			return valid(&id), nil
 		}
+		// [Kroma: ZKT to MPT]
+		if kromaMptTime != nil && *kromaMptTime == args.Timestamp {
+			log.Info("Kroma MPT time reached")
+			migratedNum := api.eth.BlockChain().GetMigratedRef().Number
+			if migratedNum < block.NumberU64() {
+				return engine.STATUS_INVALID, fmt.Errorf("state migration is not complete: head %d, migrated %d", block.NumberU64(), migratedNum)
+			}
+			api.eth.StateMigrator().Stop()
+			if api.eth.APIBackend.HistoricalRPCService() == nil {
+				return engine.STATUS_INVALID, core.HaltOnStateTransition
+			}
+		}
+		// [Kroma: END]
 		payload, err := api.eth.Miner().BuildPayload(args)
 		if err != nil {
 			log.Error("Failed to build payload", "err", err)
@@ -400,6 +423,7 @@ func (api *ConsensusAPI) forkchoiceUpdated(update engine.ForkchoiceStateV1, payl
 		api.localBlocks.put(id, payload)
 		return valid(&id), nil
 	}
+
 	return valid(nil), nil
 }
 

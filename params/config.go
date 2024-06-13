@@ -343,6 +343,8 @@ type ChainConfig struct {
 
 	InteropTime *uint64 `json:"interopTime,omitempty"` // Interop switch time (nil = no fork, 0 = already on optimism interop)
 
+	KromaMptTime *uint64 `json:"kromaMptTime,omitempty"` // TODO(pangssu): comment
+
 	// TerminalTotalDifficulty is the amount of total difficulty reached by
 	// the network that triggers the consensus upgrade.
 	TerminalTotalDifficulty *big.Int `json:"terminalTotalDifficulty,omitempty"`
@@ -520,6 +522,9 @@ func (c *ChainConfig) Description() string {
 	if c.InteropTime != nil {
 		banner += fmt.Sprintf(" - Interop:                     @%-10v\n", *c.InteropTime)
 	}
+	if c.KromaMptTime != nil {
+		banner += fmt.Sprintf(" - Kroma MPT:                   @%-10v\n", *c.KromaMptTime)
+	}
 	return banner
 }
 
@@ -642,6 +647,14 @@ func (c *ChainConfig) IsEcotone(time uint64) bool {
 
 func (c *ChainConfig) IsInterop(time uint64) bool {
 	return isTimestampForked(c.InteropTime, time)
+}
+
+func (c *ChainConfig) IsKromaMPT(time uint64) bool {
+	return isTimestampForked(c.KromaMptTime, time)
+}
+
+func (c *ChainConfig) IsKromaZK(time uint64) bool {
+	return c.Zktrie && !c.IsKromaMPT(time)
 }
 
 // IsKroma returns whether the node is a kroma(based on optimism) node or not.

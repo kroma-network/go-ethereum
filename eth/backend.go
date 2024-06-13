@@ -18,6 +18,7 @@
 package eth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -44,11 +45,13 @@ import (
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
+	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/shutdowncheck"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/migration"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -76,9 +79,9 @@ type Ethereum struct {
 	snapDialCandidates enode.Iterator
 	merger             *consensus.Merger
 
+	historicalRPCService *rpc.Client
 	/* [kroma unsupported]
 	seqRPCService        *rpc.Client
-	historicalRPCService *rpc.Client
 	*/
 
 	// DB interfaces
@@ -108,6 +111,9 @@ type Ethereum struct {
 	shutdownTracker *shutdowncheck.ShutdownTracker // Tracks if and when the node has shutdown ungracefully
 
 	nodeCloser func() error
+
+	// [Kroma: ZKT to MPT]
+	migrator *migration.StateMigrator
 }
 
 // New creates a new Ethereum object (including the
@@ -243,6 +249,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	/* [kroma unsupported]
 	overrides.ApplySuperchainUpgrades = config.ApplySuperchainUpgrades
 	*/
+	// [Kroma: ZKT to MPT]
+	if config.OverrideKromaMPT != nil {
+		overrides.OverrideKromaMPT = config.OverrideKromaMPT
+	}
+	// [Kroma: END]
+
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TransactionHistory)
 	if err != nil {
 		return nil, err
@@ -330,17 +342,18 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 		eth.seqRPCService = client
 	}
+	*/
 
 	if config.RollupHistoricalRPC != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), config.RollupHistoricalRPCTimeout)
 		client, err := rpc.DialContext(ctx, config.RollupHistoricalRPC)
 		cancel()
 		if err != nil {
+			log.Info("err", err)
 			return nil, err
 		}
 		eth.historicalRPCService = client
 	}
-	*/
 	// Start the RPC service
 	eth.netRPCService = ethapi.NewNetAPI(eth.p2pServer, networkID)
 
@@ -351,6 +364,16 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	// Successful startup; push a marker and check previous unclean shutdowns.
 	eth.shutdownTracker.MarkStartup()
+
+	// [Kroma: ZKT to MPT]
+	// start the background state migrator
+	if eth.blockchain.Config().Zktrie && eth.blockchain.Config().KromaMptTime != nil {
+		migrator, err := migration.NewStateMigrator(eth, tracers.NewAPI(eth.APIBackend))
+		if err == nil {
+			eth.migrator = migrator
+			migrator.Start()
+		}
+	}
 
 	return eth, nil
 }
@@ -560,6 +583,9 @@ func (s *Ethereum) SyncMode() downloader.SyncMode {
 	return mode
 }
 
+// [Kroma: ZKT to MPT]
+func (s *Ethereum) StateMigrator() *migration.StateMigrator { return s.migrator }
+
 // Protocols returns all the currently configured
 // network protocols to start.
 func (s *Ethereum) Protocols() []p2p.Protocol {
@@ -613,11 +639,10 @@ func (s *Ethereum) Stop() error {
 	if s.seqRPCService != nil {
 		s.seqRPCService.Close()
 	}
+	*/
 	if s.historicalRPCService != nil {
 		s.historicalRPCService.Close()
 	}
-	*/
-
 	// Clean shutdown marker as the last thing before closing db
 	s.shutdownTracker.Stop()
 

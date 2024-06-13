@@ -166,13 +166,17 @@ type Config struct {
 	OverrideOptimismEcotone *uint64 `toml:",omitempty"`
 
 	OverrideOptimismInterop *uint64 `toml:",omitempty"`
+
+	// [Kroma: ZKT to MPT]
+	OverrideKromaMPT *uint64 `toml:",omitempty"`
+
+	RollupHistoricalRPC        string
+	RollupHistoricalRPCTimeout time.Duration
 	/* [kroma unsupported]
 	// ApplySuperchainUpgrades requests the node to load chain-configuration from the superchain-registry.
 	ApplySuperchainUpgrades bool `toml:",omitempty"`
 
 	RollupSequencerHTTP                     string
-	RollupHistoricalRPC                     string
-	RollupHistoricalRPCTimeout              time.Duration
 	RollupDisableTxPoolGossip               bool
 	RollupDisableTxPoolAdmission            bool
 	RollupHaltOnIncompatibleProtocolVersion string
