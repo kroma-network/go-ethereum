@@ -250,6 +250,7 @@ func (dl *diskLayer) proveRange(ctx *generatorContext, trieId *trie.ID, prefix [
 				proofErr: fmt.Errorf("wrong root: have %#x want %#x", gotRoot, root),
 			}, nil
 		}
+		log.Debug("[test] end prove range. origin == nil && !diskMore", "uuid", iter.uuid)
 		return &proofResult{keys: keys, vals: vals}, nil
 	}
 	// Snap state is chunked, generate edge proofs for verification.
@@ -292,6 +293,7 @@ func (dl *diskLayer) proveRange(ctx *generatorContext, trieId *trie.ID, prefix [
 	} else {
 		cont, err = trie.VerifyRangeProof(root, origin, keys, vals, proof)
 	}
+	log.Debug("[test] end prove range", "uuid", iter.uuid, "cont", cont, "err", err)
 	return &proofResult{
 			keys:     keys,
 			vals:     vals,
