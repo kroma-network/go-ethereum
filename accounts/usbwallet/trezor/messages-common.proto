@@ -75,7 +75,7 @@ message ButtonAck {
 }
 
 /**
- * Response: Device is asking computer to show PIN matrix and awaits PIN encoded using this matrix scheme
+ * Response: Device is asking the computer to show PIN matrix and awaits PIN encoded using this matrix scheme
  * @auxstart
  * @next PinMatrixAck
  */
