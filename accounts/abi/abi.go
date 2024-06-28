@@ -234,7 +234,7 @@ func (abi *ABI) ErrorByID(sigdata [4]byte) (*Error, error) {
 	return nil, fmt.Errorf("no error with id: %#x", sigdata[:])
 }
 
-// HasFallback returns an indicator whether a fallback function is included.
+// HasFallback returns an indicator of whether a fallback function is included.
 func (abi *ABI) HasFallback() bool {
 	return abi.Fallback.Type == Fallback
 }
