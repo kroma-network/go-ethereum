@@ -634,7 +634,7 @@ func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMs
 	} else {
 		feeCap = common.Big0
 	}
-	// Recap the highest gas allowance with account's balance.
+	// Recap the highest gas allowance with the account's balance.
 	if feeCap.BitLen() != 0 {
 		balance := b.pendingState.GetBalance(call.From) // from can't be nil
 		available := new(big.Int).Set(balance)
