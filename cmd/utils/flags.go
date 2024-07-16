@@ -34,6 +34,10 @@ import (
 	"strings"
 	"time"
 
+	pcsclite "github.com/gballet/go-libpcsclite"
+	gopsutil "github.com/shirou/gopsutil/mem"
+	"github.com/urfave/cli/v2"
+
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
@@ -72,9 +76,6 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
 	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
-	pcsclite "github.com/gballet/go-libpcsclite"
-	gopsutil "github.com/shirou/gopsutil/mem"
-	"github.com/urfave/cli/v2"
 )
 
 // These are all the command line flags we support.
@@ -278,6 +279,13 @@ var (
 		Usage:    "Manually specify the Optimsim Interop feature-set fork timestamp, overriding the bundled setting",
 		Category: flags.EthCategory,
 	}
+	// [Kroma: ZKT to MPT]
+	OverrideKromaMPT = &cli.Uint64Flag{
+		Name:     "override.mpt",
+		Usage:    "Manually specify the Kroma mpt transition timestamp, overriding the bundled setting",
+		Category: flags.EthCategory,
+	}
+	// [Kroma: END]
 	SyncModeFlag = &flags.TextMarshalerFlag{
 		Name:     "syncmode",
 		Usage:    `Blockchain sync mode ("snap" or "full")`,
@@ -865,14 +873,6 @@ var (
 		Value:    ethconfig.Defaults.GPO.MinSuggestedPriorityFee.Int64(),
 		Category: flags.GasPriceCategory,
 	}
-	/* [kroma unsupported]
-	// Rollup Flags
-	RollupSequencerHTTPFlag = &cli.StringFlag{
-		Name:     "rollup.sequencerhttp",
-		Usage:    "HTTP endpoint for the sequencer mempool",
-		Category: flags.RollupCategory,
-	}
-
 	RollupHistoricalRPCFlag = &cli.StringFlag{
 		Name:     "rollup.historicalrpc",
 		Usage:    "RPC endpoint for historical data.",
@@ -885,7 +885,12 @@ var (
 		Value:    "5s",
 		Category: flags.RollupCategory,
 	}
-
+	// Rollup Flags
+	RollupSequencerHTTPFlag = &cli.StringFlag{
+		Name:     "rollup.sequencerhttp",
+		Usage:    "HTTP endpoint for the sequencer mempool",
+		Category: flags.RollupCategory,
+	}
 	RollupDisableTxPoolGossipFlag = &cli.BoolFlag{
 		Name:     "rollup.disabletxpoolgossip",
 		Usage:    "Disable transaction pool gossip.",
@@ -896,7 +901,6 @@ var (
 		Usage:    "Add RPC-submitted transactions to the txpool (on by default if --rollup.sequencerhttp is not set).",
 		Category: flags.RollupCategory,
 	}
-	*/
 	RollupComputePendingBlock = &cli.BoolFlag{
 		Name:     "rollup.computependingblock",
 		Usage:    "By default the pending block equals the latest block to save resources and not leak txs from the tx-pool, this flag enables computing of the pending block from the tx-pool instead.",
@@ -1866,16 +1870,16 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 			cfg.EthDiscoveryURLs = SplitAndTrim(urls)
 		}
 	}
-	/* [kroma unsupported]
-	// Only configure sequencer http flag if we're running in verifier mode i.e. --mine is disabled.
-	if ctx.IsSet(RollupSequencerHTTPFlag.Name) && !ctx.IsSet(MiningEnabledFlag.Name) {
-		cfg.RollupSequencerHTTP = ctx.String(RollupSequencerHTTPFlag.Name)
-	}
 	if ctx.IsSet(RollupHistoricalRPCFlag.Name) {
 		cfg.RollupHistoricalRPC = ctx.String(RollupHistoricalRPCFlag.Name)
 	}
 	if ctx.IsSet(RollupHistoricalRPCTimeoutFlag.Name) {
 		cfg.RollupHistoricalRPCTimeout = ctx.Duration(RollupHistoricalRPCTimeoutFlag.Name)
+	}
+	/* [kroma unsupported]
+	// Only configure sequencer http flag if we're running in verifier mode i.e. --mine is disabled.
+	if ctx.IsSet(RollupSequencerHTTPFlag.Name) && !ctx.IsSet(MiningEnabledFlag.Name) {
+		cfg.RollupSequencerHTTP = ctx.String(RollupSequencerHTTPFlag.Name)
 	}
 	cfg.RollupDisableTxPoolGossip = ctx.Bool(RollupDisableTxPoolGossipFlag.Name)
 	cfg.RollupDisableTxPoolAdmission = cfg.RollupSequencerHTTP != "" && !ctx.Bool(RollupEnableTxPoolAdmissionFlag.Name)
@@ -1963,7 +1967,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 			if rawdb.ReadCanonicalHash(chaindb, 0) != (common.Hash{}) {
 				cfg.Genesis = nil // fallback to db content
 
-				//validate genesis has PoS enabled in block 0
+				// validate genesis has PoS enabled in block 0
 				genesis, err := core.ReadGenesis(chaindb)
 				if err != nil {
 					Fatalf("Could not read genesis from database: %v", err)
