@@ -45,11 +45,13 @@ import (
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
+	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/shutdowncheck"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/migration"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -109,6 +111,10 @@ type Ethereum struct {
 	shutdownTracker *shutdowncheck.ShutdownTracker // Tracks if and when the node has shutdown ungracefully
 
 	nodeCloser func() error
+
+	// [Kroma: ZKT to MPT]
+	migrator *migration.StateMigrator
+	// [Kroma: END]
 }
 
 // New creates a new Ethereum object (including the
@@ -348,6 +354,25 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 		eth.historicalRPCService = client
 	}
+
+	// [Kroma: ZKT to MPT]
+	// Start the background state migrator
+	if eth.blockchain.Config().Zktrie && eth.blockchain.Config().KromaMPTTime != nil && !config.DisableMPTMigration {
+		head := eth.BlockChain().CurrentBlock()
+		if !eth.blockchain.Config().IsKromaMPT(head.Time) {
+			migrator, err := migration.NewStateMigrator(eth, tracers.NewAPI(eth.APIBackend))
+			if err != nil {
+				log.Error("Fail to start state migrator", "error", err)
+			} else {
+				migrator.Start()
+				eth.migrator = migrator
+			}
+		} else {
+			log.Info("Kroma MPT state migration has been already done")
+		}
+	}
+	// [Kroma: END]
+
 	// Start the RPC service
 	eth.netRPCService = ethapi.NewNetAPI(eth.p2pServer, networkID)
 
@@ -567,6 +592,11 @@ func (s *Ethereum) SyncMode() downloader.SyncMode {
 	return mode
 }
 
+// [Kroma: ZKT to MPT]
+func (s *Ethereum) StateMigrator() *migration.StateMigrator { return s.migrator }
+
+// [Kroma: END]
+
 // Protocols returns all the currently configured
 // network protocols to start.
 func (s *Ethereum) Protocols() []p2p.Protocol {
@@ -629,6 +659,12 @@ func (s *Ethereum) Stop() error {
 
 	s.chainDb.Close()
 	s.eventMux.Stop()
+
+	// [Kroma: START]
+	if s.migrator != nil {
+		s.migrator.Stop()
+	}
+	// [Kroma: END]
 
 	return nil
 }
