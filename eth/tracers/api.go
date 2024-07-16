@@ -22,12 +22,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 	"runtime"
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -88,6 +88,7 @@ type Backend interface {
 	ChainDb() ethdb.Database
 	StateAtBlock(ctx context.Context, block *types.Block, reexec uint64, base *state.StateDB, readOnly bool, preferDisk bool) (*state.StateDB, StateReleaseFunc, error)
 	StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (*core.Message, vm.BlockContext, *state.StateDB, StateReleaseFunc, error)
+	HistoricalRPCService() *rpc.Client
 }
 
 // API is the collection of tracing APIs exposed over the private debugging endpoint.
@@ -114,7 +115,7 @@ func (api *API) blockByNumber(ctx context.Context, number rpc.BlockNumber) (*typ
 		return nil, err
 	}
 	if block == nil {
-		return nil, fmt.Errorf("block #%d %w", number, ethereum.NotFound)
+		return nil, fmt.Errorf("block #%d not found", number)
 	}
 	return block, nil
 }
@@ -127,7 +128,7 @@ func (api *API) blockByHash(ctx context.Context, hash common.Hash) (*types.Block
 		return nil, err
 	}
 	if block == nil {
-		return nil, fmt.Errorf("block %s %w", hash.Hex(), ethereum.NotFound)
+		return nil, fmt.Errorf("block %s not found", hash.Hex())
 	}
 	return block, nil
 }
@@ -438,6 +439,20 @@ func (api *API) TraceBlockByNumber(ctx context.Context, number rpc.BlockNumber, 
 	if err != nil {
 		return nil, err
 	}
+
+	if api.backend.ChainConfig().IsOptimismPreBedrock(block.Number()) {
+		if api.backend.HistoricalRPCService() != nil {
+			var histResult []*txTraceResult
+			err = api.backend.HistoricalRPCService().CallContext(ctx, &histResult, "debug_traceBlockByNumber", number, config)
+			if err != nil {
+				return nil, fmt.Errorf("historical backend error: %w", err)
+			}
+			return histResult, nil
+		} else {
+			return nil, rpc.ErrNoHistoricalFallback
+		}
+	}
+
 	return api.traceBlock(ctx, block, config)
 }
 
@@ -448,6 +463,20 @@ func (api *API) TraceBlockByHash(ctx context.Context, hash common.Hash, config *
 	if err != nil {
 		return nil, err
 	}
+
+	if api.backend.ChainConfig().IsOptimismPreBedrock(block.Number()) {
+		if api.backend.HistoricalRPCService() != nil {
+			var histResult []*txTraceResult
+			err = api.backend.HistoricalRPCService().CallContext(ctx, &histResult, "debug_traceBlockByHash", hash, config)
+			if err != nil {
+				return nil, fmt.Errorf("historical backend error: %w", err)
+			}
+			return histResult, nil
+		} else {
+			return nil, rpc.ErrNoHistoricalFallback
+		}
+	}
+
 	return api.traceBlock(ctx, block, config)
 }
 
@@ -477,7 +506,7 @@ func (api *API) TraceBlockFromFile(ctx context.Context, file string, config *Tra
 func (api *API) TraceBadBlock(ctx context.Context, hash common.Hash, config *TraceConfig) ([]*txTraceResult, error) {
 	block := rawdb.ReadBadBlock(api.backend.ChainDb(), hash)
 	if block == nil {
-		return nil, fmt.Errorf("bad block %#x %w", hash, ethereum.NotFound)
+		return nil, fmt.Errorf("bad block %#x not found", hash)
 	}
 	return api.traceBlock(ctx, block, config)
 }
@@ -497,12 +526,13 @@ func (api *API) StandardTraceBlockToFile(ctx context.Context, hash common.Hash, 
 // of intermediate roots: the stateroot after each transaction.
 func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config *TraceConfig) ([]common.Hash, error) {
 	block, _ := api.blockByHash(ctx, hash)
+	// TODO: Cannot get intermediate roots for pre-bedrock block without daisy chain
 	if block == nil {
 		// Check in the bad blocks
 		block = rawdb.ReadBadBlock(api.backend.ChainDb(), hash)
 	}
 	if block == nil {
-		return nil, fmt.Errorf("block %#x %w", hash, ethereum.NotFound)
+		return nil, fmt.Errorf("block %#x not found", hash)
 	}
 	if block.NumberU64() == 0 {
 		return nil, errors.New("genesis is not traceable")
@@ -561,7 +591,7 @@ func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config 
 func (api *API) StandardTraceBadBlockToFile(ctx context.Context, hash common.Hash, config *StdTraceConfig) ([]string, error) {
 	block := rawdb.ReadBadBlock(api.backend.ChainDb(), hash)
 	if block == nil {
-		return nil, fmt.Errorf("bad block %#x %w", hash, ethereum.NotFound)
+		return nil, fmt.Errorf("bad block %#x not found", hash)
 	}
 	return api.standardTraceBlockToFile(ctx, block, config)
 }
@@ -711,7 +741,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 	// If we're tracing a single transaction, make sure it's present
 	if config != nil && config.TxHash != (common.Hash{}) {
 		if !containsTx(block, config.TxHash) {
-			return nil, fmt.Errorf("transaction %#x %w in block", config.TxHash, ethereum.NotFound)
+			return nil, fmt.Errorf("transaction %#x not found in block", config.TxHash)
 		}
 	}
 	if block.NumberU64() == 0 {
@@ -835,6 +865,19 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 		return nil, err
 	}
 
+	if api.backend.ChainConfig().IsOptimismPreBedrock(new(big.Int).SetUint64(blockNumber)) {
+		if api.backend.HistoricalRPCService() != nil {
+			var histResult json.RawMessage
+			err := api.backend.HistoricalRPCService().CallContext(ctx, &histResult, "debug_traceTransaction", hash, config)
+			if err != nil {
+				return nil, fmt.Errorf("historical backend error: %w", err)
+			}
+			return histResult, nil
+		} else {
+			return nil, rpc.ErrNoHistoricalFallback
+		}
+	}
+
 	// It shouldn't happen in practice.
 	if blockNumber == 0 {
 		return nil, errors.New("genesis is not traceable")
@@ -895,6 +938,11 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 	if err != nil {
 		return nil, err
 	}
+
+	if api.backend.ChainConfig().IsOptimismPreBedrock(block.Number()) {
+		return nil, errors.New("l2geth does not have a debug_traceCall method")
+	}
+
 	// try to recompute the state
 	reexec := defaultTraceReexec
 	if config != nil && config.Reexec != nil {
