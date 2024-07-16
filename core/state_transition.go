@@ -526,29 +526,33 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		effectiveTip = cmath.BigMin(msg.GasTipCap, new(big.Int).Sub(msg.GasFeeCap, st.evm.Context.BaseFee))
 	}
 
-	kromaConfig := st.evm.ChainConfig().Kroma
-	blockNum := st.evm.Context.BlockNumber.Uint64()
-
 	if st.evm.Config.NoBaseFee && msg.GasFeeCap.Sign() == 0 && msg.GasTipCap.Sign() == 0 {
 		// Skip fee payment when NoBaseFee is set and the fee fields
 		// are 0. This avoids a negative effectiveTip being applied to
 		// the coinbase when simulating calls.
-	} else if kromaConfig != nil {
-		gasUsed := new(big.Int).SetUint64(st.gasUsed())
-		feeDist := st.evm.Context.FeeDistributionFunc(blockNum, gasUsed, st.evm.Context.BaseFee, effectiveTip)
+		// [Kroma: START]
+	} else if st.evm.ChainConfig().IsPreKromaMPT(st.evm.Context.Time) {
+		blockNum := st.evm.Context.BlockNumber.Uint64()
+		feeDist := st.evm.Context.FeeDistributionFunc(blockNum, st.gasUsed(), st.evm.Context.BaseFee, effectiveTip)
 		st.state.AddBalance(params.KromaValidatorRewardVault, feeDist.Reward)
 		st.state.AddBalance(params.KromaProtocolVault, feeDist.Protocol)
+		// [Kroma: END]
 	} else {
 		fee := new(big.Int).SetUint64(st.gasUsed())
 		fee.Mul(fee, effectiveTip)
 		st.state.AddBalance(st.evm.Context.Coinbase, fee)
 	}
 
-	if kromaConfig != nil && !st.msg.IsDepositTx {
+	// Check that we are post bedrock to enable op-geth to be able to create pseudo pre-bedrock blocks (these are pre-bedrock, but don't follow l2 geth rules)
+	// Note optimismConfig will not be nil if rules.IsOptimismBedrock is true
+	// [Kroma: START]
+	if kromaConfig := st.evm.ChainConfig().Kroma; kromaConfig != nil && rules.IsOptimismBedrock && !st.msg.IsDepositTx {
+		st.state.AddBalance(params.KromaProtocolVault, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
 		if cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); cost != nil {
 			st.state.AddBalance(params.KromaProposerRewardVault, cost)
 		}
 	}
+	// [Kroma: END]
 
 	return &ExecutionResult{
 		UsedGas:     st.gasUsed(),
