@@ -1023,6 +1023,12 @@ Please note that --` + MetricsHTTPFlag.Name + ` must be set to start the server.
 		Category: flags.EthCategory,
 		Value:    true,
 	}
+	DisableMPTMigrationFlag = &cli.BoolFlag{
+		Name:     "kroma.migration.disable",
+		Usage:    "Disable migration to switch from ZKTrie to Merkle Patricia Tree",
+		Category: flags.EthCategory,
+		Value:    false,
+	}
 )
 
 var (

@@ -168,7 +168,8 @@ type Config struct {
 	OverrideOptimismInterop *uint64 `toml:",omitempty"`
 
 	// [Kroma: ZKT to MPT]
-	OverrideKromaMPT *uint64 `toml:",omitempty"`
+	OverrideKromaMPT    *uint64 `toml:",omitempty"`
+	DisableMPTMigration bool
 
 	RollupHistoricalRPC        string
 	RollupHistoricalRPCTimeout time.Duration
