@@ -484,7 +484,10 @@ func IsTTDReached(chain consensus.ChainHeaderReader, parentHash common.Hash, par
 	if cfg := chain.Config(); cfg.Kroma != nil {
 		// If OP-Stack then bedrock activation number determines when TTD (eth Merge) has been reached.
 		// Note: some tests/utils will set parentNumber == max_uint64 as "parent" of the genesis block, this is fine.
-		return cfg.IsBedrock(new(big.Int).SetUint64(parentNumber + 1)), nil
+		// return cfg.IsBedrock(new(big.Int).SetUint64(parentNumber + 1)), nil
+		// [Kroma: ZKT to MPT]
+		// Since Kroma was started post-Bedrock(post-Merge), it always returns true.
+		return true, nil
 	}
 	if chain.Config().TerminalTotalDifficulty == nil {
 		return false, nil

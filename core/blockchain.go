@@ -28,6 +28,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/exp/slices"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/common/mclock"
@@ -51,7 +53,6 @@ import (
 	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
 	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
 	"github.com/ethereum/go-ethereum/trie/zkproof"
-	"golang.org/x/exp/slices"
 )
 
 var (
@@ -350,6 +351,14 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	// Make sure the state associated with the block is available, or log out
 	// if there is no available state, waiting for state sync.
 	head := bc.CurrentBlock()
+
+	// [Kroma: ZKT to MPT]
+	if chainConfig.IsKromaMPT(head.Time) {
+		bc.chainConfig.Zktrie = false
+		bc.triedb.SetBackend(false)
+	}
+	// [Kroma: END
+
 	if !bc.HasState(head.Root) {
 		if head.Number.Uint64() == 0 {
 			// The genesis state is missing, which is only possible in the path-based
@@ -1788,7 +1797,19 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		if parent == nil {
 			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 		}
-		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
+		// [Kroma: ZKT to MPT]
+		var statedb *state.StateDB
+		if bc.Config().IsKromaMPTActivationBlock(block.Time()) {
+			migratedRef := NewMigratedRef(bc.db)
+			if migratedRef == nil || migratedRef.BlockNumber() != parent.Number.Uint64() {
+				return it.index, errors.New("cannot find migrated reference")
+			}
+			bc.Config().Zktrie = false
+			bc.TrieDB().SetBackend(false)
+			statedb, err = state.New(migratedRef.Root(), bc.stateCache, bc.snaps)
+		} else {
+			statedb, err = state.New(parent.Root, bc.stateCache, bc.snaps)
+		}
 		if err != nil {
 			return it.index, err
 		}
