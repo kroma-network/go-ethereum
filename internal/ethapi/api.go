@@ -1527,10 +1527,19 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 		srcHash := tx.SourceHash()
 		isSystemTx := tx.IsSystemTx()
 		result.SourceHash = &srcHash
-		if isSystemTx {
+		// [Kroma: START]
+		// KromaDepositTx does not have an isSystemTransaction field, so
+		// DepositTx must always contain an isSystemTx field to distinguish it.
+		/* if isSystemTx {
 			// Only include IsSystemTx when true
 			result.IsSystemTx = &isSystemTx
+		}*/
+		if b, _ := tx.MarshalBinary(); len(b) > 0 {
+			if isKromaDeposit, _ := types.IsKromaDepositTx(b[1:]); !isKromaDeposit {
+				result.IsSystemTx = &isSystemTx
+			}
 		}
+		// [Kroma: END]
 		result.Mint = (*hexutil.Big)(tx.Mint())
 		if receipt != nil && receipt.DepositNonce != nil {
 			result.Nonce = hexutil.Uint64(*receipt.DepositNonce)
