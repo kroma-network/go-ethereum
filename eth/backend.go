@@ -45,11 +45,13 @@ import (
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
+	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/shutdowncheck"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/migration"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -109,6 +111,9 @@ type Ethereum struct {
 	shutdownTracker *shutdowncheck.ShutdownTracker // Tracks if and when the node has shutdown ungracefully
 
 	nodeCloser func() error
+
+	// [Kroma: ZKT to MPT]
+	migrator *migration.StateMigrator
 }
 
 // New creates a new Ethereum object (including the
@@ -347,6 +352,15 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			return nil, err
 		}
 		eth.historicalRPCService = client
+
+		// [Kroma: ZKT to MPT]
+		// start the background state migrator
+		if eth.blockchain.Config().Zktrie && eth.blockchain.Config().KromaMptTime != nil {
+			migrator := migration.NewStateMigrator(eth, tracers.NewAPI(eth.APIBackend))
+			if err := migrator.Start(); err == nil {
+				eth.migrator = migrator
+			}
+		}
 	}
 	// Start the RPC service
 	eth.netRPCService = ethapi.NewNetAPI(eth.p2pServer, networkID)
@@ -566,6 +580,9 @@ func (s *Ethereum) SyncMode() downloader.SyncMode {
 	mode, _ := s.handler.chainSync.modeAndLocalHead()
 	return mode
 }
+
+// [Kroma: ZKT to MPT]
+func (s *Ethereum) StateMigrator() *migration.StateMigrator { return s.migrator }
 
 // Protocols returns all the currently configured
 // network protocols to start.
