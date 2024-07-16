@@ -56,8 +56,9 @@ import (
 
 func TestNewRPCTransactionDepositTx(t *testing.T) {
 	tx := types.NewTx(&types.DepositTx{
-		SourceHash: common.HexToHash("0x1234"),
-		Mint:       big.NewInt(34),
+		SourceHash:          common.HexToHash("0x1234"),
+		IsSystemTransaction: true,
+		Mint:                big.NewInt(34),
 	})
 	nonce := uint64(7)
 	receipt := &types.Receipt{
@@ -78,9 +79,9 @@ func TestNewRPCTransactionDepositTx(t *testing.T) {
 
 func TestRPCTransactionDepositTxWithVersion(t *testing.T) {
 	tx := types.NewTx(&types.DepositTx{
-		SourceHash: common.HexToHash("0x1234"),
-		// IsSystemTransaction: true,
-		Mint: big.NewInt(34),
+		SourceHash:          common.HexToHash("0x1234"),
+		IsSystemTransaction: true,
+		Mint:                big.NewInt(34),
 	})
 	nonce := uint64(7)
 	version := types.CanyonDepositReceiptVersion
@@ -182,8 +183,9 @@ func TestUnmarshalRpcDepositTx(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			tx := types.NewTx(&types.DepositTx{
-				SourceHash: common.HexToHash("0x1234"),
-				Mint:       big.NewInt(34),
+				SourceHash:          common.HexToHash("0x1234"),
+				IsSystemTransaction: true,
+				Mint:                big.NewInt(34),
 			})
 			rpcTx := newRPCTransaction(tx, common.Hash{}, uint64(12), uint64(1234), uint64(1), big.NewInt(0), &params.ChainConfig{}, nil)
 			test.modifier(rpcTx)
