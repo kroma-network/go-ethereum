@@ -165,6 +165,7 @@ var (
 		utils.RollupSuperchainUpgradesFlag,
 		*/
 		utils.KromaZKTrie,
+		utils.DisableMPTMigrationFlag,
 		configFileFlag,
 		utils.LogDebugFlag,
 		utils.LogBacktraceAtFlag,
