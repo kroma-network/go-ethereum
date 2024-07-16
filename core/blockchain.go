@@ -2602,3 +2602,8 @@ func (bc *BlockChain) SetTrieFlushInterval(interval time.Duration) {
 func (bc *BlockChain) GetTrieFlushInterval() time.Duration {
 	return time.Duration(bc.flushInterval.Load())
 }
+
+// GetMigratedRef returns a reference to the migrated state during ZKT to MPT transition.
+func (bc *BlockChain) GetMigratedRef() *MigratedRef {
+	return NewMigratedRef(bc.db)
+}
