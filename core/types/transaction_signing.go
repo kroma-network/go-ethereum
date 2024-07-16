@@ -260,6 +260,8 @@ func (s londonSigner) Sender(tx *Transaction) (common.Address, error) {
 		switch tx.inner.(type) {
 		case *DepositTx:
 			return tx.inner.(*DepositTx).From, nil
+		case *KromaDepositTx:
+			return tx.inner.(*KromaDepositTx).From, nil
 		case *depositTxWithNonce:
 			return tx.inner.(*depositTxWithNonce).From, nil
 		}

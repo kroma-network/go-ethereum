@@ -53,6 +53,7 @@ type txJSON struct {
 	SourceHash *common.Hash    `json:"sourceHash,omitempty"`
 	From       *common.Address `json:"from,omitempty"`
 	Mint       *hexutil.Big    `json:"mint,omitempty"`
+	IsSystemTx *bool           `json:"isSystemTx,omitempty"`
 
 	// Only used for encoding:
 	Hash common.Hash `json:"hash"`
@@ -159,6 +160,18 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		if itx.Mint != nil {
 			enc.Mint = (*hexutil.Big)(itx.Mint)
 		}
+		enc.IsSystemTx = &itx.IsSystemTransaction
+	case *KromaDepositTx:
+		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
+		enc.Value = (*hexutil.Big)(itx.Value)
+		enc.Input = (*hexutil.Bytes)(&itx.Data)
+		enc.To = tx.To()
+		enc.SourceHash = &itx.SourceHash
+		enc.From = &itx.From
+		if itx.Mint != nil {
+			enc.Mint = (*hexutil.Big)(itx.Mint)
+		}
+		enc.IsSystemTx = nil
 		// other fields will show up as null.
 	// NOTE(chokobole): When unmarshalling the DepositTx from the RPC transaction format,
 	// it is transformed into depositTxWithNonce. This unexpected transformation can cause data loss,
@@ -472,6 +485,10 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 		itx.SourceHash = *dec.SourceHash
 		if dec.Nonce != nil {
 			inner = &depositTxWithNonce{DepositTx: itx, EffectiveNonce: uint64(*dec.Nonce)}
+		}
+		// IsSystemTx may be omitted. Defaults to false.
+		if dec.IsSystemTx != nil {
+			itx.IsSystemTransaction = *dec.IsSystemTx
 		}
 	default:
 		return ErrTxTypeNotSupported
