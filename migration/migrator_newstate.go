@@ -26,7 +26,9 @@ type prestateAccount struct {
 	Nonce   *uint64         `json:"nonce,omitempty"`
 	Code    string          `json:"code,omitempty"`
 	Storage prestateStorage `json:"storage,omitempty"`
+	Deleted bool            `json:"deleted,omitempty"`
 }
+
 type prestateTracerResult struct {
 	Pre  map[string]prestateAccount `json:"pre"`
 	Post map[string]prestateAccount `json:"post"`
@@ -41,6 +43,10 @@ func (m *StateMigrator) updateAccount(stateTrie *trie.StateTrie, stateRoot commo
 			b := common.Hex2Bytes(strings.TrimPrefix(changes.Code, "0x"))
 			account.CodeHash = crypto.Keccak256Hash(b).Bytes()
 		}
+	}
+
+	if changes.Deleted {
+		account = types.NewEmptyStateAccount(false)
 	}
 
 	if len(changes.Balance) != 0 {
@@ -167,32 +173,48 @@ func (m *StateMigrator) mergeTracerResult(res prestateTracerResult) map[string]p
 	ret := make(map[string]prestateAccount)
 
 	for addr, pre := range res.Pre {
-		post, modified := res.Post[addr]
-		if modified {
-			acc := prestateAccount{
-				Balance: pre.Balance,
-				Nonce:   pre.Nonce,
-				Code:    post.Code,
-				Storage: make(prestateStorage),
-			}
-			if post.Nonce != nil {
-				acc.Nonce = post.Nonce
-			}
-			if len(post.Balance) != 0 {
+		acc := prestateAccount{
+			Balance: pre.Balance,
+			Nonce:   pre.Nonce,
+			Code:    pre.Code,
+			Storage: pre.Storage,
+		}
+		if _, ok := res.Post[addr]; !ok {
+			acc.Deleted = true
+		}
+		ret[addr] = acc
+	}
+
+	for addr, post := range res.Post {
+		if acc, modified := ret[addr]; modified {
+			if len(post.Balance) > 0 && acc.Balance != post.Balance {
 				acc.Balance = post.Balance
 			}
-
-			if len(pre.Storage) > 0 || len(post.Storage) > 0 {
-				maps.Copy(acc.Storage, pre.Storage)
-				maps.Copy(acc.Storage, post.Storage)
-				for slot := range acc.Storage {
-					if _, ok := post.Storage[slot]; !ok {
-						acc.Storage[slot] = ""
+			if post.Nonce != nil && acc.Nonce != post.Nonce {
+				acc.Nonce = post.Nonce
+			}
+			if len(post.Code) > 0 && acc.Code != post.Code {
+				acc.Code = post.Code
+			}
+			storage := make(prestateStorage)
+			maps.Copy(storage, acc.Storage)
+			maps.Copy(storage, post.Storage)
+			if len(storage) > 0 {
+				for k := range storage {
+					if _, ok := post.Storage[k]; !ok {
+						storage[k] = ""
 					}
 				}
+				acc.Storage = storage
 			}
-
 			ret[addr] = acc
+		} else {
+			ret[addr] = prestateAccount{
+				Balance: post.Balance,
+				Nonce:   post.Nonce,
+				Code:    post.Code,
+				Storage: post.Storage,
+			}
 		}
 	}
 

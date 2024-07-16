@@ -187,6 +187,7 @@ type Config struct {
 
 	KromaZKTrie         bool
 	OverrideKromaMPT    *uint64 `toml:",omitempty"`
+	DisableMPTMigration bool
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain config.
