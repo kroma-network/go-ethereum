@@ -29,7 +29,7 @@ var (
 
 // FeeDistributionFunc is used in the state transition to determine the validation reward and protocol fee.
 // Returns nil if not Kroma execution engine.
-type FeeDistributionFunc func(blockNum uint64, gasUsed, baseFee, effectiveTip *big.Int) *FeeDistribution
+type FeeDistributionFunc func(blockNum, gasUsed uint64, baseFee, effectiveTip *big.Int) *FeeDistribution
 
 type FeeDistribution struct {
 	Reward   *big.Int
@@ -39,7 +39,7 @@ type FeeDistribution struct {
 func NewFeeDistributionFunc(config *params.ChainConfig, statedb StateGetter) FeeDistributionFunc {
 	cacheBlockNum := ^uint64(0)
 	var scalar uint64
-	return func(blockNum uint64, gasUsed, baseFee, effectiveTip *big.Int) *FeeDistribution {
+	return func(blockNum, gasUsed uint64, baseFee, effectiveTip *big.Int) *FeeDistribution {
 		if config.Kroma == nil {
 			return nil
 		}
@@ -53,8 +53,8 @@ func NewFeeDistributionFunc(config *params.ChainConfig, statedb StateGetter) Fee
 			cacheBlockNum = blockNum
 		}
 		fee := new(big.Int)
-		fee.Mul(gasUsed, baseFee)
-		fee.Add(fee, new(big.Int).Mul(gasUsed, effectiveTip))
+		fee.Mul(new(big.Int).SetUint64(gasUsed), baseFee)
+		fee.Add(fee, new(big.Int).Mul(new(big.Int).SetUint64(gasUsed), effectiveTip))
 
 		R := big.NewRat(int64(scalar), 10000)
 		reward := new(big.Int).Mul(fee, R.Num())
