@@ -171,8 +171,10 @@ type Config struct {
 	ApplySuperchainUpgrades bool `toml:",omitempty"`
 
 	RollupSequencerHTTP                     string
-	RollupHistoricalRPC                     string
-	RollupHistoricalRPCTimeout              time.Duration
+	*/
+	RollupHistoricalRPC        string
+	RollupHistoricalRPCTimeout time.Duration
+	/* [kroma unsupported]
 	RollupDisableTxPoolGossip               bool
 	RollupDisableTxPoolAdmission            bool
 	RollupHaltOnIncompatibleProtocolVersion string
@@ -183,7 +185,8 @@ type Config struct {
 	// [Scroll: END]
 	CircuitParams *params.CircuitParams
 
-	KromaZKTrie bool
+	KromaZKTrie         bool
+	OverrideKromaMPT    *uint64 `toml:",omitempty"`
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain config.

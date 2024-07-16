@@ -18,6 +18,7 @@
 package eth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -78,8 +79,8 @@ type Ethereum struct {
 
 	/* [kroma unsupported]
 	seqRPCService        *rpc.Client
-	historicalRPCService *rpc.Client
 	*/
+	historicalRPCService *rpc.Client
 
 	// DB interfaces
 	chainDb ethdb.Database // Block chain database
@@ -243,6 +244,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	/* [kroma unsupported]
 	overrides.ApplySuperchainUpgrades = config.ApplySuperchainUpgrades
 	*/
+	// [Kroma: ZKT to MPT]
+	if config.OverrideKromaMPT != nil {
+		overrides.OverrideKromaMPT = config.OverrideKromaMPT
+	}
+	// [Kroma: END]
+
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TransactionHistory)
 	if err != nil {
 		return nil, err
@@ -330,6 +337,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 		eth.seqRPCService = client
 	}
+	*/
 
 	if config.RollupHistoricalRPC != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), config.RollupHistoricalRPCTimeout)
@@ -340,7 +348,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 		eth.historicalRPCService = client
 	}
-	*/
 	// Start the RPC service
 	eth.netRPCService = ethapi.NewNetAPI(eth.p2pServer, networkID)
 
@@ -613,11 +620,10 @@ func (s *Ethereum) Stop() error {
 	if s.seqRPCService != nil {
 		s.seqRPCService.Close()
 	}
+	*/
 	if s.historicalRPCService != nil {
 		s.historicalRPCService.Close()
 	}
-	*/
-
 	// Clean shutdown marker as the last thing before closing db
 	s.shutdownTracker.Stop()
 

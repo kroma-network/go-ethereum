@@ -956,7 +956,7 @@ func TestCall(t *testing.T) {
 				To:    &accounts[1].addr,
 				Value: (*hexutil.Big)(big.NewInt(1000)),
 			},
-			expectErr: errors.New("header not found"),
+			expectErr: ethereum.NotFound,
 		},
 		// transfer on the latest block
 		{
