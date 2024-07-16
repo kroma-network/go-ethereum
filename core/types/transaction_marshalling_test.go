@@ -11,8 +11,9 @@ import (
 
 func TestTransactionUnmarshalJsonDeposit(t *testing.T) {
 	tx := NewTx(&DepositTx{
-		SourceHash: common.HexToHash("0x1234"),
-		Mint:       big.NewInt(34),
+		SourceHash:          common.HexToHash("0x1234"),
+		IsSystemTransaction: true,
+		Mint:                big.NewInt(34),
 	})
 	json, err := tx.MarshalJSON()
 	require.NoError(t, err, "Failed to marshal tx JSON")
