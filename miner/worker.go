@@ -17,6 +17,7 @@
 package miner
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -34,8 +35,10 @@ import (
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/migration"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 )
@@ -737,20 +740,33 @@ func (w *worker) resultLoop() {
 
 // makeEnv creates a new environment for the sealing block.
 func (w *worker) makeEnv(parent *types.Header, header *types.Header, coinbase common.Address) (*environment, error) {
-	// Retrieve the parent state to execute on top and start a prefetcher for
-	// the miner to speed block sealing up a bit.
-	state, err := w.chain.StateAt(parent.Root)
-	/* [kroma unsupported]
-	if err != nil && w.chainConfig.Optimism != nil { // Allow the miner to reorg its own chain arbitrarily deep
-		if historicalBackend, ok := w.eth.(BackendWithHistoricalState); ok {
-			var release tracers.StateReleaseFunc
-			parentBlock := w.eth.BlockChain().GetBlockByHash(parent.Hash())
-			state, release, err = historicalBackend.StateAtBlock(context.Background(), parentBlock, ^uint64(0), nil, false, false)
-			state = state.Copy()
-			release()
+	var state *state.StateDB
+	var err error
+
+	// [Kroma: ZKT to MPT]
+	if w.chainConfig.KromaMptTime != nil && *w.chainConfig.KromaMptTime == header.Time {
+		w.chainConfig.Zktrie = false
+		w.chain.TrieDB().SetBackend(false)
+		migratedRef := w.chain.GetMigratedRef()
+		if migratedRef != nil && migratedRef.BlockNumber() != 0 {
+			state, err = w.chain.StateAt(migratedRef.Root())
+		}
+	} else {
+		// Retrieve the parent state to execute on top and start a prefetcher for
+		// the miner to speed block sealing up a bit.
+		state, err = w.chain.StateAt(parent.Root)
+		if err != nil && w.chainConfig.Optimism != nil { // Allow the miner to reorg its own chain arbitrarily deep
+			if historicalBackend, ok := w.eth.(BackendWithHistoricalState); ok {
+				var release tracers.StateReleaseFunc
+				parentBlock := w.eth.BlockChain().GetBlockByHash(parent.Hash())
+				state, release, err = historicalBackend.StateAtBlock(context.Background(), parentBlock, ^uint64(0), nil, false, false)
+				state = state.Copy()
+				release()
+			}
 		}
 	}
-	*/
+	// [Kroma: END]
+
 	if err != nil {
 		return nil, err
 	}
@@ -1078,6 +1094,10 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		context := core.NewEVMBlockContext(header, w.chain, nil, w.chainConfig, env.state)
 		vmenv := vm.NewEVM(context, vm.TxContext{}, env.state, w.chainConfig, vm.Config{})
 		core.ProcessBeaconBlockRoot(*header.ParentBeaconRoot, vmenv, env.state)
+	}
+
+	if w.chainConfig.KromaMptTime != nil && *w.chainConfig.KromaMptTime == header.Time {
+		header.Extra = migration.BedrockTransitionBlockExtraData
 	}
 	return env, nil
 }
