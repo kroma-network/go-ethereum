@@ -72,6 +72,7 @@ var (
 		utils.OverrideOptimismCanyon,
 		utils.OverrideOptimismEcotone,
 		utils.OverrideOptimismInterop,
+		utils.OverrideKromaMPT,
 		utils.EnablePersonal,
 		utils.TxPoolLocalsFlag,
 		utils.TxPoolNoLocalsFlag,
@@ -150,10 +151,10 @@ var (
 		utils.GpoMaxGasPriceFlag,
 		utils.GpoIgnoreGasPriceFlag,
 		utils.GpoMinSuggestedPriorityFeeFlag,
-		/* [kroma unsupported]
-		utils.RollupSequencerHTTPFlag,
 		utils.RollupHistoricalRPCFlag,
 		utils.RollupHistoricalRPCTimeoutFlag,
+		/* [kroma unsupported]
+		utils.RollupSequencerHTTPFlag,
 		utils.RollupDisableTxPoolGossipFlag,
 		*/
 		utils.RollupComputePendingBlock,

@@ -192,6 +192,12 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 		v := ctx.Uint64(utils.OverrideOptimismInterop.Name)
 		cfg.Eth.OverrideOptimismInterop = &v
 	}
+	// [Kroma: ZKT to MPT]
+	if ctx.IsSet(utils.OverrideKromaMPT.Name) {
+		v := ctx.Uint64(utils.OverrideKromaMPT.Name)
+		cfg.Eth.OverrideKromaMPT = &v
+	}
+	// [Kroma: END]
 
 	if ctx.IsSet(utils.OverrideVerkle.Name) {
 		v := ctx.Uint64(utils.OverrideVerkle.Name)
