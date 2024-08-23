@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -137,7 +138,6 @@ func (m *StateMigrator) MigratedRef() *core.MigratedRef {
 
 func (m *StateMigrator) migrateAccount(header *types.Header) error {
 	log.Info("Migrate account", "root", header.Root, "number", header.Number)
-
 	startAt := time.Now()
 	var accounts atomic.Uint64
 
@@ -159,16 +159,17 @@ func (m *StateMigrator) migrateAccount(header *types.Header) error {
 	if err != nil {
 		return err
 	}
-	zkAcctIt, err := openZkNodeIterator(m.zkdb, header.Root)
+
+	zkt, err := trie.NewZkMerkleStateTrie(header.Root, m.zkdb)
 	if err != nil {
 		return err
 	}
-	zkAccIter := trie.NewIterator(zkAcctIt)
-	for zkAccIter.Next() {
+	var mu sync.Mutex
+	err = hashRangeIterator(zkt, NumProcessAccount, func(key, value []byte) error {
 		accounts.Add(1)
-		address := common.BytesToAddress(m.readZkPreimage(zkAccIter.Key))
+		address := common.BytesToAddress(m.readZkPreimage(key))
 		log.Debug("Start migrate account", "address", address.Hex())
-		acc, err := types.NewStateAccount(zkAccIter.Value, true)
+		acc, err := types.NewStateAccount(value, true)
 		if err != nil {
 			return err
 		}
@@ -176,14 +177,16 @@ func (m *StateMigrator) migrateAccount(header *types.Header) error {
 		if err != nil {
 			return err
 		}
+		mu.Lock()
+		defer mu.Unlock()
 		if err := mpt.UpdateAccount(address, acc); err != nil {
 			return err
 		}
-		log.Trace("Account updated in MPT", "account", address.Hex(), "index", common.BytesToHash(zkAccIter.Key).Hex())
-	}
-	if zkAccIter.Err != nil {
-		log.Error("Failed to traverse state trie", "root", header.Root, "err", zkAccIter.Err)
-		return zkAccIter.Err
+		log.Trace("Account updated in MPT", "account", address.Hex(), "index", common.BytesToHash(key).Hex())
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	root, err := m.commit(mpt, types.EmptyRootHash)
@@ -213,24 +216,28 @@ func (m *StateMigrator) migrateStorage(
 	if err != nil {
 		return common.Hash{}, err
 	}
-	zkStorageIt, err := openZkNodeIterator(m.zkdb, zkStorageRoot)
+
+	zkt, err := trie.NewZkMerkleStateTrie(zkStorageRoot, m.zkdb)
 	if err != nil {
 		return common.Hash{}, err
 	}
+
+	var mu sync.Mutex
 	var slots atomic.Uint64
-	zkStorageIter := trie.NewIterator(zkStorageIt)
-	for zkStorageIter.Next() {
+	err = hashRangeIterator(zkt, NumProcessStorage, func(key, value []byte) error {
 		slots.Add(1)
-		slot := m.readZkPreimage(zkStorageIter.Key)
-		trimmed := common.TrimLeftZeroes(common.BytesToHash(zkStorageIter.Value).Bytes())
+		slot := m.readZkPreimage(key)
+		trimmed := common.TrimLeftZeroes(common.BytesToHash(value).Bytes())
+		mu.Lock()
+		defer mu.Unlock()
 		if err := mpt.UpdateStorage(address, slot, trimmed); err != nil {
-			return common.Hash{}, err
+			return err
 		}
-		log.Trace("Updated storage slot to MPT", "contract", address.Hex(), "index", common.BytesToHash(zkStorageIter.Key).Hex())
-	}
-	if zkStorageIter.Err != nil {
-		log.Error("Failed to traverse zk storage trie", "root", zkStorageIt, "err", zkStorageIter.Err)
-		return common.Hash{}, zkStorageIter.Err
+		log.Trace("Updated storage slot to MPT", "contract", address.Hex(), "index", common.BytesToHash(key).Hex())
+		return nil
+	})
+	if err != nil {
+		return common.Hash{}, err
 	}
 
 	root, err := m.commit(mpt, types.EmptyRootHash)
@@ -349,12 +356,4 @@ func (m *StateMigrator) FinalizeTransition(transitionBlock types.Block) {
 		}
 		log.Info("All migrated state have been validated", "elapsed", time.Since(startAt))
 	}()
-}
-
-func openZkNodeIterator(triedb *trie.Database, root common.Hash) (trie.NodeIterator, error) {
-	tr, err := trie.NewZkMerkleStateTrie(root, triedb)
-	if err != nil {
-		return nil, err
-	}
-	return tr.NodeIterator(nil)
 }
