@@ -18,13 +18,17 @@ package trie
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"fmt"
+	"math/big"
 	"math/rand"
+	"strings"
 	"testing"
 
 	zkt "github.com/kroma-network/zktrie/types"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -722,4 +726,205 @@ func TestMerkleTreeIterator(t *testing.T) {
 			t.Errorf("iterated leaf count invalid. expected %d, but got %d", len(testdata1), leafCount)
 		}
 	})
+
+	t.Run("single", func(t *testing.T) {
+		db := memorydb.New()
+		zkdb := NewZkDatabase(rawdb.NewDatabase(db))
+		trie, _ := NewZkTrie(common.Hash{}, zkdb)
+		input := testdata1[0]
+		trie.TryUpdate(common.LeftPadBytes([]byte(input.k), 32), []byte(input.v))
+
+		root, _, _ := trie.Commit(false)
+		zkdb.Commit(root, true)
+
+		t.Run("no start", func(t *testing.T) {
+			it := trie.MustNodeIterator(nil)
+			count, leafCount := testIterator(t, db, it)
+			if count != 1 {
+				t.Errorf("iterated node count invalid. expected %d, but got %d", 1, count)
+			}
+			if leafCount != 1 {
+				t.Errorf("iterated leaf count invalid. expected %d, but got %d", 1, leafCount)
+			}
+		})
+
+		t.Run("start < leaf", func(t *testing.T) {
+			it := trie.MustNodeIterator(common.BigToHash(common.Big2).Bytes())
+			count, leafCount := testIterator(t, db, it)
+			if count != 1 {
+				t.Errorf("iterated node count invalid. expected %d, but got %d", 1, count)
+			}
+			if leafCount != 1 {
+				t.Errorf("iterated leaf count invalid. expected %d, but got %d", 1, leafCount)
+			}
+		})
+
+		t.Run("start == leaf", func(t *testing.T) {
+			treePath := zk.NewTreePathFromZkHash(*zk.MustNewSecureHash(common.LeftPadBytes([]byte(input.k), 32)))
+			it := trie.MustNodeIterator(common.BigToHash(treePath.ToBigInt()).Bytes())
+			count, leafCount := testIterator(t, db, it)
+			if count != 1 {
+				t.Errorf("iterated node count invalid. expected %d, but got %d", 1, count)
+			}
+			if leafCount != 1 {
+				t.Errorf("iterated leaf count invalid. expected %d, but got %d", 1, leafCount)
+			}
+		})
+
+		t.Run("leaf < start", func(t *testing.T) {
+			it := trie.MustNodeIterator(new(big.Int).Sub(math.BigPow(2, 256), big.NewInt(20)).Bytes())
+			count, leafCount := testIterator(t, db, it)
+			if count != 0 {
+				t.Errorf("iterated node count invalid. expected %d, but got %d", 0, count)
+			}
+			if leafCount != 0 {
+				t.Errorf("iterated leaf count invalid. expected %d, but got %d", 0, leafCount)
+			}
+		})
+	})
+
+	t.Run("start param", func(t *testing.T) {
+		db := memorydb.New()
+		zdb := NewZkDatabase(rawdb.NewDatabase(db))
+		tree := NewEmptyZkMerkleStateTrie(zdb)
+		tree.MustUpdate(common.BigToHash(new(big.Int).SetInt64(10)).Bytes(), []byte("a"))
+		tree.MustUpdate(common.BigToHash(new(big.Int).SetInt64(45)).Bytes(), []byte("b"))
+
+		root, _, _ := tree.Commit(false)
+		zdb.Commit(root, true)
+
+		it := tree.MustNodeIterator(new(big.Int).Sub(math.BigPow(2, 256), big.NewInt(20)).Bytes())
+		count, leafCount := testIterator(t, db, it)
+		if count != 0 {
+			t.Errorf("iterated node count invalid. expected %d, but got %d", 0, count)
+		}
+		if leafCount != 0 {
+			t.Errorf("iterated leaf count invalid. expected %d, but got %d", 0, leafCount)
+		}
+	})
+
+	// 2117868253024658673051308919765768251327889971706193468262358283651495249312
+	// 5890867801457181665214479254972498000781191528432013068122435103377766174560
+	// 14581765644332007355603742199734881084194908881797547524839575783062290731888
+	// 34788104062452934851384508780622905500996384124020206338343429550016154937976
+	// 35276556762053997527613056591322528636494104613584587955086221921567012068952
+	// 35360899632278431044740218782056701006787372914479814587499001065171395100648
+	// 37464597366772015210317945055100241299952644205502865319476387775685341350804
+	// 37969619727885826713456741609104273363135728311753922979242122609203067018480
+	// 49105898062310628859001440408801641574777586797109612022294302697255598990260
+	// 52741712599410822789960629764379820729046689701270413750704650756582052966208
+	// 60605793585936038718222944469367330975045253165943558504994436015126663057264
+	// 85820665183479862833099943033748518022104258034302536812924589654960629631092
+	// 85903213226554376758871722034242209534889372863809613891381864212832081120192
+	// 90325294576998166929651976356705470786861187287245759150875554730994004964376
+	// 100426110323909178507910617048938140138509083918485403644527157931210594668280
+	// 101121973535399381299596552991112472380608726703043018240306005545403524541156
+	// 107728238818287576212658976290069527420728087670830176810004760597624147961456
+	// 108965031955345082684882074272074576895157534795165059799486221336737027828244
+	// 109990652738555876101121666461374586270194093281384129526042736168378582559940
+	// 110211460199408811616376306299384222697381109719033443765762911326375974320200
+	t.Run("startKey", func(t *testing.T) {
+		testLeafCount := func(expectedLeafCount int) func(t *testing.T) {
+			return func(t *testing.T) {
+				db := memorydb.New()
+				zdb := NewZkDatabase(rawdb.NewDatabase(db))
+				tree := NewEmptyZkMerkleStateTrie(zdb)
+
+				keys, values := makeTreeInput()
+				for i := range keys {
+					tree.MustUpdate(keys[i], values[i])
+				}
+				root, _, _ := tree.Commit(false)
+				if err := zdb.Commit(root, true); err != nil {
+					t.Error(err)
+				}
+
+				var startKey []byte
+				if names := strings.Split(t.Name(), "/"); names[len(names)-1] != "null" {
+					start, _ := new(big.Int).SetString(names[len(names)-1], 10)
+					startKey = common.BigToHash(start).Bytes()
+				}
+				//tree, _ := NewZkMerkleStateTrie(root, zdb)
+				//it := tree.MustNodeIterator(startKey)
+				it := tree.MustNodeIterator(startKey)
+				if it.Error() != nil {
+					t.Error(it.Error())
+				}
+				_, leafCount := testIterator(t, db, it)
+				if leafCount != expectedLeafCount {
+					t.Errorf("expected leaf count : %v, but got : %v", expectedLeafCount, leafCount)
+				}
+			}
+		}
+
+		testRangeRandom := func(expectedLeafCount int) func(t *testing.T) {
+			return func(t *testing.T) {
+				names := strings.Split(t.Name(), "/")
+				startRandomRange := strings.Split(names[len(names)-1], "~")
+				for i := 0; i < 100; i++ {
+					start := randomBigInt(
+						startRandomRange[0],
+						startRandomRange[1],
+					)
+					t.Run(start.String(), testLeafCount(expectedLeafCount))
+				}
+			}
+		}
+
+		t.Run("null", testLeafCount(20))
+		t.Run("0~2117868253024658673051308919765768251327889971706193468262358283651495249312", testRangeRandom(20))
+		t.Run("2117868253024658673051308919765768251327889971706193468262358283651495249311", testLeafCount(20))
+		t.Run("2117868253024658673051308919765768251327889971706193468262358283651495249312", testLeafCount(20)) // leaf hit
+		t.Run("2117868253024658673051308919765768251327889971706193468262358283651495249313", testLeafCount(19))
+		t.Run("2117868253024658673051308919765768251327889971706193468262358283651495249313~5890867801457181665214479254972498000781191528432013068122435103377766174559", testRangeRandom(19))
+		t.Run("5890867801457181665214479254972498000781191528432013068122435103377766174559", testLeafCount(19))
+		t.Run("5890867801457181665214479254972498000781191528432013068122435103377766174560", testLeafCount(19)) // leaf hit
+		t.Run("5890867801457181665214479254972498000781191528432013068122435103377766174561", testLeafCount(18))
+		t.Run("14581765644332007355603742199734881084194908881797547524839575783062290731888", testLeafCount(18)) // leaf hit
+		t.Run("34788104062452934851384508780622905500996384124020206338343429550016154937976", testLeafCount(17)) // leaf hit
+		t.Run("35276556762053997527613056591322528636494104613584587955086221921567012068952", testLeafCount(16)) // leaf hit
+		t.Run("35360899632278431044740218782056701006787372914479814587499001065171395100648", testLeafCount(15)) // leaf hit
+		t.Run("37464597366772015210317945055100241299952644205502865319476387775685341350804", testLeafCount(14)) // leaf hit
+		t.Run("37969619727885826713456741609104273363135728311753922979242122609203067018480", testLeafCount(13)) // leaf hit
+		t.Run("37969619727885826713456741609104273363135728311753922979242122609203067018481~49105898062310628859001440408801641574777586797109612022294302697255598990259", testRangeRandom(12))
+		t.Run("43059581450286369774720893806032160531653066764655610223233743297647867892559", testLeafCount(12))
+		t.Run("49105898062310628859001440408801641574777586797109612022294302697255598990260", testLeafCount(12)) // leaf hit
+		t.Run("52741712599410822789960629764379820729046689701270413750704650756582052966208", testLeafCount(11)) // leaf hit
+		t.Run("60605793585936038718222944469367330975045253165943558504994436015126663057264", testLeafCount(10)) // leaf hit
+		t.Run("85820665183479862833099943033748518022104258034302536812924589654960629631092", testLeafCount(9))  // leaf hit
+		t.Run("85903213226554376758871722034242209534889372863809613891381864212832081120192", testLeafCount(8))  // leaf hit
+		t.Run("90325294576998166929651976356705470786861187287245759150875554730994004964376", testLeafCount(7))  // leaf hit
+		t.Run("90325294576998166929651976356705470786861187287245759150875554730994004964377~100426110323909178507910617048938140138509083918485403644527157931210594668279", testRangeRandom(6))
+		t.Run("94522316217657177309342980577705593912865267091010285900227687201142635166164", testLeafCount(6))
+		t.Run("100426110323909178507910617048938140138509083918485403644527157931210594668280", testLeafCount(6)) // leaf hit
+		t.Run("101121973535399381299596552991112472380608726703043018240306005545403524541156", testLeafCount(5)) // leaf hit
+		t.Run("107728238818287576212658976290069527420728087670830176810004760597624147961456", testLeafCount(4)) // leaf hit
+		t.Run("108965031955345082684882074272074576895157534795165059799486221336737027828244", testLeafCount(3)) // leaf hit
+		t.Run("109990652738555876101121666461374586270194093281384129526042736168378582559940", testLeafCount(2)) // leaf hit
+		t.Run("110211460199408811616376306299384222697381109719033443765762911326375974320200", testLeafCount(1)) // leaf hit
+		t.Run("110211460199408811616376306299384222697381109719033443765762911326375974320201", testLeafCount(0))
+		t.Run("110211460199408811616376306299384222697381109719033443765762911326375974320201~115792089237316195423570985008687907853269984665640564039457584007913129639935", testRangeRandom(0))
+		t.Run("115792089237316195423570985008687907853269984665640564039457584007913129639935", testLeafCount(0)) // 2^256-1
+	})
+}
+
+func makeTreeInput() ([][]byte, [][]byte) {
+	r := rand.New(rand.NewSource(0))
+	keys := make([][]byte, 20)
+	values := make([][]byte, 20)
+	for i := range keys {
+		keys[i] = make([]byte, 32)
+		values[i] = make([]byte, 32)
+		r.Read(keys[i])
+		r.Read(values[i])
+	}
+	return keys, values
+}
+
+func randomBigInt(start, end string) *big.Int {
+	startNum, _ := new(big.Int).SetString(start, 10)
+	endNum, _ := new(big.Int).SetString(end, 10)
+	rangeNum := new(big.Int).Sub(endNum, startNum)
+	randomNum, _ := crand.Int(crand.Reader, rangeNum)
+	return new(big.Int).Add(startNum, randomNum)
 }

@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"container/heap"
 	"errors"
-
 	zktrie "github.com/kroma-network/zktrie/trie"
 	zkt "github.com/kroma-network/zktrie/types"
 
@@ -946,17 +945,14 @@ func newMerkleTreeIterator(
 	}
 	if it.err == nil && rootNode != nil {
 		it.stack = []merkleTreeIteratorNode{rootNode}
-		it.seek(start)
+		if len(start) != 0 {
+			it.seek(zk.NewTreePathFromHashBig(common.BytesToHash(start)))
+		}
 	}
 	return it
 }
 
-func (it *merkleTreeIterator) seek(path []byte) {
-	if len(path) == 0 {
-		return
-	}
-	path = zk.NewTreePathFromHashBig(common.BytesToHash(path))
-
+func (it *merkleTreeIterator) seek(path zk.TreePath) {
 	for _, p := range path {
 		if parent, ok := it.stack[len(it.stack)-1].(*merkleTreeIteratorParentNode); ok {
 			if child := it.resolveNode(parent.children[p]); child != nil {
@@ -967,51 +963,125 @@ func (it *merkleTreeIterator) seek(path []byte) {
 			if it.err != nil {
 				return
 			}
-		} else {
-			break
+		}
+		break
+	}
+
+	if _, ok := it.stack[len(it.stack)-1].(*merkleTreeIteratorParentNode); ok {
+		it.nextLeaf()
+	}
+
+	if leaf, ok := it.stack[len(it.stack)-1].(*merkleTreeIteratorLeafNode); ok {
+		switch bytes.Compare(path, zk.NewTreePathFromHashBig(common.BytesToHash(leaf.key))) {
+		case -1: // path < leaf path
+		loop1:
+			for it.prevLeaf() {
+				switch bytes.Compare(path, zk.NewTreePathFromHashBig(common.BytesToHash(it.lastNodeAsLeaf().key))) {
+				case -1: // path < leaf path
+					continue
+				case 0: // path == leaf path
+					break loop1
+				case 1:
+					it.nextLeaf()
+					break loop1
+				}
+			}
+		case 0: // leaf path == path
+		case 1: // leaf path < path
+		loop2:
+			for it.nextLeaf() {
+				switch bytes.Compare(path, zk.NewTreePathFromHashBig(common.BytesToHash(it.lastNodeAsLeaf().key))) {
+				case -1: // path < leaf path
+					it.prevLeaf()
+					break loop2
+				case 0: // path == leaf path
+					break loop2
+				case 1:
+					continue
+				}
+			}
+			return
 		}
 	}
 
 	if len(it.path) == 0 {
-		return // root node is not parent node
+		return
 	}
-
 	// When using the Next function, it always moves to the next node.
 	// Therefore, it sets the previous node of the node retrieved by seek to the last visited node.
 	lastIdx := len(it.path) - 1
 	if it.path[lastIdx] == right {
 		it.path[lastIdx] = left
 		it.stack[len(it.stack)-1] = it.resolveNode(it.parentOfLastNode().children[left])
-		for {
-			if parent, ok := it.stack[len(it.stack)-1].(*merkleTreeIteratorParentNode); ok {
-				for _, path := range []byte{right, left} {
-					if child := it.resolveNode(parent.children[path]); child != nil {
-						it.stack = append(it.stack, child)
-						it.path = append(it.path, path)
-						break
-					}
-					if it.err != nil {
-						return
-					}
-				}
-			} else {
-				break
-			}
-		}
+		it.visitBeforeLeafNode()
 	} else {
 		it.path = it.path[:lastIdx]
 		it.stack = it.stack[:len(it.stack)-1]
 	}
 }
 
+func (it *merkleTreeIterator) visitBeforeLeafNode() {
+	for {
+		if parent, ok := it.stack[len(it.stack)-1].(*merkleTreeIteratorParentNode); ok {
+			for _, path := range []byte{right, left} {
+				if child := it.resolveNode(parent.children[path]); child != nil {
+					it.stack = append(it.stack, child)
+					it.path = append(it.path, path)
+					break
+				}
+				if it.err != nil {
+					return
+				}
+			}
+		} else {
+			break
+		}
+	}
+}
+
+func (it *merkleTreeIterator) prevLeaf() bool {
+	if _, ok := it.stack[len(it.stack)-1].(*merkleTreeIteratorLeafNode); ok {
+		for len(it.path) != 0 { // Infinite loop if there are still paths left to visit
+			switch lastPathIndex := len(it.path) - 1; it.path[lastPathIndex] {
+			case left: // left visited. go up
+				it.path = it.path[:len(it.path)-1]
+				it.stack = it.stack[:len(it.stack)-1]
+			case right: // right visited. go left
+				if leftNode := it.resolveNode(it.parentOfLastNode().children[left]); leftNode != nil {
+					it.path[lastPathIndex] = left
+					it.stack[len(it.stack)-1] = leftNode
+					it.visitBeforeLeafNode()
+					return true
+				}
+				if it.err != nil {
+					return false
+				}
+				// left does not exist. go up
+				it.path = it.path[:len(it.path)-1]
+				it.stack = it.stack[:len(it.stack)-1]
+			}
+		}
+	}
+	return false
+}
+
+func (it *merkleTreeIterator) nextLeaf() bool {
+	for it.Next(true) {
+		if it.Leaf() {
+			return true
+		}
+	}
+	if len(it.stack) == 1 && len(it.path) == 0 {
+		it.stack = nil
+	}
+	return false
+}
+
 func (it *merkleTreeIterator) Next(bool) bool {
 	if it.err != nil {
 		return false
 	}
-	if len(it.stack) == 0 {
-		return false
-	}
-	if it.stack == nil { // end of iterator traversal
+	if len(it.stack) == 0 { // end of iterator traversal
 		return false
 	}
 	if it.path == nil { // first visit. Starting from the root
