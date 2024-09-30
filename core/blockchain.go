@@ -1799,13 +1799,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		// [Kroma: ZKT to MPT]
 		var statedb *state.StateDB
 		if bc.Config().KromaMptTime != nil && *bc.Config().KromaMptTime == block.Time() {
-			bc.Config().Zktrie = false
-			bc.TrieDB().SetBackend(false)
-
 			migratedRef := NewMigratedRef(bc.db)
 			if migratedRef == nil || migratedRef.BlockNumber() != parent.Number.Uint64() {
 				return it.index, errors.New("cannot find migrated reference")
 			}
+			bc.Config().Zktrie = false
+			bc.TrieDB().SetBackend(false)
 			statedb, err = state.New(migratedRef.Root(), bc.stateCache, bc.snaps)
 		} else {
 			statedb, err = state.New(parent.Root, bc.stateCache, bc.snaps)
