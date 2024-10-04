@@ -1846,11 +1846,19 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		ptime := time.Since(pstart)
 
 		vstart := time.Now()
+		// [Kroma: ZKT to MPT]
+		if bc.Config().KromaMptTime != nil && *bc.Config().KromaMptTime == block.Time() {
+			fmt.Printf("YSM - skipping ValidateState() becuase it's migration time!. block #%d\n", block.NumberU64())
+			goto KROMA
+		}
+		// [Kroma: END]
+
 		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
 			bc.reportBlock(block, receipts, err)
 			followupInterrupt.Store(true)
 			return it.index, err
 		}
+	KROMA:
 		vtime := time.Since(vstart)
 		proctime := time.Since(start) // processing + validation
 
