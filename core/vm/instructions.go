@@ -817,6 +817,12 @@ func opStop(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 }
 
 func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	// [Kroma: START]
+	// NOTE: Since zkEVM cannot prove this opcode, it is disabled before KromaMPTTime.
+	if interpreter.evm.chainConfig.Zktrie && !interpreter.evm.chainConfig.IsKromaMPT(interpreter.evm.Context.Time) {
+		return opUndefined(pc, interpreter, scope)
+	}
+	// [Kroma: END]
 	if interpreter.readOnly {
 		return nil, ErrWriteProtection
 	}
