@@ -228,6 +228,13 @@ func (s *StateDB) onCommitForMigration(blockNumber uint64, stateObjectsDestruct 
 	/* TOCHECK:
 	- Do we need to check if batch.ValueSize() > ethdb.IdealBatchSize, have storages size limit?
 	*/
+
+	// If an account value is a nil slice, it indicates that the account has been deleted.
+	for addr, _ := range stateObjectsDestruct {
+		addrHash := crypto.MustHashing(nil, addr[:], s.IsZktrie())
+		accounts[addrHash] = nil
+	}
+
 	serializedAccounts := new(bytes.Buffer)
 	accountsEncoder := gob.NewEncoder(serializedAccounts)
 	if err := accountsEncoder.Encode(accounts); err != nil {
