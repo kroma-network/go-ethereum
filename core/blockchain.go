@@ -1876,6 +1876,11 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			wstart = time.Now()
 			status WriteStatus
 		)
+		// [Kroma: START]
+		if !bc.Config().IsKromaMPT(block.Time()) {
+			statedb.SetIsToBeMigrated(true)
+		}
+		// [Kroma: END]
 		if !setHead {
 			// [Scroll: START]
 			// EvmTraces & StorageTrace being nil is safe because l2geth's p2p server is stoped and the code will not execute there.

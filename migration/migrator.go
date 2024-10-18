@@ -111,7 +111,6 @@ func (m *StateMigrator) Start() {
 				}
 				err := m.applyNewStateTransition(currentBlock.Number.Uint64())
 				if err != nil {
-					// TODO(pangssu): should we panic here?
 					log.Error("Failed to apply new state transition", "error", err)
 				}
 			case <-m.stopCh:
@@ -253,6 +252,18 @@ func (m *StateMigrator) readZkPreimage(key []byte) []byte {
 		}
 	}
 	panic("preimage does not exist: " + hk.Hex())
+}
+
+func (m *StateMigrator) readZkPreimageWithNonIteratorKey(key common.Hash) []byte {
+	if preimage, ok := m.allocPreimage[key]; ok {
+		return preimage
+	}
+	if preimage := m.zkdb.Preimage(key); preimage != nil {
+		if common.BytesToHash(zk.MustNewSecureHash(preimage).Bytes()).Hex() == key.Hex() {
+			return preimage
+		}
+	}
+	panic("preimage does not exist: " + key.Hex())
 }
 
 func (m *StateMigrator) commit(mpt *trie.StateTrie, parentHash common.Hash) (common.Hash, error) {

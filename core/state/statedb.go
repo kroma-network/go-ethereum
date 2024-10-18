@@ -18,6 +18,9 @@
 package state
 
 import (
+	"bytes"
+	"encoding/binary"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"math/big"
@@ -44,6 +47,25 @@ const (
 	// employed for contract storage deletion.
 	storageDeleteLimit = 512 * 1024 * 1024
 )
+
+var (
+	accountPrefixForMigration = []byte("Z")
+	storagePrefixForMigration = []byte("X")
+)
+
+func Uint64ToBytes(x uint64) []byte {
+	bytesSlice := make([]byte, 8)
+	binary.BigEndian.PutUint64(bytesSlice, x)
+	return bytesSlice
+}
+
+func AccountPrefixForMigration(blockNumber uint64) []byte {
+	return append(accountPrefixForMigration, Uint64ToBytes(blockNumber)...)
+}
+
+func StoragePrefixForMigration(blockNumber uint64) []byte {
+	return append(storagePrefixForMigration, Uint64ToBytes(blockNumber)...)
+}
 
 type revision struct {
 	id           int
@@ -157,7 +179,8 @@ type StateDB struct {
 	StorageDeleted int
 
 	// Testing hooks
-	onCommit func(states *triestate.Set) // Hook invoked when commit is performed
+	onCommit       func(states *triestate.Set) // Hook invoked when commit is performed
+	isToBeMigrated bool
 }
 
 // New creates a new state from a given trie.
@@ -190,6 +213,43 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		sdb.snap = sdb.snaps.Snapshot(root)
 	}
 	return sdb, nil
+}
+
+func (s *StateDB) SetIsToBeMigrated(flag bool) {
+	s.isToBeMigrated = flag
+}
+
+// TODO : must handlestateObjectsDestruct parameter
+// NOTICE: it's should be called in MigrationTime
+func (s *StateDB) onCommitForMigration(blockNumber uint64, stateObjectsDestruct map[common.Address]*types.StateAccount, accounts map[common.Hash][]byte, storages map[common.Hash]map[common.Hash][]byte) error {
+	db := s.db.DiskDB()
+	batch := db.NewBatch()
+
+	/* TOCHECK:
+	- Do we need to check if batch.ValueSize() > ethdb.IdealBatchSize, have storages size limit?
+	*/
+	serializedAccounts := new(bytes.Buffer)
+	accountsEncoder := gob.NewEncoder(serializedAccounts)
+	if err := accountsEncoder.Encode(accounts); err != nil {
+		return err
+	}
+
+	batch.Put(AccountPrefixForMigration(blockNumber), serializedAccounts.Bytes())
+
+	serializedStorages := new(bytes.Buffer)
+	storagesEncoder := gob.NewEncoder(serializedStorages)
+	if err := storagesEncoder.Encode(storages); err != nil {
+		return err
+	}
+
+	batch.Put(StoragePrefixForMigration(blockNumber), serializedStorages.Bytes())
+
+	if err := batch.Write(); err != nil {
+		return err
+	}
+	batch.Reset()
+
+	return nil
 }
 
 // StartPrefetcher initializes a new trie prefetcher to pull in nodes from the
@@ -1427,6 +1487,13 @@ func (s *StateDB) Commit(block uint64, deleteEmptyObjects bool) (common.Hash, er
 		}
 		if s.onCommit != nil {
 			s.onCommit(set)
+		}
+
+		if s.isToBeMigrated {
+			err := s.onCommitForMigration(block, s.stateObjectsDestruct, s.accounts, s.storages)
+			if err != nil {
+				return common.Hash{}, err
+			}
 		}
 	}
 	// Clear all internal flags at the end of commit operation.

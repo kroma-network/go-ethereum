@@ -2,21 +2,18 @@ package migration
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
+	"encoding/gob"
 	"fmt"
-	"maps"
-	"math/big"
-	"strings"
-	"time"
-
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
+	"maps"
+	"math/big"
+	"strings"
 )
 
 type prestateStorage map[string]string
@@ -118,52 +115,117 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 	for i := start; i <= headNumber; i++ {
 		log.Info("Apply new state to MPT", "block", i, "root", root.TerminalString())
 
-		stateTrie, err := trie.NewStateTrie(trie.StateTrieID(root), m.mptdb)
+		mptStateTrie, err := trie.NewStateTrie(trie.StateTrieID(root), m.mptdb)
 		if err != nil {
 			return err
 		}
 
-		// Apply state changes for EIP-4788 process.
 		header := m.backend.BlockChain().GetHeaderByNumber(i)
 		if header == nil {
 			return fmt.Errorf("block %d header not found", i)
 		}
-		if header.ParentBeaconRoot != nil {
-			err = m.applyEip4788PostState(stateTrie, root, new(big.Int).SetUint64(header.Time), *header.ParentBeaconRoot)
+
+		batch := m.db.NewBatch()
+		accountStateDiffKey := state.AccountPrefixForMigration(i)
+		serializedAccounts, err := m.db.Get(accountStateDiffKey)
+		batch.Delete(accountStateDiffKey)
+
+		if err != nil {
+			return err
+		}
+		b := new(bytes.Buffer)
+		if _, err := b.Write(serializedAccounts); err != nil {
+			return err
+		}
+		d := gob.NewDecoder(b)
+
+		var deserializedAccounts map[common.Hash][]byte
+		err = d.Decode(&deserializedAccounts)
+		if err != nil {
+			return err
+		}
+
+		storageStateDiffKey := state.StoragePrefixForMigration(i)
+		serializedStorages, err := m.db.Get(storageStateDiffKey)
+		batch.Delete(storageStateDiffKey)
+
+		if err != nil {
+			return err
+		}
+
+		b = new(bytes.Buffer)
+		if _, err := b.Write(serializedStorages); err != nil {
+			return err
+		}
+		d = gob.NewDecoder(b)
+
+		var deserializedStorages map[common.Hash]map[common.Hash][]byte
+		err = d.Decode(&deserializedStorages)
+		if err != nil {
+			return err
+		}
+
+		for hashedAddress, encodedAccountState := range deserializedAccounts {
+			addr := common.BytesToAddress(m.readZkPreimageWithNonIteratorKey(hashedAddress))
+			stateAccount, err := mptStateTrie.GetAccount(addr)
+
 			if err != nil {
 				return err
 			}
-		}
 
-		// Apply state changes for transactions.
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		res, err := m.tracersAPI.TraceBlockByNumber(ctx, rpc.BlockNumber(i), m.traceCfg)
-		if err != nil {
-			cancel()
-			return err
-		}
-		cancel()
-		for _, tx := range res {
-			var result prestateTracerResult
-			if err := json.Unmarshal(tx.Result.(json.RawMessage), &result); err != nil {
+			if stateAccount == nil {
+				stateAccount = types.NewEmptyStateAccount(false)
+			}
+
+			id := trie.StorageTrieID(root, crypto.Keccak256Hash(addr.Bytes()), stateAccount.Root)
+			mptStorageTrie, err := trie.NewStateTrie(id, m.mptdb)
+			if err != nil {
 				return err
 			}
-			for key, changes := range m.mergeTracerResult(result) {
-				address := common.HexToAddress(key)
-				err := m.updateAccount(stateTrie, root, address, changes)
-				if err != nil {
-					log.Error("Failed to apply new state", "address", address, "err", err)
+
+			_, exists := deserializedStorages[hashedAddress]
+
+			for hashedSlotKey, encodedSlotValue := range deserializedStorages[hashedAddress] {
+				slotKey := m.readZkPreimageWithNonIteratorKey(hashedSlotKey)
+				trimmed := common.TrimLeftZeroes(common.BytesToHash(encodedSlotValue).Bytes())
+				if err := mptStorageTrie.UpdateStorage(addr, slotKey, trimmed); err != nil {
+					return err
 				}
+			}
+
+			mptStorageRoot := stateAccount.Root
+			if exists {
+				mptStorageRoot, err = m.commit(mptStorageTrie, stateAccount.Root)
+				if err != nil {
+					return err
+				}
+			}
+
+			zktAccountState, err := types.NewStateAccount(encodedAccountState, true)
+			if err != nil {
+				return err
+			}
+
+			zktAccountState.Root = mptStorageRoot
+
+			if err := mptStateTrie.UpdateAccount(addr, zktAccountState); err != nil {
+				return err
 			}
 		}
 
-		root, err = m.commit(stateTrie, root)
+		root, err = m.commit(mptStateTrie, root)
 		if err != nil {
 			return err
 		}
 		if err := m.migratedRef.Update(root, header.Number.Uint64()); err != nil {
 			return err
 		}
+
+		if err := batch.Write(); err != nil {
+			return err
+		}
+
+		batch.Reset()
 	}
 
 	return nil
