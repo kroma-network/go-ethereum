@@ -219,7 +219,6 @@ func (s *StateDB) SetIsToBeMigrated(flag bool) {
 	s.isToBeMigrated = flag
 }
 
-// TODO : must handlestateObjectsDestruct parameter
 // NOTICE: it's should be called in MigrationTime
 func (s *StateDB) onCommitForMigration(blockNumber uint64, stateObjectsDestruct map[common.Address]*types.StateAccount, accounts map[common.Hash][]byte, storages map[common.Hash]map[common.Hash][]byte) error {
 	db := s.db.DiskDB()
@@ -228,9 +227,11 @@ func (s *StateDB) onCommitForMigration(blockNumber uint64, stateObjectsDestruct 
 	/* TOCHECK:
 	- Do we need to check if batch.ValueSize() > ethdb.IdealBatchSize, have storages size limit?
 	*/
-
 	// If an account value is a nil slice, it indicates that the account has been deleted.
 	for addr, _ := range stateObjectsDestruct {
+		if addr.Cmp(params.SystemAddress) == 0 {
+			continue
+		}
 		addrHash := crypto.MustHashing(nil, addr[:], s.IsZktrie())
 		accounts[addrHash] = nil
 	}

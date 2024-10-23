@@ -69,13 +69,7 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 		}
 
 		for hashedAddress, encodedAccountState := range deserializedAccounts {
-
 			addr := common.BytesToAddress(m.readZkPreimageWithNonIteratorKey(hashedAddress))
-			stateAccount, err := mptStateTrie.GetAccount(addr)
-
-			if err != nil {
-				return err
-			}
 
 			if encodedAccountState == nil {
 				if err := mptStateTrie.DeleteAccount(addr); err != nil {
@@ -84,10 +78,15 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 				continue
 			}
 
+			stateAccount, err := mptStateTrie.GetAccount(addr)
+
+			if err != nil {
+				return err
+			}
+
 			if stateAccount == nil {
 				stateAccount = types.NewEmptyStateAccount(false)
 			}
-
 			id := trie.StorageTrieID(root, crypto.Keccak256Hash(addr.Bytes()), stateAccount.Root)
 			mptStorageTrie, err := trie.NewStateTrie(id, m.mptdb)
 			if err != nil {
