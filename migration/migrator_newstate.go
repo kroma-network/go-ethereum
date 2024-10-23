@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -69,19 +70,18 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 		}
 
 		for hashedAddress, encodedAccountState := range deserializedAccounts {
-
 			addr := common.BytesToAddress(m.readZkPreimageWithNonIteratorKey(hashedAddress))
-			stateAccount, err := mptStateTrie.GetAccount(addr)
-
-			if err != nil {
-				return err
-			}
 
 			if encodedAccountState == nil {
 				if err := mptStateTrie.DeleteAccount(addr); err != nil {
 					return err
 				}
 				continue
+			}
+
+			stateAccount, err := mptStateTrie.GetAccount(addr)
+			if err != nil {
+				return err
 			}
 
 			if stateAccount == nil {
