@@ -28,6 +28,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/exp/slices"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/common/mclock"
@@ -51,7 +53,6 @@ import (
 	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
 	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
 	"github.com/ethereum/go-ethereum/trie/zkproof"
-	"golang.org/x/exp/slices"
 )
 
 var (
@@ -1876,8 +1877,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			status WriteStatus
 		)
 		// [Kroma: START]
-		if !bc.Config().IsKromaMPT(block.Time()) {
-			statedb.SetIsToBeMigrated(true)
+		if bc.chainConfig.KromaMptTime != nil && *bc.chainConfig.KromaMptTime > block.Time() {
+			statedb.OnCommitForMigration = WriteStateChanges
 		}
 		// [Kroma: END]
 		if !setHead {

@@ -1,11 +1,10 @@
 package migration
 
 import (
-	"bytes"
-	"encoding/gob"
 	"fmt"
+
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -29,49 +28,41 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 		}
 
 		batch := m.db.NewBatch()
-		accountStateDiffKey := state.AccountPrefixForMigration(i)
-		serializedAccounts, err := m.db.Get(accountStateDiffKey)
-		batch.Delete(accountStateDiffKey)
+		accountChangesKey := core.AccountChangesKey(i)
 
-		if err != nil {
-			return err
-		}
-		b := new(bytes.Buffer)
-		if _, err := b.Write(serializedAccounts); err != nil {
-			return err
-		}
-		d := gob.NewDecoder(b)
-
-		var deserializedAccounts map[common.Hash][]byte
-		err = d.Decode(&deserializedAccounts)
+		serAccountChanges, err := m.db.Get(accountChangesKey)
 		if err != nil {
 			return err
 		}
 
-		storageStateDiffKey := state.StoragePrefixForMigration(i)
-		serializedStorages, err := m.db.Get(storageStateDiffKey)
-		batch.Delete(storageStateDiffKey)
+		if err := batch.Delete(accountChangesKey); err != nil {
+			return err
+		}
 
+		accountChanges, err := core.DeserializeStateChanges[map[common.Hash][]byte](serAccountChanges)
 		if err != nil {
 			return err
 		}
 
-		b = new(bytes.Buffer)
-		if _, err := b.Write(serializedStorages); err != nil {
-			return err
-		}
-		d = gob.NewDecoder(b)
-
-		var deserializedStorages map[common.Hash]map[common.Hash][]byte
-		err = d.Decode(&deserializedStorages)
+		storageChangesKey := core.StorageChangesKey(i)
+		serStorageChanges, err := m.db.Get(storageChangesKey)
 		if err != nil {
 			return err
 		}
 
-		for hashedAddress, encodedAccountState := range deserializedAccounts {
-			addr := common.BytesToAddress(m.readZkPreimageWithNonIteratorKey(hashedAddress))
+		if err := batch.Delete(storageChangesKey); err != nil {
+			return err
+		}
 
-			if encodedAccountState == nil {
+		storageChanges, err := core.DeserializeStateChanges[map[common.Hash]map[common.Hash][]byte](serStorageChanges)
+		if err != nil {
+			return err
+		}
+
+		for hashedAddr, encStateAccount := range accountChanges {
+			addr := common.BytesToAddress(m.readZkPreimageWithNonIteratorKey(hashedAddr))
+
+			if encStateAccount == nil {
 				if err := mptStateTrie.DeleteAccount(addr); err != nil {
 					return err
 				}
@@ -79,7 +70,6 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 			}
 
 			stateAccount, err := mptStateTrie.GetAccount(addr)
-
 			if err != nil {
 				return err
 			}
@@ -87,38 +77,37 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 			if stateAccount == nil {
 				stateAccount = types.NewEmptyStateAccount(false)
 			}
+
 			id := trie.StorageTrieID(root, crypto.Keccak256Hash(addr.Bytes()), stateAccount.Root)
 			mptStorageTrie, err := trie.NewStateTrie(id, m.mptdb)
 			if err != nil {
 				return err
 			}
 
-			_, exists := deserializedStorages[hashedAddress]
-
-			for hashedSlotKey, encodedSlotValue := range deserializedStorages[hashedAddress] {
-				slotKey := m.readZkPreimageWithNonIteratorKey(hashedSlotKey)
-				trimmed := common.TrimLeftZeroes(common.BytesToHash(encodedSlotValue).Bytes())
-				if err := mptStorageTrie.UpdateStorage(addr, slotKey, trimmed); err != nil {
-					return err
-				}
-			}
-
 			mptStorageRoot := stateAccount.Root
-			if exists {
+
+			if _, exists := storageChanges[hashedAddr]; exists {
+				for hashedSlotKey, encSlotValue := range storageChanges[hashedAddr] {
+					slotKey := m.readZkPreimageWithNonIteratorKey(hashedSlotKey)
+					trimmed := common.TrimLeftZeroes(common.BytesToHash(encSlotValue).Bytes())
+					if err := mptStorageTrie.UpdateStorage(addr, slotKey, trimmed); err != nil {
+						return err
+					}
+				}
 				mptStorageRoot, err = m.commit(mptStorageTrie, stateAccount.Root)
 				if err != nil {
 					return err
 				}
 			}
 
-			zktAccountState, err := types.NewStateAccount(encodedAccountState, true)
+			zktStateAccount, err := types.NewStateAccount(encStateAccount, true)
 			if err != nil {
 				return err
 			}
 
-			zktAccountState.Root = mptStorageRoot
+			zktStateAccount.Root = mptStorageRoot
 
-			if err := mptStateTrie.UpdateAccount(addr, zktAccountState); err != nil {
+			if err := mptStateTrie.UpdateAccount(addr, zktStateAccount); err != nil {
 				return err
 			}
 		}
