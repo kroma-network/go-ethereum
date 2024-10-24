@@ -1877,8 +1877,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			status WriteStatus
 		)
 		// [Kroma: START]
-		if !bc.Config().IsKromaMPT(block.Time()) {
-			statedb.SetIsToBeMigrated(true)
+		if bc.chainConfig.KromaMPTTime != nil && *bc.chainConfig.KromaMPTTime > block.Time() {
+			statedb.OnCommitForMigration = WriteStateChanges
 		}
 		// [Kroma: END]
 		if !setHead {
