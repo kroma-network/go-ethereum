@@ -661,6 +661,29 @@ func TestMerkleTreeIterator(t *testing.T) {
 		return tree, db
 	}
 
+	t.Run("empty root", func(t *testing.T) {
+		t.Run("zk merkle tree", func(t *testing.T) {
+			trie := NewEmptyMerkleTrie(NewZkDatabase(rawdb.NewMemoryDatabase()))
+			it, _ := trie.NodeIterator(nil)
+			for it.Next(true) {
+				t.Fail()
+			}
+			if it.Error() != nil {
+				t.Error(it.Error())
+			}
+		})
+		t.Run("zk trie", func(t *testing.T) {
+			trie, _ := NewZkTrie(common.Hash{}, NewZkDatabase(rawdb.NewDatabase(memorydb.New())))
+			it, _ := trie.NodeIterator(nil)
+			for it.Next(true) {
+				t.Fail()
+			}
+			if it.Error() != nil {
+				t.Error(it.Error())
+			}
+		})
+	})
+
 	t.Run("zk merkle tree", func(t *testing.T) {
 		tree, db := makeMerkleTreeWithData(testdata1)
 		expected := db.Len()
