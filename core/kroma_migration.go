@@ -19,10 +19,11 @@ import (
 var HaltOnStateTransition = errors.New("historical rpc must be set to transition to MPT")
 
 var (
-	accountChangesPrefix = []byte("aC-")
-	storageChangesPrefix = []byte("sC-")
-	migratedRootKey      = []byte("MigratedRoot")
-	migratedNumberKey    = []byte("MigratedNumber")
+	accountChangesPrefix  = []byte("aC-")
+	storageChangesPrefix  = []byte("sC-")
+	destructChangesPrefix = []byte("dC-")
+	migratedRootKey       = []byte("MigratedRoot")
+	migratedNumberKey     = []byte("MigratedNumber")
 )
 
 type MigratedRef struct {
@@ -87,18 +88,40 @@ func StorageChangesKey(blockNumber uint64) []byte {
 	return append(storageChangesPrefix, encodeBlockNumber(blockNumber)...)
 }
 
+func DestructChangesKey(blockNumber uint64) []byte {
+	return append(destructChangesPrefix, encodeBlockNumber(blockNumber)...)
+}
+
 // Note: it's should be called in MigrationTime
 func WriteStateChanges(db ethdb.KeyValueStore, blockNumber uint64, stateObjectsDestruct map[common.Address]*types.StateAccount, accounts map[common.Hash][]byte, storages map[common.Hash]map[common.Hash][]byte) error {
 	batch := db.NewBatch()
 
+	stateObjectsDestructInfo := make(map[common.Hash]bool)
+
 	// TODO: Do we need to check if batch.ValueSize() > ethdb.IdealBatchSize, have storages size limit?
-	// If an account value is a nil slice, it indicates that the account has been deleted.
 	for addr := range stateObjectsDestruct {
 		if addr.Cmp(params.SystemAddress) == 0 {
 			continue
 		}
+
 		addrHash := common.BytesToHash(zk.MustNewSecureHash(addr[:]).Bytes())
-		accounts[addrHash] = nil
+		stateObjectsDestructInfo[addrHash] = true
+
+		// if it's deleted account
+		if _, exist := accounts[addrHash]; !exist {
+			// If an account value is a nil, it indicates that the account has been deleted.
+			accounts[addrHash] = nil
+		}
+	}
+
+	serializedStateObjectsDestruct, err := SerializeStateChanges(stateObjectsDestructInfo)
+	if err != nil {
+		return err
+	}
+
+	err = batch.Put(DestructChangesKey(blockNumber), serializedStateObjectsDestruct)
+	if err != nil {
+		return err
 	}
 
 	serializedAccounts, err := SerializeStateChanges(accounts)
@@ -128,7 +151,7 @@ func WriteStateChanges(db ethdb.KeyValueStore, blockNumber uint64, stateObjectsD
 	return nil
 }
 
-func SerializeStateChanges[T map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data T) ([]byte, error) {
+func SerializeStateChanges[T map[common.Hash]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data T) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	encoder := gob.NewEncoder(buf)
 	if err := encoder.Encode(data); err != nil {
@@ -137,7 +160,7 @@ func SerializeStateChanges[T map[common.Hash][]byte | map[common.Hash]map[common
 	return buf.Bytes(), nil
 }
 
-func DeserializeStateChanges[T map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data []byte) (T, error) {
+func DeserializeStateChanges[T map[common.Hash]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data []byte) (T, error) {
 	var result T
 	buf := bytes.NewBuffer(data)
 	decoder := gob.NewDecoder(buf)

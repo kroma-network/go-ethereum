@@ -78,7 +78,6 @@ func NewStateMigrator(backend ethBackend, tracersAPI *tracers.API) *StateMigrato
 }
 
 func (m *StateMigrator) Start() error {
-
 	// TODO: have to replace this code with this -->  head := m.backend.BlockChain().CurrentSafeBlock()
 	head := m.backend.BlockChain().CurrentBlock()
 	if m.backend.BlockChain().Config().IsKromaMPT(head.Time) {

@@ -159,7 +159,7 @@ type StateDB struct {
 
 	// Testing hooks
 	onCommit             func(states *triestate.Set) // Hook invoked when commit is performed
-	OnCommitForMigration func(db ethdb.KeyValueStore, blockNumber uint64, stateObjectsDestruct map[common.Address]*types.StateAccount, accounts map[common.Hash][]byte, storages map[common.Hash]map[common.Hash][]byte) error
+	OnCommitForMigration func(s ethdb.KeyValueStore, blockNumber uint64, stateObjectsDestruct map[common.Address]*types.StateAccount, accounts map[common.Hash][]byte, storages map[common.Hash]map[common.Hash][]byte) error
 }
 
 // New creates a new state from a given trie.
@@ -1432,7 +1432,7 @@ func (s *StateDB) Commit(block uint64, deleteEmptyObjects bool) (common.Hash, er
 		}
 
 		if s.OnCommitForMigration != nil {
-			err := s.OnCommitForMigration(s.db.DiskDB(), block, s.stateObjectsDestruct, s.accounts, s.storages)
+			err := s.OnCommitForMigration(s.Database().DiskDB(), block, s.stateObjectsDestruct, s.accounts, s.storages)
 			if err != nil {
 				return common.Hash{}, err
 			}

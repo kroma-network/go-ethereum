@@ -332,7 +332,7 @@ func opReturnDataCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeConte
 		return nil, ErrReturnDataOutOfBounds
 	}
 	// we can reuse dataOffset now (aliasing it for clarity)
-	var end = dataOffset
+	end := dataOffset
 	end.Add(&dataOffset, &length)
 	end64, overflow := end.Uint64WithOverflow()
 	if overflow || uint64(len(interpreter.returnData)) < end64 {
@@ -594,7 +594,7 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	scope.Contract.UseGas(gas)
 	// TODO: use uint256.Int instead of converting with toBig()
-	var bigVal = big0
+	bigVal := big0
 	if !value.IsZero() {
 		bigVal = value.ToBig()
 	}
@@ -677,7 +677,7 @@ func opCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	if interpreter.readOnly && !value.IsZero() {
 		return nil, ErrWriteProtection
 	}
-	var bigVal = big0
+	bigVal := big0
 	// TODO: use uint256.Int instead of converting with toBig()
 	// By using big0 here, we save an alloc for the most common case (non-ether-transferring contract calls),
 	// but it would make more sense to extend the usage of uint256.Int
@@ -716,7 +716,7 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 	args := scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
 
 	// TODO: use uint256.Int instead of converting with toBig()
-	var bigVal = big0
+	bigVal := big0
 	if !value.IsZero() {
 		gas += params.CallStipend
 		bigVal = value.ToBig()
@@ -818,6 +818,13 @@ func opStop(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 }
 
 func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	// [Kroma: START]
+	// NOTE: Since zkEVM cannot prove this opcode, it is disabled before KromaMPTTime.
+	if interpreter.evm.chainConfig.Zktrie && interpreter.evm.chainConfig.KromaMptTime == nil || *interpreter.evm.chainConfig.KromaMptTime > interpreter.evm.Context.Time {
+		return opUndefined(pc, interpreter, scope)
+	}
+	// [Kroma: END]
+
 	if interpreter.readOnly {
 		return nil, ErrWriteProtection
 	}
@@ -833,6 +840,12 @@ func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 }
 
 func opSelfdestruct6780(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	// [Kroma: START]
+	// NOTE: Since zkEVM cannot prove this opcode, it is disabled before KromaMPTTime.
+	if interpreter.evm.chainConfig.Zktrie && interpreter.evm.chainConfig.KromaMptTime == nil || *interpreter.evm.chainConfig.KromaMptTime > interpreter.evm.Context.Time {
+		return opUndefined(pc, interpreter, scope)
+	}
+	// [Kroma: END]
 	if interpreter.readOnly {
 		return nil, ErrWriteProtection
 	}
