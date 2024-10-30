@@ -91,6 +91,34 @@ func DestructChangesKey(blockNumber uint64) []byte {
 	return append(destructChangesPrefix, encodeBlockNumber(blockNumber)...)
 }
 
+func ReadStateChanges(db ethdb.KeyValueStore, blockNumber uint64) (map[common.Address]bool, map[common.Hash][]byte, map[common.Hash]map[common.Hash][]byte, error) {
+	enc, err := db.Get(DestructChangesKey(blockNumber))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	destruct, err := DeserializeStateChanges[map[common.Address]bool](enc)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	enc, err = db.Get(AccountChangesKey(blockNumber))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	accounts, err := DeserializeStateChanges[map[common.Hash][]byte](enc)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	enc, err = db.Get(StorageChangesKey(blockNumber))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	storages, err := DeserializeStateChanges[map[common.Hash]map[common.Hash][]byte](enc)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return destruct, accounts, storages, nil
+}
+
 // Note: it's should be called in MigrationTime
 func WriteStateChanges(db ethdb.KeyValueStore, blockNumber uint64, stateObjectsDestruct map[common.Address]*types.StateAccount, accounts map[common.Hash][]byte, storages map[common.Hash]map[common.Hash][]byte) error {
 	batch := db.NewBatch()
@@ -105,11 +133,11 @@ func WriteStateChanges(db ethdb.KeyValueStore, blockNumber uint64, stateObjectsD
 
 	}
 
-	serializedStateObjectsDestruct, err := SerializeStateChanges(stateObjectsDestructInfo)
+	serializedDestruct, err := SerializeStateChanges(stateObjectsDestructInfo)
 	if err != nil {
 		return err
 	}
-	err = batch.Put(DestructChangesKey(blockNumber), serializedStateObjectsDestruct)
+	err = batch.Put(DestructChangesKey(blockNumber), serializedDestruct)
 	if err != nil {
 		return err
 	}
@@ -144,6 +172,21 @@ func SerializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | 
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func DeleteStateChanges(db ethdb.KeyValueStore, blockNumber uint64) error {
+	batch := db.NewBatch()
+	defer batch.Reset()
+	if err := batch.Delete(DestructChangesKey(blockNumber)); err != nil {
+		return err
+	}
+	if err := batch.Delete(AccountChangesKey(blockNumber)); err != nil {
+		return err
+	}
+	if err := batch.Delete(StorageChangesKey(blockNumber)); err != nil {
+		return err
+	}
+	return batch.Write()
 }
 
 func DeserializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data []byte) (T, error) {
