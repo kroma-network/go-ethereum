@@ -35,6 +35,88 @@ func deleteAccountStorage(mptStorageTrie *trie.StateTrie) error {
 	return nil
 }
 
+func (m *StateMigrator) applyDestructChanges(mptStateTrie *trie.StateTrie, root common.Hash, destructChanges map[common.Address]bool) error {
+	for addr := range destructChanges {
+		stateAccount, err := mptStateTrie.GetAccount(addr)
+		if err != nil {
+			return err
+		}
+
+		if stateAccount == nil {
+			continue
+		}
+
+		if err := mptStateTrie.DeleteAccount(addr); err != nil {
+			return err
+		}
+
+		id := trie.StorageTrieID(root, crypto.Keccak256Hash(addr.Bytes()), stateAccount.Root)
+		mptStorageTrie, err := trie.NewStateTrie(id, m.mptdb)
+		if err != nil {
+			return err
+		}
+
+		if err := deleteAccountStorage(mptStorageTrie); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *StateMigrator) applyAccountChanges(mptStateTrie *trie.StateTrie, root common.Hash, accountChanges map[common.Hash][]byte, storageChanges map[common.Hash]map[common.Hash][]byte) error {
+	for hashedAddr, encStateAccount := range accountChanges {
+		addr := common.BytesToAddress(m.readZkPreimageWithNonIteratorKey(hashedAddr))
+
+		if encStateAccount == nil {
+			return fmt.Errorf("changes in an account is nil. we did not expect it")
+		}
+
+		stateAccount, err := mptStateTrie.GetAccount(addr)
+		if err != nil {
+			return err
+		}
+
+		if stateAccount == nil {
+			stateAccount = types.NewEmptyStateAccount(false)
+		}
+
+		mptStorageRoot := stateAccount.Root
+
+		subChanges, exists := storageChanges[hashedAddr]
+		if exists {
+			id := trie.StorageTrieID(root, crypto.Keccak256Hash(addr.Bytes()), stateAccount.Root)
+			mptStorageTrie, err := trie.NewStateTrie(id, m.mptdb)
+			if err != nil {
+				return err
+			}
+
+			for hashedSlotKey, encSlotValue := range subChanges {
+				slotKey := m.readZkPreimageWithNonIteratorKey(hashedSlotKey)
+				trimmed := common.TrimLeftZeroes(common.BytesToHash(encSlotValue).Bytes())
+				if err := mptStorageTrie.UpdateStorage(addr, slotKey, trimmed); err != nil {
+					return err
+				}
+			}
+
+			mptStorageRoot, err = m.commit(mptStorageTrie, mptStorageRoot)
+			if err != nil {
+				return err
+			}
+		}
+
+		zktStateAccount, err := types.NewStateAccount(encStateAccount, true)
+		if err != nil {
+			return err
+		}
+		zktStateAccount.Root = mptStorageRoot
+
+		if err := mptStateTrie.UpdateAccount(addr, zktStateAccount); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 	start := m.migratedRef.BlockNumber() + 1
 	root := m.migratedRef.Root()
@@ -52,8 +134,27 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 		}
 
 		batch := m.db.NewBatch()
-		accountChangesKey := core.AccountChangesKey(i)
 
+		destructChangesKey := core.DestructChangesKey(i)
+		serDestructChanges, err := m.db.Get(destructChangesKey)
+		if err != nil {
+			return err
+		}
+
+		if err := batch.Delete(destructChangesKey); err != nil {
+			return err
+		}
+
+		destructChanges, err := core.DeserializeStateChanges[map[common.Address]bool](serDestructChanges)
+		if err != nil {
+			return err
+		}
+
+		if err := m.applyDestructChanges(mptStateTrie, root, destructChanges); err != nil {
+			return err
+		}
+
+		accountChangesKey := core.AccountChangesKey(i)
 		serAccountChanges, err := m.db.Get(accountChangesKey)
 		if err != nil {
 			return err
@@ -83,107 +184,8 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 			return err
 		}
 
-		for hashedAddr, encStateAccount := range accountChanges {
-			addr := common.BytesToAddress(m.readZkPreimageWithNonIteratorKey(hashedAddr))
-
-			// if stateAccount is deleted
-			if encStateAccount == nil {
-				stateAccount, err := mptStateTrie.GetAccount(addr)
-				if err != nil {
-					return err
-				}
-
-				if err := mptStateTrie.DeleteAccount(addr); err != nil {
-					return err
-				}
-
-				id := trie.StorageTrieID(root, crypto.Keccak256Hash(addr.Bytes()), stateAccount.Root)
-				mptStorageTrie, err := trie.NewStateTrie(id, m.mptdb)
-				if err != nil {
-					return err
-				}
-
-				if err := deleteAccountStorage(mptStorageTrie); err != nil {
-					return err
-				}
-
-				_, err = m.commit(mptStorageTrie, stateAccount.Root)
-				if err != nil {
-					return err
-				}
-
-			} else { // if stateAccount is updated
-				// TODO: I'm not sure about the difference between the cases when 'nil' and 'missingTrieNodeErr' are returned
-				stateAccount, err := mptStateTrie.GetAccount(addr)
-				if err != nil {
-					return err
-				}
-
-				if stateAccount == nil {
-					stateAccount = types.NewEmptyStateAccount(false)
-				}
-
-				id := trie.StorageTrieID(root, crypto.Keccak256Hash(addr.Bytes()), stateAccount.Root)
-				mptStorageTrie, err := trie.NewStateTrie(id, m.mptdb)
-				if err != nil {
-					return err
-				}
-
-				mptStorageRoot := stateAccount.Root
-
-				destructChangesKey := core.DestructChangesKey(i)
-				serDestructChangesKey, err := m.db.Get(destructChangesKey)
-				if err != nil {
-					return err
-				}
-
-				if err := batch.Delete(destructChangesKey); err != nil {
-					return err
-				}
-
-				destructChanges, err := core.DeserializeStateChanges[map[common.Hash]bool](serDestructChangesKey)
-				if err != nil {
-					return err
-				}
-
-				if destructChanges[hashedAddr] {
-					if err := deleteAccountStorage(mptStorageTrie); err != nil {
-						return err
-					}
-				}
-
-				subChanges, exists := storageChanges[hashedAddr]
-				if exists {
-					for hashedSlotKey, encSlotValue := range subChanges {
-						slotKey := m.readZkPreimageWithNonIteratorKey(hashedSlotKey)
-						trimmed := common.TrimLeftZeroes(common.BytesToHash(encSlotValue).Bytes())
-						if err := mptStorageTrie.UpdateStorage(addr, slotKey, trimmed); err != nil {
-							return err
-						}
-					}
-				}
-
-				// it's ok to skip this checking code.
-				if destructChanges[hashedAddr] || exists {
-					mptStorageRoot, err = m.commit(mptStorageTrie, mptStorageRoot)
-					if err != nil {
-						return err
-					}
-				}
-
-				zktStateAccount, err := types.NewStateAccount(encStateAccount, true)
-				if err != nil {
-					return err
-				}
-
-				zktStateAccount.Root = mptStorageRoot
-
-				if err := mptStateTrie.UpdateAccount(addr, zktStateAccount); err != nil {
-					return err
-				}
-
-			}
-
+		if err := m.applyAccountChanges(mptStateTrie, root, accountChanges, storageChanges); err != nil {
+			return err
 		}
 
 		root, err = m.commit(mptStateTrie, root)

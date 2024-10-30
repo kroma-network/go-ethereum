@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/trie/zk"
 )
 
 var HaltOnStateTransition = errors.New("historical rpc must be set to transition to MPT")
@@ -96,22 +95,14 @@ func DestructChangesKey(blockNumber uint64) []byte {
 func WriteStateChanges(db ethdb.KeyValueStore, blockNumber uint64, stateObjectsDestruct map[common.Address]*types.StateAccount, accounts map[common.Hash][]byte, storages map[common.Hash]map[common.Hash][]byte) error {
 	batch := db.NewBatch()
 
-	stateObjectsDestructInfo := make(map[common.Hash]bool)
+	stateObjectsDestructInfo := make(map[common.Address]bool)
 
 	// TODO: Do we need to check if batch.ValueSize() > ethdb.IdealBatchSize, have storages size limit?
 	for addr := range stateObjectsDestruct {
 		if addr.Cmp(params.SystemAddress) == 0 {
 			continue
 		}
-
-		addrHash := common.BytesToHash(zk.MustNewSecureHash(addr[:]).Bytes())
-		stateObjectsDestructInfo[addrHash] = true
-
-		// if it's deleted account
-		if _, exist := accounts[addrHash]; !exist {
-			// If an account value is a nil, it indicates that the account has been deleted.
-			accounts[addrHash] = nil
-		}
+		stateObjectsDestructInfo[addr] = true
 	}
 
 	serializedStateObjectsDestruct, err := SerializeStateChanges(stateObjectsDestructInfo)
@@ -151,7 +142,7 @@ func WriteStateChanges(db ethdb.KeyValueStore, blockNumber uint64, stateObjectsD
 	return nil
 }
 
-func SerializeStateChanges[T map[common.Hash]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data T) ([]byte, error) {
+func SerializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data T) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	encoder := gob.NewEncoder(buf)
 	if err := encoder.Encode(data); err != nil {
@@ -160,7 +151,7 @@ func SerializeStateChanges[T map[common.Hash]bool | map[common.Hash][]byte | map
 	return buf.Bytes(), nil
 }
 
-func DeserializeStateChanges[T map[common.Hash]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data []byte) (T, error) {
+func DeserializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data []byte) (T, error) {
 	var result T
 	buf := bytes.NewBuffer(data)
 	decoder := gob.NewDecoder(buf)
