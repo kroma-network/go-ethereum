@@ -168,7 +168,8 @@ func (m *StateMigrator) migrateAccount(header *types.Header) error {
 	var mu sync.Mutex
 	err = hashRangeIterator(zkt, NumProcessAccount, func(key, value []byte) error {
 		accounts.Add(1)
-		address := common.BytesToAddress(m.readZkPreimage(key))
+		hk := trie.IteratorKeyToHash(key, true)
+		address := common.BytesToAddress(m.readZkPreimage(*hk))
 		log.Debug("Start migrate account", "address", address.Hex())
 		acc, err := types.NewStateAccount(value, true)
 		if err != nil {
@@ -227,7 +228,8 @@ func (m *StateMigrator) migrateStorage(
 	var slots atomic.Uint64
 	err = hashRangeIterator(zkt, NumProcessStorage, func(key, value []byte) error {
 		slots.Add(1)
-		slot := m.readZkPreimage(key)
+		hk := trie.IteratorKeyToHash(key, true)
+		slot := m.readZkPreimage(*hk)
 		trimmed := common.TrimLeftZeroes(common.BytesToHash(value).Bytes())
 		mu.Lock()
 		defer mu.Unlock()
@@ -249,29 +251,16 @@ func (m *StateMigrator) migrateStorage(
 	return root, nil
 }
 
-func (m *StateMigrator) readZkPreimage(key []byte) []byte {
-	hk := *trie.IteratorKeyToHash(key, true)
-	if preimage, ok := m.allocPreimage[hk]; ok {
+func (m *StateMigrator) readZkPreimage(hashKey common.Hash) []byte {
+	if preimage, ok := m.allocPreimage[hashKey]; ok {
 		return preimage
 	}
-	if preimage := m.zkdb.Preimage(hk); preimage != nil {
-		if common.BytesToHash(zk.MustNewSecureHash(preimage).Bytes()).Hex() == hk.Hex() {
+	if preimage := m.zkdb.Preimage(hashKey); preimage != nil {
+		if common.BytesToHash(zk.MustNewSecureHash(preimage).Bytes()).Hex() == hashKey.Hex() {
 			return preimage
 		}
 	}
-	panic("preimage does not exist: " + hk.Hex())
-}
-
-func (m *StateMigrator) readZkPreimageWithNonIteratorKey(key common.Hash) []byte {
-	if preimage, ok := m.allocPreimage[key]; ok {
-		return preimage
-	}
-	if preimage := m.zkdb.Preimage(key); preimage != nil {
-		if common.BytesToHash(zk.MustNewSecureHash(preimage).Bytes()).Hex() == key.Hex() {
-			return preimage
-		}
-	}
-	panic("preimage does not exist: " + key.Hex())
+	panic("preimage does not exist: " + hashKey.Hex())
 }
 
 func (m *StateMigrator) commit(mpt *trie.StateTrie, parentHash common.Hash) (common.Hash, error) {

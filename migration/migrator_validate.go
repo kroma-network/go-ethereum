@@ -43,8 +43,8 @@ func (m *StateMigrator) ValidateMigratedState(mptRoot common.Hash, zkRoot common
 				log.Error("Invalid account encountered during traversal", "err", err)
 				return err
 			}
-
-			addr := common.BytesToAddress(m.readZkPreimage(key))
+			hk := trie.IteratorKeyToHash(key, true)
+			addr := common.BytesToAddress(m.readZkPreimage(*hk))
 			mu.Lock()
 			mptAcc, err := mpt.GetAccount(addr)
 			mu.Unlock()
@@ -78,7 +78,8 @@ func (m *StateMigrator) ValidateMigratedState(mptRoot common.Hash, zkRoot common
 				var mu sync.Mutex
 				err = hashRangeIterator(zkt, NumProcessStorage, func(key, value []byte) error {
 					slots.Add(1)
-					slot := m.readZkPreimage(key)
+					hk := trie.IteratorKeyToHash(key, true)
+					slot := m.readZkPreimage(*hk)
 					zktVal := common.TrimLeftZeroes(common.BytesToHash(value).Bytes())
 					mu.Lock()
 					mptVal, err := mpt.GetStorage(addr, slot)

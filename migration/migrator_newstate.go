@@ -1,8 +1,6 @@
 package migration
 
 import (
-	"fmt"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -37,12 +35,11 @@ func deleteAccountStorage(mptStorageTrie *trie.StateTrie) error {
 
 func (m *StateMigrator) applyDestructChanges(mptStateTrie *trie.StateTrie, root common.Hash, destructChanges map[common.Address]bool) error {
 	for addr := range destructChanges {
-		stateAccount, err := mptStateTrie.GetAccount(addr)
+		acc, err := mptStateTrie.GetAccount(addr)
 		if err != nil {
 			return err
 		}
-
-		if stateAccount == nil {
+		if acc == nil {
 			continue
 		}
 
@@ -50,7 +47,7 @@ func (m *StateMigrator) applyDestructChanges(mptStateTrie *trie.StateTrie, root 
 			return err
 		}
 
-		id := trie.StorageTrieID(root, crypto.Keccak256Hash(addr.Bytes()), stateAccount.Root)
+		id := trie.StorageTrieID(root, crypto.Keccak256Hash(addr.Bytes()), acc.Root)
 		mptStorageTrie, err := trie.NewStateTrie(id, m.mptdb)
 		if err != nil {
 			return err
@@ -64,57 +61,52 @@ func (m *StateMigrator) applyDestructChanges(mptStateTrie *trie.StateTrie, root 
 }
 
 func (m *StateMigrator) applyAccountChanges(mptStateTrie *trie.StateTrie, root common.Hash, accountChanges map[common.Hash][]byte, storageChanges map[common.Hash]map[common.Hash][]byte) error {
-	for hashedAddr, encStateAccount := range accountChanges {
-		addr := common.BytesToAddress(m.readZkPreimageWithNonIteratorKey(hashedAddr))
+	for hk, val := range accountChanges {
+		addr := common.BytesToAddress(m.readZkPreimage(hk))
 
-		if encStateAccount == nil {
-			return fmt.Errorf("changes in an account is nil. we did not expect it")
-		}
-
-		stateAccount, err := mptStateTrie.GetAccount(addr)
+		acc, err := types.NewStateAccount(val, true)
 		if err != nil {
 			return err
 		}
+		acc.Root = types.EmptyRootHash
 
-		if stateAccount == nil {
-			stateAccount = types.NewEmptyStateAccount(false)
+		mptAcc, err := mptStateTrie.GetAccount(addr)
+		if err != nil {
+			return err
+		}
+		if mptAcc != nil {
+			acc.Root = mptAcc.Root
 		}
 
-		mptStorageRoot := stateAccount.Root
-
-		subChanges, exists := storageChanges[hashedAddr]
-		if exists {
-			id := trie.StorageTrieID(root, crypto.Keccak256Hash(addr.Bytes()), stateAccount.Root)
+		if changes, ok := storageChanges[hk]; ok {
+			id := trie.StorageTrieID(root, crypto.Keccak256Hash(addr.Bytes()), acc.Root)
 			mptStorageTrie, err := trie.NewStateTrie(id, m.mptdb)
 			if err != nil {
 				return err
 			}
-
-			for hashedSlotKey, encSlotValue := range subChanges {
-				slotKey := m.readZkPreimageWithNonIteratorKey(hashedSlotKey)
-				trimmed := common.TrimLeftZeroes(common.BytesToHash(encSlotValue).Bytes())
-				if err := mptStorageTrie.UpdateStorage(addr, slotKey, trimmed); err != nil {
-					return err
-				}
-			}
-
-			mptStorageRoot, err = m.commit(mptStorageTrie, mptStorageRoot)
+			acc.Root, err = m.applyStorageChanges(mptStorageTrie, acc.Root, changes)
 			if err != nil {
 				return err
 			}
 		}
 
-		zktStateAccount, err := types.NewStateAccount(encStateAccount, true)
-		if err != nil {
-			return err
-		}
-		zktStateAccount.Root = mptStorageRoot
-
-		if err := mptStateTrie.UpdateAccount(addr, zktStateAccount); err != nil {
+		if err := mptStateTrie.UpdateAccount(addr, acc); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (m *StateMigrator) applyStorageChanges(mptStorageTrie *trie.StateTrie, storageRoot common.Hash, changes map[common.Hash][]byte) (common.Hash, error) {
+	for hk, val := range changes {
+		slotKey := m.readZkPreimage(hk)
+		trimmed := common.TrimLeftZeroes(common.BytesToHash(val).Bytes())
+		if err := mptStorageTrie.UpdateStorage(common.Address{}, slotKey, trimmed); err != nil {
+			return common.Hash{}, err
+		}
+	}
+
+	return m.commit(mptStorageTrie, storageRoot)
 }
 
 func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
@@ -128,62 +120,13 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 			return err
 		}
 
-		header := m.backend.BlockChain().GetHeaderByNumber(i)
-		if header == nil {
-			return fmt.Errorf("block %d header not found", i)
-		}
-
-		batch := m.db.NewBatch()
-
-		destructChangesKey := core.DestructChangesKey(i)
-		serDestructChanges, err := m.db.Get(destructChangesKey)
+		destructChanges, accountChanges, storageChanges, err := core.ReadStateChanges(m.db, i)
 		if err != nil {
 			return err
 		}
-
-		if err := batch.Delete(destructChangesKey); err != nil {
-			return err
-		}
-
-		destructChanges, err := core.DeserializeStateChanges[map[common.Address]bool](serDestructChanges)
-		if err != nil {
-			return err
-		}
-
 		if err := m.applyDestructChanges(mptStateTrie, root, destructChanges); err != nil {
 			return err
 		}
-
-		accountChangesKey := core.AccountChangesKey(i)
-		serAccountChanges, err := m.db.Get(accountChangesKey)
-		if err != nil {
-			return err
-		}
-
-		if err := batch.Delete(accountChangesKey); err != nil {
-			return err
-		}
-
-		accountChanges, err := core.DeserializeStateChanges[map[common.Hash][]byte](serAccountChanges)
-		if err != nil {
-			return err
-		}
-
-		storageChangesKey := core.StorageChangesKey(i)
-		serStorageChanges, err := m.db.Get(storageChangesKey)
-		if err != nil {
-			return err
-		}
-
-		if err := batch.Delete(storageChangesKey); err != nil {
-			return err
-		}
-
-		storageChanges, err := core.DeserializeStateChanges[map[common.Hash]map[common.Hash][]byte](serStorageChanges)
-		if err != nil {
-			return err
-		}
-
 		if err := m.applyAccountChanges(mptStateTrie, root, accountChanges, storageChanges); err != nil {
 			return err
 		}
@@ -192,15 +135,13 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 		if err != nil {
 			return err
 		}
-		if err := m.migratedRef.Update(root, header.Number.Uint64()); err != nil {
+		if err := m.migratedRef.Update(root, i); err != nil {
 			return err
 		}
 
-		if err := batch.Write(); err != nil {
+		if err := core.DeleteStateChanges(m.db, i); err != nil {
 			return err
 		}
-
-		batch.Reset()
 	}
 
 	return nil

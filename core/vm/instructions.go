@@ -820,7 +820,8 @@ func opStop(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	// [Kroma: START]
 	// NOTE: Since zkEVM cannot prove this opcode, it is disabled before KromaMPTTime.
-	if interpreter.evm.chainConfig.Zktrie && interpreter.evm.chainConfig.KromaMptTime == nil || *interpreter.evm.chainConfig.KromaMptTime > interpreter.evm.Context.Time {
+	kromaMptTime := interpreter.evm.chainConfig.KromaMptTime
+	if interpreter.evm.chainConfig.Zktrie && (kromaMptTime == nil || *kromaMptTime > interpreter.evm.Context.Time) {
 		return opUndefined(pc, interpreter, scope)
 	}
 	// [Kroma: END]
@@ -842,7 +843,8 @@ func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 func opSelfdestruct6780(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	// [Kroma: START]
 	// NOTE: Since zkEVM cannot prove this opcode, it is disabled before KromaMPTTime.
-	if interpreter.evm.chainConfig.Zktrie && interpreter.evm.chainConfig.KromaMptTime == nil || *interpreter.evm.chainConfig.KromaMptTime > interpreter.evm.Context.Time {
+	kromaMptTime := interpreter.evm.chainConfig.KromaMptTime
+	if interpreter.evm.chainConfig.Zktrie && (kromaMptTime == nil || *kromaMptTime > interpreter.evm.Context.Time) {
 		return opUndefined(pc, interpreter, scope)
 	}
 	// [Kroma: END]
