@@ -78,24 +78,39 @@ func NewStateMigrator(backend ethBackend, tracersAPI *tracers.API) *StateMigrato
 }
 
 func (m *StateMigrator) Start() error {
-	// TODO: have to replace this code with this -->  head := m.backend.BlockChain().CurrentSafeBlock()
-	head := m.backend.BlockChain().CurrentBlock()
-	if m.backend.BlockChain().Config().IsKromaMPT(head.Time) {
+	head := m.backend.BlockChain().CurrentSafeBlock()
+	if head != nil && m.backend.BlockChain().Config().IsKromaMPT(head.Time) {
 		return errors.New("state has been already transitioned")
 	}
 
 	log.Info("Start state migrator to migrate ZKT to MPT")
 	go func() {
-		header := rawdb.ReadHeadHeader(m.db)
+		if head == nil {
+			syncTicker := time.NewTicker(time.Second * 2)
+			defer syncTicker.Stop()
+		done:
+			for {
+				select {
+				case <-syncTicker.C:
+					head = m.backend.BlockChain().CurrentSafeBlock()
+					if head != nil {
+						break done
+					}
+				case <-m.stopCh:
+					return
+				}
+			}
+		}
+
 		if m.migratedRef.BlockNumber() == 0 {
 			log.Info("Start migrate past state")
 			// Start migration from the head block. It takes long time.
-			err := m.migrateAccount(header)
+			err := m.migrateAccount(head)
 			if err != nil {
 				log.Crit("Failed to migrate state", "error", err)
 			}
 
-			err = m.ValidateMigratedState(m.migratedRef.Root(), header.Root)
+			err = m.ValidateMigratedState(m.migratedRef.Root(), head.Root)
 			if err != nil {
 				log.Crit("Migrated state is invalid", "error", err)
 			}
