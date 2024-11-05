@@ -85,24 +85,11 @@ func (m *StateMigrator) Start() error {
 
 	log.Info("Start state migrator to migrate ZKT to MPT")
 	go func() {
-		if head == nil {
-			syncTicker := time.NewTicker(time.Second * 2)
-			defer syncTicker.Stop()
-		done:
-			for {
-				select {
-				case <-syncTicker.C:
-					head = m.backend.BlockChain().CurrentSafeBlock()
-					if head != nil {
-						break done
-					}
-				case <-m.stopCh:
-					return
-				}
+		if m.migratedRef.Root().Cmp(types.EmptyRootHash) == 0 {
+			if head == nil {
+				genesisHash := rawdb.ReadCanonicalHash(m.db, 0)
+				head = rawdb.ReadHeader(m.db, genesisHash, 0)
 			}
-		}
-
-		if m.migratedRef.BlockNumber() == 0 {
 			log.Info("Start migrate past state")
 			// Start migration from the head block. It takes long time.
 			err := m.migrateAccount(head)
@@ -123,9 +110,9 @@ func (m *StateMigrator) Start() error {
 		for {
 			select {
 			case <-ticker.C:
-				currentBlock := m.backend.BlockChain().CurrentBlock()
+				currentBlock := m.backend.BlockChain().CurrentSafeBlock()
 				// Skip block that have already been migrated.
-				if m.migratedRef.BlockNumber() >= currentBlock.Number.Uint64() {
+				if currentBlock == nil || m.migratedRef.BlockNumber() >= currentBlock.Number.Uint64() {
 					continue
 				}
 				if m.backend.BlockChain().Config().IsKromaMPT(currentBlock.Time) {

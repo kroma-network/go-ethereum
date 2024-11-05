@@ -748,7 +748,7 @@ func (w *worker) makeEnv(parent *types.Header, header *types.Header, coinbase co
 		w.chainConfig.Zktrie = false
 		w.chain.TrieDB().SetBackend(false)
 		migratedRef := w.chain.GetMigratedRef()
-		if migratedRef != nil && migratedRef.BlockNumber() != 0 {
+		if migratedRef != nil && migratedRef.Root().Cmp(types.EmptyRootHash) != 0 {
 			state, err = w.chain.StateAt(migratedRef.Root())
 		}
 	} else {
