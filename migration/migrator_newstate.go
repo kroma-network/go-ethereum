@@ -100,9 +100,15 @@ func (m *StateMigrator) applyAccountChanges(mptStateTrie *trie.StateTrie, root c
 func (m *StateMigrator) applyStorageChanges(mptStorageTrie *trie.StateTrie, storageRoot common.Hash, changes map[common.Hash][]byte) (common.Hash, error) {
 	for hk, val := range changes {
 		slotKey := m.readZkPreimage(hk)
-		trimmed := common.TrimLeftZeroes(common.BytesToHash(val).Bytes())
-		if err := mptStorageTrie.UpdateStorage(common.Address{}, slotKey, trimmed); err != nil {
-			return common.Hash{}, err
+		if (common.BytesToHash(val) == common.Hash{}) {
+			if err := mptStorageTrie.DeleteStorage(common.Address{}, slotKey); err != nil {
+				return common.Hash{}, err
+			}
+		} else {
+			trimmed := common.TrimLeftZeroes(common.BytesToHash(val).Bytes())
+			if err := mptStorageTrie.UpdateStorage(common.Address{}, slotKey, trimmed); err != nil {
+				return common.Hash{}, err
+			}
 		}
 	}
 
