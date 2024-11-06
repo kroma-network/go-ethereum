@@ -748,8 +748,10 @@ func (w *worker) makeEnv(parent *types.Header, header *types.Header, coinbase co
 		w.chainConfig.Zktrie = false
 		w.chain.TrieDB().SetBackend(false)
 		migratedRef := w.chain.GetMigratedRef()
-		if migratedRef != nil && migratedRef.BlockNumber() != 0 {
+		if migratedRef != nil && migratedRef.BlockNumber() == header.Number.Uint64()-1 {
 			state, err = w.chain.StateAt(migratedRef.Root())
+		} else {
+			err = errors.New("migration has not been completed")
 		}
 	} else {
 		// Retrieve the parent state to execute on top and start a prefetcher for
