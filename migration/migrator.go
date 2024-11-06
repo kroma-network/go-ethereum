@@ -86,12 +86,8 @@ func (m *StateMigrator) Start() error {
 	log.Info("Start state migrator to migrate ZKT to MPT")
 	go func() {
 		if m.migratedRef.Root() == (common.Hash{}) {
-			var safeHead *types.Header
-			if newSafeHead := m.backend.BlockChain().CurrentSafeBlock(); newSafeHead != nil {
-				safeHead = newSafeHead
-			} else {
-				safeHead = m.backend.BlockChain().Genesis().Header()
-			}
+			safeHead := m.backend.BlockChain().Genesis().Header()
+
 			log.Info("Start migrate past state")
 			// Start migration from the head block. It takes long time.
 			err := m.migrateAccount(safeHead)
