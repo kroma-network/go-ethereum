@@ -856,7 +856,7 @@ func zkMerkleTreeNodeBlobFunctions(findBlobByHash func(key []byte) ([]byte, erro
 ) {
 	return func(hash common.Hash) ([]byte, error) {
 			if bytes.Equal(hash.Bytes(), zkt.HashZero[:]) {
-				return nil, nil
+				return zk.EmptyNodeValue.CanonicalValue(), nil
 			}
 			return findBlobByHash(zkt.ReverseByteOrder(hash.Bytes()))
 		},
