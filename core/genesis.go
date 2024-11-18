@@ -183,6 +183,7 @@ func (ga *GenesisAlloc) flush(db ethdb.Database, triedb *trie.Database, blockhas
 			statedb.SetState(addr, key, value)
 		}
 	}
+
 	root, err := statedb.Commit(0, false)
 	if err != nil {
 		return err

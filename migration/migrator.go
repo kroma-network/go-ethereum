@@ -79,16 +79,21 @@ func NewStateMigrator(backend ethBackend, tracersAPI *tracers.API) *StateMigrato
 func (m *StateMigrator) Start() {
 	log.Info("Start state migrator to migrate ZKT to MPT")
 	go func() {
-		header := rawdb.ReadHeadHeader(m.db)
-		if m.migratedRef.BlockNumber() == 0 {
+		if m.migratedRef.Root() == (common.Hash{}) {
+			var safeHead *types.Header
+			if newSafeHead := m.backend.BlockChain().CurrentSafeBlock(); newSafeHead != nil {
+				safeHead = newSafeHead
+			} else {
+				safeHead = m.backend.BlockChain().Genesis().Header()
+			}
 			log.Info("Start migrate past state")
 			// Start migration from the head block. It takes long time.
-			err := m.migrateAccount(header)
+			err := m.migrateAccount(safeHead)
 			if err != nil {
 				log.Crit("Failed to migrate state", "error", err)
 			}
 
-			err = m.ValidateMigratedState(m.migratedRef.Root(), header.Root)
+			err = m.ValidateMigratedState(m.migratedRef.Root(), safeHead.Root)
 			if err != nil {
 				log.Crit("Migrated state is invalid", "error", err)
 			}
@@ -101,9 +106,9 @@ func (m *StateMigrator) Start() {
 		for {
 			select {
 			case <-ticker.C:
-				currentBlock := m.backend.BlockChain().CurrentBlock()
+				currentBlock := m.backend.BlockChain().CurrentSafeBlock()
 				// Skip block that have already been migrated.
-				if m.migratedRef.BlockNumber() >= currentBlock.Number.Uint64() {
+				if currentBlock == nil || m.migratedRef.BlockNumber() >= currentBlock.Number.Uint64() {
 					continue
 				}
 				if m.backend.BlockChain().Config().IsKromaMPT(currentBlock.Time) {
@@ -111,7 +116,6 @@ func (m *StateMigrator) Start() {
 				}
 				err := m.applyNewStateTransition(currentBlock.Number.Uint64())
 				if err != nil {
-					// TODO(pangssu): should we panic here?
 					log.Error("Failed to apply new state transition", "error", err)
 				}
 			case <-m.stopCh:
@@ -161,7 +165,8 @@ func (m *StateMigrator) migrateAccount(header *types.Header) error {
 	var mu sync.Mutex
 	err = hashRangeIterator(zkt, NumProcessAccount, func(key, value []byte) error {
 		accounts.Add(1)
-		address := common.BytesToAddress(m.readZkPreimage(key))
+		hk := trie.IteratorKeyToHash(key, true)
+		address := common.BytesToAddress(m.readZkPreimage(*hk))
 		log.Debug("Start migrate account", "address", address.Hex())
 		acc, err := types.NewStateAccount(value, true)
 		if err != nil {
@@ -220,7 +225,8 @@ func (m *StateMigrator) migrateStorage(
 	var slots atomic.Uint64
 	err = hashRangeIterator(zkt, NumProcessStorage, func(key, value []byte) error {
 		slots.Add(1)
-		slot := m.readZkPreimage(key)
+		hk := trie.IteratorKeyToHash(key, true)
+		slot := m.readZkPreimage(*hk)
 		trimmed := common.TrimLeftZeroes(common.BytesToHash(value).Bytes())
 		mu.Lock()
 		defer mu.Unlock()
@@ -242,17 +248,16 @@ func (m *StateMigrator) migrateStorage(
 	return root, nil
 }
 
-func (m *StateMigrator) readZkPreimage(key []byte) []byte {
-	hk := *trie.IteratorKeyToHash(key, true)
-	if preimage, ok := m.allocPreimage[hk]; ok {
+func (m *StateMigrator) readZkPreimage(hashKey common.Hash) []byte {
+	if preimage, ok := m.allocPreimage[hashKey]; ok {
 		return preimage
 	}
-	if preimage := m.zkdb.Preimage(hk); preimage != nil {
-		if common.BytesToHash(zk.MustNewSecureHash(preimage).Bytes()).Hex() == hk.Hex() {
+	if preimage := m.zkdb.Preimage(hashKey); preimage != nil {
+		if common.BytesToHash(zk.MustNewSecureHash(preimage).Bytes()).Hex() == hashKey.Hex() {
 			return preimage
 		}
 	}
-	panic("preimage does not exist: " + hk.Hex())
+	panic("preimage does not exist: " + hashKey.Hex())
 }
 
 func (m *StateMigrator) commit(mpt *trie.StateTrie, parentHash common.Hash) (common.Hash, error) {
