@@ -45,7 +45,6 @@ import (
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
-	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
@@ -359,7 +358,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if eth.blockchain.Config().Zktrie && eth.blockchain.Config().KromaMPTTime != nil && !config.DisableMPTMigration {
 		head := eth.BlockChain().CurrentBlock()
 		if !eth.blockchain.Config().IsKromaMPT(head.Time) {
-			migrator, err := migration.NewStateMigrator(eth, tracers.NewAPI(eth.APIBackend))
+			migrator, err := migration.NewStateMigrator(eth)
 			if err != nil {
 				log.Error("Fail to start state migrator", "error", err)
 			} else {
