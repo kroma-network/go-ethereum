@@ -165,7 +165,8 @@ func (m *StateMigrator) migrateAccount(header *types.Header) error {
 	}
 	var mu sync.Mutex
 	err = hashRangeIterator(m.ctx, zkt, NumProcessAccount, func(key, value []byte) error {
-		preimage, err := m.readZkPreimage(key)
+		hk := trie.IteratorKeyToHash(key, true)
+		preimage, err := m.readZkPreimage(*hk)
 		if err != nil {
 			return err
 		}
@@ -229,7 +230,8 @@ func (m *StateMigrator) migrateStorage(
 	var mu sync.Mutex
 	var slots atomic.Uint64
 	err = hashRangeIterator(m.ctx, zkt, NumProcessStorage, func(key, value []byte) error {
-		preimage, err := m.readZkPreimage(key)
+		hk := trie.IteratorKeyToHash(key, true)
+		preimage, err := m.readZkPreimage(*hk)
 		if err != nil {
 			return err
 		}
@@ -257,17 +259,16 @@ func (m *StateMigrator) migrateStorage(
 	return root, nil
 }
 
-func (m *StateMigrator) readZkPreimage(key []byte) ([]byte, error) {
-	hk := *trie.IteratorKeyToHash(key, true)
-	if preimage, ok := m.allocPreimage[hk]; ok {
+func (m *StateMigrator) readZkPreimage(hashKey common.Hash) ([]byte, error) {
+	if preimage, ok := m.allocPreimage[hashKey]; ok {
 		return preimage, nil
 	}
-	if preimage := m.zktdb.Preimage(hk); preimage != nil {
-		if common.BytesToHash(zk.MustNewSecureHash(preimage).Bytes()).Hex() == hk.Hex() {
+	if preimage := m.zktdb.Preimage(hashKey); preimage != nil {
+		if common.BytesToHash(zk.MustNewSecureHash(preimage).Bytes()).Hex() == hashKey.Hex() {
 			return preimage, nil
 		}
 	}
-	return []byte{}, fmt.Errorf("preimage does not exist: %s", hk.Hex())
+	return []byte{}, fmt.Errorf("preimage does not exist: %s", hashKey.Hex())
 }
 
 func (m *StateMigrator) commit(mpt *trie.StateTrie, parentHash common.Hash) (common.Hash, error) {
