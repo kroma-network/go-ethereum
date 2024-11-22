@@ -278,6 +278,13 @@ var (
 		Usage:    "Manually specify the Optimsim Interop feature-set fork timestamp, overriding the bundled setting",
 		Category: flags.EthCategory,
 	}
+	// [Kroma: ZKT to MPT]
+	OverrideKromaMPT = &cli.Uint64Flag{
+		Name:     "override.mpt",
+		Usage:    "Manually specify the Kroma mpt transition timestamp, overriding the bundled setting",
+		Category: flags.EthCategory,
+	}
+	// [Kroma: END]
 	SyncModeFlag = &flags.TextMarshalerFlag{
 		Name:     "syncmode",
 		Usage:    `Blockchain sync mode ("snap" or "full")`,
@@ -865,6 +872,7 @@ var (
 		Value:    ethconfig.Defaults.GPO.MinSuggestedPriorityFee.Int64(),
 		Category: flags.GasPriceCategory,
 	}
+
 	/* [kroma unsupported]
 	// Rollup Flags
 	RollupSequencerHTTPFlag = &cli.StringFlag{
@@ -872,6 +880,7 @@ var (
 		Usage:    "HTTP endpoint for the sequencer mempool",
 		Category: flags.RollupCategory,
 	}
+	*/
 
 	RollupHistoricalRPCFlag = &cli.StringFlag{
 		Name:     "rollup.historicalrpc",
@@ -886,6 +895,7 @@ var (
 		Category: flags.RollupCategory,
 	}
 
+	/* [kroma unsupported]
 	RollupDisableTxPoolGossipFlag = &cli.BoolFlag{
 		Name:     "rollup.disabletxpoolgossip",
 		Usage:    "Disable transaction pool gossip.",
@@ -1017,6 +1027,12 @@ Please note that --` + MetricsHTTPFlag.Name + ` must be set to start the server.
 		Usage:    "use ZkMerkleStateTrie instead of ZkTrie in state.",
 		Category: flags.EthCategory,
 		Value:    true,
+	}
+	DisableMPTMigrationFlag = &cli.BoolFlag{
+		Name:     "kroma.migration.disable",
+		Usage:    "Disable migration to switch from ZKTrie to Merkle Patricia Tree",
+		Category: flags.EthCategory,
+		Value:    false,
 	}
 )
 
@@ -1866,16 +1882,16 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 			cfg.EthDiscoveryURLs = SplitAndTrim(urls)
 		}
 	}
-	/* [kroma unsupported]
-	// Only configure sequencer http flag if we're running in verifier mode i.e. --mine is disabled.
-	if ctx.IsSet(RollupSequencerHTTPFlag.Name) && !ctx.IsSet(MiningEnabledFlag.Name) {
-		cfg.RollupSequencerHTTP = ctx.String(RollupSequencerHTTPFlag.Name)
-	}
 	if ctx.IsSet(RollupHistoricalRPCFlag.Name) {
 		cfg.RollupHistoricalRPC = ctx.String(RollupHistoricalRPCFlag.Name)
 	}
 	if ctx.IsSet(RollupHistoricalRPCTimeoutFlag.Name) {
 		cfg.RollupHistoricalRPCTimeout = ctx.Duration(RollupHistoricalRPCTimeoutFlag.Name)
+	}
+	/* [kroma unsupported]
+	// Only configure sequencer http flag if we're running in verifier mode i.e. --mine is disabled.
+	if ctx.IsSet(RollupSequencerHTTPFlag.Name) && !ctx.IsSet(MiningEnabledFlag.Name) {
+		cfg.RollupSequencerHTTP = ctx.String(RollupSequencerHTTPFlag.Name)
 	}
 	cfg.RollupDisableTxPoolGossip = ctx.Bool(RollupDisableTxPoolGossipFlag.Name)
 	cfg.RollupDisableTxPoolAdmission = cfg.RollupSequencerHTTP != "" && !ctx.Bool(RollupEnableTxPoolAdmissionFlag.Name)
