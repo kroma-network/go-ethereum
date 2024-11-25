@@ -18,7 +18,6 @@
 package state
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -46,25 +45,6 @@ const (
 	// employed for contract storage deletion.
 	storageDeleteLimit = 512 * 1024 * 1024
 )
-
-var (
-	accountPrefixForMigration = []byte("Z")
-	storagePrefixForMigration = []byte("X")
-)
-
-func Uint64ToBytes(x uint64) []byte {
-	bytesSlice := make([]byte, 8)
-	binary.BigEndian.PutUint64(bytesSlice, x)
-	return bytesSlice
-}
-
-func AccountPrefixForMigration(blockNumber uint64) []byte {
-	return append(accountPrefixForMigration, Uint64ToBytes(blockNumber)...)
-}
-
-func StoragePrefixForMigration(blockNumber uint64) []byte {
-	return append(storagePrefixForMigration, Uint64ToBytes(blockNumber)...)
-}
 
 type revision struct {
 	id           int

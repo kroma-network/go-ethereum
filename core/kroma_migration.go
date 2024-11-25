@@ -160,7 +160,6 @@ func WriteStateChanges(db ethdb.KeyValueStore, blockNumber uint64, stateObjectsD
 	if err := batch.Write(); err != nil {
 		return err
 	}
-	batch.Reset()
 	return nil
 }
 
@@ -175,7 +174,6 @@ func SerializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | 
 
 func DeleteStateChanges(db ethdb.KeyValueStore, blockNumber uint64) error {
 	batch := db.NewBatch()
-	defer batch.Reset()
 	if err := batch.Delete(DestructChangesKey(blockNumber)); err != nil {
 		return err
 	}
