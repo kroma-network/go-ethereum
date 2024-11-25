@@ -295,6 +295,13 @@ func (w *worker) buildPayload(args *BuildPayloadArgs) (*Payload, error) {
 		gasLimit:    args.GasLimit,
 	}
 
+	// [Kroma: ZKT to MPT]
+	// Migration block do not include user transactions that are in the mempool in the block.
+	if w.chainConfig.IsKromaMPTActivationBlock(args.Timestamp) {
+		fullParams.noTxs = true
+	}
+	// [Kroma: END]
+
 	// Since we skip building the empty block when using the tx pool, we need to explicitly
 	// validate the BuildPayloadArgs here.
 	blockTime, err := w.validateParams(fullParams)

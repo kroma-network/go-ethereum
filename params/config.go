@@ -343,6 +343,8 @@ type ChainConfig struct {
 
 	InteropTime *uint64 `json:"interopTime,omitempty"` // Interop switch time (nil = no fork, 0 = already on optimism interop)
 
+	KromaMPTTime *uint64 `json:"kromaMptTime,omitempty"` // Kroma MPT transition time (nil = no fork, 0 = already on kroma MPT)
+
 	// TerminalTotalDifficulty is the amount of total difficulty reached by
 	// the network that triggers the consensus upgrade.
 	TerminalTotalDifficulty *big.Int `json:"terminalTotalDifficulty,omitempty"`
@@ -355,6 +357,9 @@ type ChainConfig struct {
 	// Various consensus engines
 	Ethash *EthashConfig `json:"ethash,omitempty"`
 	Clique *CliqueConfig `json:"clique,omitempty"`
+
+	// Optimism config, nil if not active
+	Optimism *OptimismConfig `json:"optimism,omitempty"`
 
 	// Kroma config, nil if not active
 	Kroma *KromaConfig `json:"kroma,omitempty"`
@@ -388,6 +393,18 @@ type CliqueConfig struct {
 // String implements the stringer interface, returning the consensus engine details.
 func (c *CliqueConfig) String() string {
 	return "clique"
+}
+
+// OptimismConfig is the optimism config.
+type OptimismConfig struct {
+	EIP1559Elasticity        uint64 `json:"eip1559Elasticity"`
+	EIP1559Denominator       uint64 `json:"eip1559Denominator"`
+	EIP1559DenominatorCanyon uint64 `json:"eip1559DenominatorCanyon"`
+}
+
+// String implements the stringer interface, returning the optimism fee config details.
+func (o *OptimismConfig) String() string {
+	return "optimism"
 }
 
 // KromaConfig is the kroma config.
@@ -504,6 +521,9 @@ func (c *ChainConfig) Description() string {
 	}
 	if c.InteropTime != nil {
 		banner += fmt.Sprintf(" - Interop:                     @%-10v\n", *c.InteropTime)
+	}
+	if c.KromaMPTTime != nil {
+		banner += fmt.Sprintf(" - Kroma MPT:                   @%-10v\n", *c.KromaMPTTime)
 	}
 	return banner
 }
@@ -629,6 +649,10 @@ func (c *ChainConfig) IsInterop(time uint64) bool {
 	return isTimestampForked(c.InteropTime, time)
 }
 
+func (c *ChainConfig) IsKromaMPT(time uint64) bool {
+	return isTimestampForked(c.KromaMPTTime, time)
+}
+
 // IsKroma returns whether the node is a kroma(based on optimism) node or not.
 func (c *ChainConfig) IsKroma() bool {
 	return c.Kroma != nil
@@ -654,6 +678,16 @@ func (c *ChainConfig) IsOptimismEcotone(time uint64) bool {
 // IsOptimismPreBedrock returns true iff this is an optimism node & bedrock is not yet active
 func (c *ChainConfig) IsOptimismPreBedrock(num *big.Int) bool {
 	return c.IsKroma() && !c.IsBedrock(num)
+}
+
+// IsPreKromaMPT returns true if this is a kroma node & kroma mpt hardfork is not yet active
+func (c *ChainConfig) IsPreKromaMPT(time uint64) bool {
+	return c.IsKroma() && !c.IsKromaMPT(time)
+}
+
+// IsKromaMPTActivationBlock returns true if given block is kroma mpt hardfork activation block
+func (c *ChainConfig) IsKromaMPTActivationBlock(time uint64) bool {
+	return c.KromaMPTTime != nil && *c.KromaMPTTime == time
 }
 
 // [Scroll: START]

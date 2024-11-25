@@ -276,7 +276,8 @@ type ChainOverrides struct {
 	OverrideOptimismInterop *uint64
 
 	// kroma
-	CircuitParams *params.CircuitParams
+	CircuitParams    *params.CircuitParams
+	OverrideKromaMPT *uint64
 }
 
 // SetupGenesisBlock writes or updates the genesis block in db.
@@ -316,7 +317,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 
 				// NOTE: kroma always post-regolith
 				zero := uint64(0)
-				config.BedrockBlock = new(big.Int).SetUint64(zero)
+				if config.BedrockBlock == nil {
+					config.BedrockBlock = new(big.Int).SetUint64(zero)
+				}
 				config.RegolithTime = &zero
 			}
 			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxTxs != nil {
@@ -324,6 +327,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 			}
 			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxCalldata != nil {
 				config.MaxTxPayloadBytesPerBlock = overrides.CircuitParams.MaxCalldata
+			}
+			if overrides != nil && overrides.OverrideKromaMPT != nil {
+				config.KromaMPTTime = overrides.OverrideKromaMPT
 			}
 			// [Kroma: END]
 
