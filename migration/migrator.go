@@ -2,7 +2,6 @@ package migration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"sync"
@@ -14,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -24,7 +22,6 @@ import (
 )
 
 var (
-	tracerType = "prestateTracer"
 	// BedrockTransitionBlockExtraData represents the extradata
 	// set in the very first bedrock block. This value must be
 	// less than 32 bytes long or it will create an invalid block.
@@ -42,14 +39,12 @@ type StateMigrator struct {
 	zkdb          *trie.Database
 	mptdb         *trie.Database
 	allocPreimage map[common.Hash][]byte
-	tracersAPI    *tracers.API
-	traceCfg      *tracers.TraceConfig
 	migratedRef   *core.MigratedRef
 
 	stopCh chan struct{}
 }
 
-func NewStateMigrator(backend ethBackend, tracersAPI *tracers.API) *StateMigrator {
+func NewStateMigrator(backend ethBackend) *StateMigrator {
 	db := backend.ChainDb()
 
 	allocPreimage, err := zkPreimageWithAlloc(db)
@@ -66,13 +61,8 @@ func NewStateMigrator(backend ethBackend, tracersAPI *tracers.API) *StateMigrato
 		}),
 		mptdb:         trie.NewDatabase(db, &trie.Config{Preimages: true}),
 		allocPreimage: allocPreimage,
-		tracersAPI:    tracersAPI,
-		traceCfg: &tracers.TraceConfig{
-			Tracer:       &tracerType,
-			TracerConfig: json.RawMessage(`{"diffMode": true}`),
-		},
-		migratedRef: core.NewMigratedRef(db),
-		stopCh:      make(chan struct{}),
+		migratedRef:   core.NewMigratedRef(db),
+		stopCh:        make(chan struct{}),
 	}
 }
 

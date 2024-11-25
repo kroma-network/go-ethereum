@@ -45,7 +45,6 @@ import (
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
-	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
@@ -359,7 +358,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if eth.blockchain.Config().Zktrie && eth.blockchain.Config().KromaMPTTime != nil && !config.DisableMPTMigration {
 		head := eth.BlockChain().CurrentBlock()
 		if !eth.blockchain.Config().IsKromaMPT(head.Time) {
-			eth.migrator = migration.NewStateMigrator(eth, tracers.NewAPI(eth.APIBackend))
+			eth.migrator = migration.NewStateMigrator(eth)
 			eth.migrator.Start()
 		} else {
 			log.Info("State has been already transitioned")
@@ -564,22 +563,35 @@ func (s *Ethereum) StopMining() {
 	s.miner.Stop()
 }
 
-func (s *Ethereum) IsMining() bool      { return s.miner.Mining() }
+func (s *Ethereum) IsMining() bool { return s.miner.Mining() }
+
 func (s *Ethereum) Miner() *miner.Miner { return s.miner }
 
-func (s *Ethereum) AccountManager() *accounts.Manager  { return s.accountManager }
-func (s *Ethereum) BlockChain() *core.BlockChain       { return s.blockchain }
-func (s *Ethereum) TxPool() *txpool.TxPool             { return s.txPool }
-func (s *Ethereum) EventMux() *event.TypeMux           { return s.eventMux }
-func (s *Ethereum) Engine() consensus.Engine           { return s.engine }
-func (s *Ethereum) ChainDb() ethdb.Database            { return s.chainDb }
+func (s *Ethereum) AccountManager() *accounts.Manager { return s.accountManager }
+
+func (s *Ethereum) BlockChain() *core.BlockChain { return s.blockchain }
+
+func (s *Ethereum) TxPool() *txpool.TxPool { return s.txPool }
+
+func (s *Ethereum) EventMux() *event.TypeMux { return s.eventMux }
+
+func (s *Ethereum) Engine() consensus.Engine { return s.engine }
+
+func (s *Ethereum) ChainDb() ethdb.Database { return s.chainDb }
+
 func (s *Ethereum) IsListening() bool                  { return true } // Always listening
 func (s *Ethereum) Downloader() *downloader.Downloader { return s.handler.downloader }
-func (s *Ethereum) Synced() bool                       { return s.handler.synced.Load() }
-func (s *Ethereum) SetSynced()                         { s.handler.enableSyncedFeatures() }
-func (s *Ethereum) ArchiveMode() bool                  { return s.config.NoPruning }
-func (s *Ethereum) BloomIndexer() *core.ChainIndexer   { return s.bloomIndexer }
-func (s *Ethereum) Merger() *consensus.Merger          { return s.merger }
+
+func (s *Ethereum) Synced() bool { return s.handler.synced.Load() }
+
+func (s *Ethereum) SetSynced() { s.handler.enableSyncedFeatures() }
+
+func (s *Ethereum) ArchiveMode() bool { return s.config.NoPruning }
+
+func (s *Ethereum) BloomIndexer() *core.ChainIndexer { return s.bloomIndexer }
+
+func (s *Ethereum) Merger() *consensus.Merger { return s.merger }
+
 func (s *Ethereum) SyncMode() downloader.SyncMode {
 	mode, _ := s.handler.chainSync.modeAndLocalHead()
 	return mode
