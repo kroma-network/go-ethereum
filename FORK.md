@@ -6,13 +6,13 @@
 - commit: `0402d543`
 - differences
   - change predeployed contract address [#17](https://github.com/kroma-network/go-ethereum/pull/17).
-  - remove daisy chain [#11](https://github.com/kroma-network/go-ethereum/pull/11).
   - enable tx pool sync by force [#13](https://github.com/kroma-network/go-ethereum/pull/13).
-  - remove system tx related fields. (e.g, `IsSystemTx()`) [#29](https://github.com/kroma-network/go-ethereum/pull/29).
   - update ValidatorRewardScalar to L1Block contract [#36](https://github.com/kroma-network/go-ethereum/pull/36).
   - change transaction fee distribution logic [#36](https://github.com/kroma-network/go-ethereum/pull/36).
   - use zktrie instead of merkle patricia trie
   - use KromaZKTrie instead of scroll zktrie
+  - implement state migrator for MPT transition [#121](https://github.com/kroma-network/go-ethereum/pull/121).
+  - separate KromaDepositTx and remove Kroma fee distribution logic [#122](https://github.com/kroma-network/go-ethereum/pull/122).
 
 ## scroll-geth
 
