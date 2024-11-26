@@ -504,10 +504,16 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		// are 0. This avoids a negative effectiveTip being applied to
 		// the coinbase when simulating calls.
 	} else if kromaConfig != nil {
-		gasUsed := new(big.Int).SetUint64(st.gasUsed())
-		feeDist := st.evm.Context.FeeDistributionFunc(blockNum, gasUsed, st.evm.Context.BaseFee, effectiveTip)
-		st.state.AddBalance(params.KromaValidatorRewardVault, feeDist.Reward)
-		st.state.AddBalance(params.KromaProtocolVault, feeDist.Protocol)
+		if st.evm.ChainConfig().IsKromaMPT(st.evm.Context.Time) {
+			effectiveFee := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip)
+			st.state.AddBalance(st.evm.Context.Coinbase, effectiveFee)
+			baseFee := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee)
+			st.state.AddBalance(params.KromaProtocolVault, baseFee)
+		} else {
+			feeDist := st.evm.Context.FeeDistributionFunc(blockNum, st.gasUsed(), st.evm.Context.BaseFee, effectiveTip)
+			st.state.AddBalance(params.KromaValidatorRewardVault, feeDist.Reward)
+			st.state.AddBalance(params.KromaProtocolVault, feeDist.Protocol)
+		}
 	} else {
 		fee := new(big.Int).SetUint64(st.gasUsed())
 		fee.Mul(fee, effectiveTip)
@@ -515,8 +521,8 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	}
 
 	if kromaConfig != nil && !st.msg.IsDepositTx {
-		if cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); cost != nil {
-			st.state.AddBalance(params.KromaProposerRewardVault, cost)
+		if l1Cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); l1Cost != nil {
+			st.state.AddBalance(params.KromaProposerRewardVault, l1Cost)
 		}
 	}
 
