@@ -279,6 +279,16 @@ func (bc *BlockChain) GetTd(hash common.Hash, number uint64) *big.Int {
 // HasState checks if state trie is fully present in the database or not.
 func (bc *BlockChain) HasState(hash common.Hash) bool {
 	_, err := bc.stateCache.OpenTrie(hash)
+	// [Kroma: ZKT to MPT]
+	if err != nil && bc.chainConfig.IsKroma() {
+		isZk := bc.chainConfig.Zktrie
+		bc.chainConfig.Zktrie = !isZk
+		bc.triedb.SetBackend(!isZk)
+		_, err = bc.stateCache.OpenTrie(hash)
+		bc.chainConfig.Zktrie = isZk
+		bc.triedb.SetBackend(isZk)
+	}
+	// [Kroma: END]
 	return err == nil
 }
 
