@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 )
 
-// remove all storage values in the input storage trie
+// deleteAccountStorage removes all storage values in the input storage trie
 func deleteAccountStorage(mptStorageTrie *trie.StateTrie) error {
 	if mptStorageTrie.Hash().Cmp(types.EmptyRootHash) == 0 {
 		return nil
@@ -124,11 +124,11 @@ func (m *StateMigrator) applyStorageChanges(mptStorageTrie *trie.StateTrie, stor
 
 func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 	start := m.migratedRef.BlockNumber() + 1
-	root := m.migratedRef.Root()
+	prevRoot := m.migratedRef.Root()
 	for i := start; i <= headNumber; i++ {
-		log.Info("Apply new state to MPT", "block", i, "root", root.TerminalString())
+		log.Info("Apply new state to MPT", "block", i, "prevRoot", prevRoot.TerminalString())
 
-		mptStateTrie, err := trie.NewStateTrie(trie.StateTrieID(root), m.mptdb)
+		mptStateTrie, err := trie.NewStateTrie(trie.StateTrieID(prevRoot), m.mptdb)
 		if err != nil {
 			return err
 		}
@@ -137,14 +137,14 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 		if err != nil {
 			return err
 		}
-		if err := m.applyDestructChanges(mptStateTrie, root, destructChanges); err != nil {
+		if err := m.applyDestructChanges(mptStateTrie, prevRoot, destructChanges); err != nil {
 			return err
 		}
-		if err := m.applyAccountChanges(mptStateTrie, root, accountChanges, storageChanges); err != nil {
+		if err := m.applyAccountChanges(mptStateTrie, prevRoot, accountChanges, storageChanges); err != nil {
 			return err
 		}
 
-		root, err = m.commit(mptStateTrie, root)
+		root, err := m.commit(mptStateTrie, prevRoot)
 		if err != nil {
 			return err
 		}

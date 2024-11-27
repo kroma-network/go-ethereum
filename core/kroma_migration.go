@@ -15,7 +15,14 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-var ErrHaltOnStateTransition = errors.New("since migration is disabled, transitioning to MPT is not possible")
+var (
+	ErrHaltOnStateTransition = errors.New("since migration is disabled, transitioning to MPT is not possible")
+	accountChangesPrefix     = []byte("aC-")
+	storageChangesPrefix     = []byte("sC-")
+	destructChangesPrefix    = []byte("dC-")
+	migratedRootKey          = []byte("MigratedRoot")
+	migratedNumberKey        = []byte("MigratedNumber")
+)
 
 type MigratedRef struct {
 	db ethdb.Database
@@ -24,14 +31,6 @@ type MigratedRef struct {
 	root   common.Hash
 	number uint64
 }
-
-var (
-	accountChangesPrefix  = []byte("aC-")
-	storageChangesPrefix  = []byte("sC-")
-	destructChangesPrefix = []byte("dC-")
-	migratedRootKey       = []byte("MigratedRoot")
-	migratedNumberKey     = []byte("MigratedNumber")
-)
 
 func NewMigratedRef(db ethdb.Database) *MigratedRef {
 	ref := &MigratedRef{db: db}
@@ -93,6 +92,15 @@ func DestructChangesKey(blockNumber uint64) []byte {
 	return append(destructChangesPrefix, encodeBlockNumber(blockNumber)...)
 }
 
+func SerializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data T) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	encoder := gob.NewEncoder(buf)
+	if err := encoder.Encode(data); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 func ReadStateChanges(db ethdb.KeyValueStore, blockNumber uint64) (map[common.Address]bool, map[common.Hash][]byte, map[common.Hash]map[common.Hash][]byte, error) {
 	enc, err := db.Get(DestructChangesKey(blockNumber))
 	if err != nil {
@@ -121,12 +129,21 @@ func ReadStateChanges(db ethdb.KeyValueStore, blockNumber uint64) (map[common.Ad
 	return destruct, accounts, storages, nil
 }
 
-// Note: it's should be called in MigrationTime
+func DeserializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data []byte) (T, error) {
+	var result T
+	buf := bytes.NewBuffer(data)
+	decoder := gob.NewDecoder(buf)
+	if err := decoder.Decode(&result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// WriteStateChanges should be called in Kroma MPT migration time
 func WriteStateChanges(db ethdb.KeyValueStore, blockNumber uint64, stateObjectsDestruct map[common.Address]*types.StateAccount, accounts map[common.Hash][]byte, storages map[common.Hash]map[common.Hash][]byte) error {
 	batch := db.NewBatch()
 	stateObjectsDestructInfo := make(map[common.Address]bool)
 
-	// TODO: Do we need to check if batch.ValueSize() > ethdb.IdealBatchSize, have storages size limit?
 	for addr := range stateObjectsDestruct {
 		if addr.Cmp(params.SystemAddress) == 0 {
 			continue
@@ -165,15 +182,6 @@ func WriteStateChanges(db ethdb.KeyValueStore, blockNumber uint64, stateObjectsD
 	return nil
 }
 
-func SerializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data T) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	encoder := gob.NewEncoder(buf)
-	if err := encoder.Encode(data); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
 func DeleteStateChanges(db ethdb.KeyValueStore, blockNumber uint64) error {
 	batch := db.NewBatch()
 	if err := batch.Delete(DestructChangesKey(blockNumber)); err != nil {
@@ -186,14 +194,4 @@ func DeleteStateChanges(db ethdb.KeyValueStore, blockNumber uint64) error {
 		return err
 	}
 	return batch.Write()
-}
-
-func DeserializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data []byte) (T, error) {
-	var result T
-	buf := bytes.NewBuffer(data)
-	decoder := gob.NewDecoder(buf)
-	if err := decoder.Decode(&result); err != nil {
-		return nil, err
-	}
-	return result, nil
 }
