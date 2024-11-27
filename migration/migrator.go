@@ -2,7 +2,6 @@ package migration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -13,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -22,13 +20,10 @@ import (
 	"github.com/ethereum/go-ethereum/trie/zk"
 )
 
-var (
-	tracerType = "prestateTracer"
-	// BedrockTransitionBlockExtraData represents the extradata
-	// set in the very first bedrock block. This value must be
-	// less than 32 bytes long or it will create an invalid block.
-	BedrockTransitionBlockExtraData = []byte("BEDROCK")
-)
+// BedrockTransitionBlockExtraData represents the extradata
+// set in the very first bedrock block. This value must be
+// less than 32 bytes long or it will create an invalid block.
+var BedrockTransitionBlockExtraData = []byte("BEDROCK")
 
 type ethBackend interface {
 	ChainDb() ethdb.Database
@@ -41,15 +36,13 @@ type StateMigrator struct {
 	zktdb         *trie.Database
 	mptdb         *trie.Database
 	allocPreimage map[common.Hash][]byte
-	tracersAPI    *tracers.API
-	traceCfg      *tracers.TraceConfig
 	migratedRef   *core.MigratedRef
 
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-func NewStateMigrator(backend ethBackend, tracersAPI *tracers.API) (*StateMigrator, error) {
+func NewStateMigrator(backend ethBackend) (*StateMigrator, error) {
 	db := backend.ChainDb()
 
 	allocPreimage, err := zkPreimageFromAlloc(db)
@@ -68,12 +61,7 @@ func NewStateMigrator(backend ethBackend, tracersAPI *tracers.API) (*StateMigrat
 		}),
 		mptdb:         trie.NewDatabase(db, &trie.Config{Preimages: true}),
 		allocPreimage: allocPreimage,
-		tracersAPI:    tracersAPI,
-		traceCfg: &tracers.TraceConfig{
-			Tracer:       &tracerType,
-			TracerConfig: json.RawMessage(`{"diffMode": true}`),
-		},
-		migratedRef: core.NewMigratedRef(db),
+		migratedRef:   core.NewMigratedRef(db),
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -165,7 +153,8 @@ func (m *StateMigrator) migrateAccount(header *types.Header) error {
 	}
 	var mu sync.Mutex
 	err = hashRangeIterator(m.ctx, zkt, NumProcessAccount, func(key, value []byte) error {
-		preimage, err := m.readZkPreimage(key)
+		hk := trie.IteratorKeyToHash(key, true)
+		preimage, err := m.readZkPreimage(*hk)
 		if err != nil {
 			return err
 		}
@@ -229,7 +218,8 @@ func (m *StateMigrator) migrateStorage(
 	var mu sync.Mutex
 	var slots atomic.Uint64
 	err = hashRangeIterator(m.ctx, zkt, NumProcessStorage, func(key, value []byte) error {
-		preimage, err := m.readZkPreimage(key)
+		hk := trie.IteratorKeyToHash(key, true)
+		preimage, err := m.readZkPreimage(*hk)
 		if err != nil {
 			return err
 		}
@@ -257,17 +247,16 @@ func (m *StateMigrator) migrateStorage(
 	return root, nil
 }
 
-func (m *StateMigrator) readZkPreimage(key []byte) ([]byte, error) {
-	hk := *trie.IteratorKeyToHash(key, true)
-	if preimage, ok := m.allocPreimage[hk]; ok {
+func (m *StateMigrator) readZkPreimage(hashKey common.Hash) ([]byte, error) {
+	if preimage, ok := m.allocPreimage[hashKey]; ok {
 		return preimage, nil
 	}
-	if preimage := m.zktdb.Preimage(hk); preimage != nil {
-		if common.BytesToHash(zk.MustNewSecureHash(preimage).Bytes()).Hex() == hk.Hex() {
+	if preimage := m.zktdb.Preimage(hashKey); preimage != nil {
+		if common.BytesToHash(zk.MustNewSecureHash(preimage).Bytes()).Hex() == hashKey.Hex() {
 			return preimage, nil
 		}
 	}
-	return []byte{}, fmt.Errorf("preimage does not exist: %s", hk.Hex())
+	return []byte{}, fmt.Errorf("preimage does not exist: %s", hashKey.Hex())
 }
 
 func (m *StateMigrator) commit(mpt *trie.StateTrie, parentHash common.Hash) (common.Hash, error) {

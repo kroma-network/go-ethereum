@@ -42,7 +42,8 @@ func (m *StateMigrator) ValidateMigratedState(mptRoot common.Hash, zkRoot common
 				return err
 			}
 
-			preimage, err := m.readZkPreimage(key)
+			hk := trie.IteratorKeyToHash(key, true)
+			preimage, err := m.readZkPreimage(*hk)
 			if err != nil {
 				return err
 			}
@@ -79,7 +80,8 @@ func (m *StateMigrator) ValidateMigratedState(mptRoot common.Hash, zkRoot common
 				}
 				var mu sync.Mutex
 				err = hashRangeIterator(cCtx, zktStorage, NumProcessStorage, func(key, value []byte) error {
-					preimage, err := m.readZkPreimage(key)
+					hk := trie.IteratorKeyToHash(key, true)
+					preimage, err := m.readZkPreimage(*hk)
 					if err != nil {
 						return err
 					}

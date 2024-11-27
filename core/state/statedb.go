@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
@@ -157,7 +158,8 @@ type StateDB struct {
 	StorageDeleted int
 
 	// Testing hooks
-	onCommit func(states *triestate.Set) // Hook invoked when commit is performed
+	onCommit             func(states *triestate.Set) // Hook invoked when commit is performed
+	OnCommitForMigration func(s ethdb.KeyValueStore, blockNumber uint64, stateObjectsDestruct map[common.Address]*types.StateAccount, accounts map[common.Hash][]byte, storages map[common.Hash]map[common.Hash][]byte) error
 }
 
 // New creates a new state from a given trie.
@@ -1427,6 +1429,13 @@ func (s *StateDB) Commit(block uint64, deleteEmptyObjects bool) (common.Hash, er
 		}
 		if s.onCommit != nil {
 			s.onCommit(set)
+		}
+
+		if s.OnCommitForMigration != nil {
+			err := s.OnCommitForMigration(s.db.DiskDB(), block, s.stateObjectsDestruct, s.accounts, s.storages)
+			if err != nil {
+				return common.Hash{}, err
+			}
 		}
 	}
 	// Clear all internal flags at the end of commit operation.

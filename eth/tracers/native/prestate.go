@@ -28,7 +28,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/params"
 )
 
 //go:generate go run github.com/fjl/gencodec -type account -field-override accountMarshaling -out gen_account_json.go
@@ -99,13 +98,6 @@ func (t *prestateTracer) CaptureStart(env *vm.EVM, from common.Address, to commo
 	t.lookupAccount(from)
 	t.lookupAccount(to)
 	t.lookupAccount(env.Context.Coinbase)
-	// [Kroma: START]
-	if env.ChainConfig().Kroma != nil {
-		t.lookupAccount(params.KromaProposerRewardVault)
-		t.lookupAccount(params.KromaProtocolVault)
-		t.lookupAccount(params.KromaValidatorRewardVault)
-	}
-	// [Kroma: END]
 
 	// The recipient balance includes the value transferred.
 	toBal := new(big.Int).Sub(t.pre[to].Balance, value)
