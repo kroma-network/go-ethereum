@@ -508,7 +508,7 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 			effectiveFee := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip)
 			st.state.AddBalance(st.evm.Context.Coinbase, effectiveFee)
 			baseFee := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee)
-			st.state.AddBalance(params.KromaProtocolVault, baseFee)
+			st.state.AddBalance(params.OptimismBaseFeeRecipient, baseFee)
 		} else {
 			feeDist := st.evm.Context.FeeDistributionFunc(blockNum, st.gasUsed(), st.evm.Context.BaseFee, effectiveTip)
 			st.state.AddBalance(params.KromaValidatorRewardVault, feeDist.Reward)
@@ -522,7 +522,11 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 
 	if kromaConfig != nil && !st.msg.IsDepositTx {
 		if l1Cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); l1Cost != nil {
-			st.state.AddBalance(params.KromaProposerRewardVault, l1Cost)
+			if st.evm.ChainConfig().IsKromaMPT(st.evm.Context.Time) {
+				st.state.AddBalance(params.OptimismL1FeeRecipient, l1Cost)
+			} else {
+				st.state.AddBalance(params.KromaProposerRewardVault, l1Cost)
+			}
 		}
 	}
 
