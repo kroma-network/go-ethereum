@@ -45,7 +45,7 @@ func NewFeeDistributionFunc(config *params.ChainConfig, statedb StateGetter) Fee
 		}
 
 		if blockNum != cacheBlockNum {
-			scalar = statedb.GetState(L1BlockAddr, ValidatorRewardScalarSlot).Big().Uint64()
+			scalar = statedb.GetState(KromaL1BlockAddr, ValidatorRewardScalarSlot).Big().Uint64()
 			if scalar > 10000 {
 				scalar = 0
 			}
