@@ -280,6 +280,8 @@ func (m *StateMigrator) commit(mpt *trie.StateTrie, parentHash common.Hash) (com
 		}
 	}
 
+	// TODO : 아마 여기서 set을 가지고 zkt
+
 	if err := m.mptdb.Update(root, parentHash, 0, trienode.NewWithNodeSet(set), nil); err != nil {
 		return common.Hash{}, err
 	}

@@ -58,7 +58,8 @@ func (n *fullNode) EncodeRLP(w io.Writer) error {
 	return eb.Flush()
 }
 
-func (n *fullNode) copy() *fullNode   { copy := *n; return &copy }
+func (n *fullNode) copy() *fullNode { copy := *n; return &copy }
+
 func (n *shortNode) copy() *shortNode { copy := *n; return &copy }
 
 // nodeFlag contains caching-related metadata about a node.
@@ -67,16 +68,22 @@ type nodeFlag struct {
 	dirty bool     // whether the node has changes that must be written to the database
 }
 
-func (n *fullNode) cache() (hashNode, bool)  { return n.flags.hash, n.flags.dirty }
+func (n *fullNode) cache() (hashNode, bool) { return n.flags.hash, n.flags.dirty }
+
 func (n *shortNode) cache() (hashNode, bool) { return n.flags.hash, n.flags.dirty }
-func (n hashNode) cache() (hashNode, bool)   { return nil, true }
-func (n valueNode) cache() (hashNode, bool)  { return nil, true }
+
+func (n hashNode) cache() (hashNode, bool) { return nil, true }
+
+func (n valueNode) cache() (hashNode, bool) { return nil, true }
 
 // Pretty printing.
-func (n *fullNode) String() string  { return n.fstring("") }
+func (n *fullNode) String() string { return n.fstring("") }
+
 func (n *shortNode) String() string { return n.fstring("") }
-func (n hashNode) String() string   { return n.fstring("") }
-func (n valueNode) String() string  { return n.fstring("") }
+
+func (n hashNode) String() string { return n.fstring("") }
+
+func (n valueNode) String() string { return n.fstring("") }
 
 func (n *fullNode) fstring(ind string) string {
 	resp := fmt.Sprintf("[\n%s  ", ind)
@@ -89,12 +96,15 @@ func (n *fullNode) fstring(ind string) string {
 	}
 	return resp + fmt.Sprintf("\n%s] ", ind)
 }
+
 func (n *shortNode) fstring(ind string) string {
 	return fmt.Sprintf("{%x: %v} ", n.Key, n.Val.fstring(ind+"  "))
 }
+
 func (n hashNode) fstring(ind string) string {
 	return fmt.Sprintf("<%x> ", []byte(n))
 }
+
 func (n valueNode) fstring(ind string) string {
 	return fmt.Sprintf("%x ", []byte(n))
 }
@@ -104,7 +114,8 @@ func (n valueNode) fstring(ind string) string {
 // in the same cache fields).
 type rawNode []byte
 
-func (n rawNode) cache() (hashNode, bool)   { panic("this should never end up in a live trie") }
+func (n rawNode) cache() (hashNode, bool) { panic("this should never end up in a live trie") }
+
 func (n rawNode) fstring(ind string) string { panic("this should never end up in a live trie") }
 
 func (n rawNode) EncodeRLP(w io.Writer) error {
@@ -252,3 +263,27 @@ func wrapError(err error, ctx string) error {
 func (err *decodeError) Error() string {
 	return fmt.Sprintf("%v (decode path: %s)", err.what, strings.Join(err.stack, "<-"))
 }
+
+// [Kroma: Start]
+func IsValueNode(node []byte) uint32 {
+	//if node == nil {
+	//	return false
+	//}
+	n := mustDecodeNodeUnsafe(nil, node)
+
+	switch n.(type) {
+	case *shortNode:
+		return 1
+	case *fullNode:
+		return 2
+	case hashNode:
+		return 3
+	case valueNode:
+		return 4
+	default:
+		fmt.Println("something is wrong!")
+		return 0
+	}
+}
+
+// [Kroma: End]
