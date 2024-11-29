@@ -101,6 +101,16 @@ func SerializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | 
 	return buf.Bytes(), nil
 }
 
+func DeserializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data []byte) (T, error) {
+	var result T
+	buf := bytes.NewBuffer(data)
+	decoder := gob.NewDecoder(buf)
+	if err := decoder.Decode(&result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func ReadStateChanges(db ethdb.KeyValueStore, blockNumber uint64) (map[common.Address]bool, map[common.Hash][]byte, map[common.Hash]map[common.Hash][]byte, error) {
 	enc, err := db.Get(DestructChangesKey(blockNumber))
 	if err != nil {
@@ -127,16 +137,6 @@ func ReadStateChanges(db ethdb.KeyValueStore, blockNumber uint64) (map[common.Ad
 		return nil, nil, nil, err
 	}
 	return destruct, accounts, storages, nil
-}
-
-func DeserializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | map[common.Hash]map[common.Hash][]byte](data []byte) (T, error) {
-	var result T
-	buf := bytes.NewBuffer(data)
-	decoder := gob.NewDecoder(buf)
-	if err := decoder.Decode(&result); err != nil {
-		return nil, err
-	}
-	return result, nil
 }
 
 // WriteStateChanges should be called in Kroma MPT migration time

@@ -155,6 +155,8 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 		if err := core.DeleteStateChanges(m.db, i); err != nil {
 			return err
 		}
+
+		prevRoot = root
 	}
 
 	return nil
