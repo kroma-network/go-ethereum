@@ -56,8 +56,9 @@ import (
 
 func TestNewRPCTransactionDepositTx(t *testing.T) {
 	tx := types.NewTx(&types.DepositTx{
-		SourceHash: common.HexToHash("0x1234"),
-		Mint:       big.NewInt(34),
+		SourceHash:          common.HexToHash("0x1234"),
+		IsSystemTransaction: true,
+		Mint:                big.NewInt(34),
 	})
 	nonce := uint64(7)
 	receipt := &types.Receipt{
@@ -72,15 +73,40 @@ func TestNewRPCTransactionDepositTx(t *testing.T) {
 
 	// Should include deposit tx specific fields
 	require.Equal(t, *got.SourceHash, tx.SourceHash(), "newRPCTransaction().SourceHash = %v, want %v", got.SourceHash, tx.SourceHash())
+	require.Equal(t, *got.IsSystemTx, tx.IsSystemTx(), "newRPCTransaction().IsSystemTx = %v, want %v", got.IsSystemTx, tx.IsSystemTx())
 	require.Equal(t, got.Mint, (*hexutil.Big)(tx.Mint()), "newRPCTransaction().Mint = %v, want %v", got.Mint, tx.Mint())
 	require.Equal(t, got.Nonce, (hexutil.Uint64)(nonce), "newRPCTransaction().Nonce = %v, want %v", got.Nonce, nonce)
 }
 
-func TestRPCTransactionDepositTxWithVersion(t *testing.T) {
+func TestNewRPCTransactionKromaDepositTx(t *testing.T) {
+	tx := types.NewTx(&types.KromaDepositTx{
+		SourceHash: common.HexToHash("0x1234"),
+		Mint:       big.NewInt(34),
+	})
+	nonce := uint64(7)
+	receipt := &types.Receipt{
+		DepositNonce: &nonce,
+	}
+	got := newRPCTransaction(tx, common.Hash{}, uint64(12), uint64(1234), uint64(1), big.NewInt(0), &params.ChainConfig{}, receipt)
+	// Should provide zero values for unused fields that are required in other transactions
+	require.Equal(t, got.GasPrice, (*hexutil.Big)(big.NewInt(0)), "newRPCTransaction().GasPrice = %v, want 0x0", got.GasPrice)
+	require.Equal(t, got.V, (*hexutil.Big)(big.NewInt(0)), "newRPCTransaction().V = %v, want 0x0", got.V)
+	require.Equal(t, got.R, (*hexutil.Big)(big.NewInt(0)), "newRPCTransaction().R = %v, want 0x0", got.R)
+	require.Equal(t, got.S, (*hexutil.Big)(big.NewInt(0)), "newRPCTransaction().S = %v, want 0x0", got.S)
+
+	// Should omit IsSystemTx
+	require.Nil(t, got.IsSystemTx, "should omit IsSystemTx when false")
+
+	// Should include deposit tx specific fields
+	require.Equal(t, *got.SourceHash, tx.SourceHash(), "newRPCTransaction().SourceHash = %v, want %v", got.SourceHash, tx.SourceHash())
+	require.Equal(t, got.Mint, (*hexutil.Big)(tx.Mint()), "newRPCTransaction().Mint = %v, want %v", got.Mint, tx.Mint())
+	require.Equal(t, got.Nonce, (hexutil.Uint64)(nonce), "newRPCTransaction().Nonce = %v, want %v", got.Nonce, nonce)
+}
+
+func TestRPCTransactionKromaDepositTxWithVersion(t *testing.T) {
 	tx := types.NewTx(&types.DepositTx{
 		SourceHash: common.HexToHash("0x1234"),
-		// IsSystemTransaction: true,
-		Mint: big.NewInt(34),
+		Mint:       big.NewInt(34),
 	})
 	nonce := uint64(7)
 	version := types.CanyonDepositReceiptVersion
@@ -97,7 +123,7 @@ func TestRPCTransactionDepositTxWithVersion(t *testing.T) {
 
 	// Should include versioned deposit tx specific fields
 	require.Equal(t, *got.SourceHash, tx.SourceHash(), "newRPCTransaction().SourceHash = %v, want %v", got.SourceHash, tx.SourceHash())
-	// require.Equal(t, *got.IsSystemTx, tx.IsSystemTx(), "newRPCTransaction().IsSystemTx = %v, want %v", got.IsSystemTx, tx.IsSystemTx())
+	require.Equal(t, *got.IsSystemTx, tx.IsSystemTx(), "newRPCTransaction().IsSystemTx = %v, want %v", got.IsSystemTx, tx.IsSystemTx())
 	require.Equal(t, got.Mint, (*hexutil.Big)(tx.Mint()), "newRPCTransaction().Mint = %v, want %v", got.Mint, tx.Mint())
 	require.Equal(t, got.Nonce, (hexutil.Uint64)(nonce), "newRPCTransaction().Nonce = %v, want %v", got.Nonce, nonce)
 	require.Equal(t, *got.DepositReceiptVersion, (hexutil.Uint64(version)), "newRPCTransaction().DepositReceiptVersion = %v, want %v", *got.DepositReceiptVersion, version)
@@ -109,6 +135,25 @@ func TestRPCTransactionDepositTxWithVersion(t *testing.T) {
 	err = json.Unmarshal(b, &parsed)
 	require.NoError(t, err, "unmarshalling failed: %w", err)
 	require.Equal(t, "0x1", parsed["depositReceiptVersion"])
+}
+
+func TestNewRPCTransactionOmitIsSystemTxFalse(t *testing.T) {
+	// [Kroma: START]
+	// Kroma Deposit Tx
+	tx := types.NewTx(&types.KromaDepositTx{})
+	got := newRPCTransaction(tx, common.Hash{}, uint64(12), uint64(1234), uint64(1), big.NewInt(0), &params.ChainConfig{}, nil)
+
+	require.Nil(t, got.IsSystemTx, "should omit IsSystemTx when false")
+
+	// OP Deposit Tx
+	tx = types.NewTx(&types.DepositTx{
+		IsSystemTransaction: false,
+	})
+	got = newRPCTransaction(tx, common.Hash{}, uint64(12), uint64(1234), uint64(1), big.NewInt(0), &params.ChainConfig{}, nil)
+
+	// In Kroma, DepositTx.isSystemTx is always included.
+	require.False(t, *got.IsSystemTx, "should omit IsSystemTx when false")
+	// [Kroma: END]
 }
 
 func TestUnmarshalRpcDepositTx(t *testing.T) {
@@ -182,15 +227,16 @@ func TestUnmarshalRpcDepositTx(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			tx := types.NewTx(&types.DepositTx{
-				SourceHash: common.HexToHash("0x1234"),
-				Mint:       big.NewInt(34),
+				SourceHash:          common.HexToHash("0x1234"),
+				IsSystemTransaction: true,
+				Mint:                big.NewInt(34),
 			})
 			rpcTx := newRPCTransaction(tx, common.Hash{}, uint64(12), uint64(1234), uint64(1), big.NewInt(0), &params.ChainConfig{}, nil)
 			test.modifier(rpcTx)
-			json, err := json.Marshal(rpcTx)
+			j, err := json.Marshal(rpcTx)
 			require.NoError(t, err, "marshalling failed: %w", err)
 			parsed := &types.Transaction{}
-			err = parsed.UnmarshalJSON(json)
+			err = parsed.UnmarshalJSON(j)
 			if test.valid {
 				require.NoError(t, err, "unmarshal failed: %w", err)
 			} else {
@@ -198,6 +244,27 @@ func TestUnmarshalRpcDepositTx(t *testing.T) {
 			}
 		})
 	}
+	// [Kroma: START]
+	for _, test := range tests {
+		t.Run("kroma_"+test.name, func(t *testing.T) {
+			tx := types.NewTx(&types.KromaDepositTx{
+				SourceHash: common.HexToHash("0x1234"),
+				Mint:       big.NewInt(34),
+			})
+			rpcTx := newRPCTransaction(tx, common.Hash{}, uint64(12), uint64(1234), uint64(1), big.NewInt(0), &params.ChainConfig{}, nil)
+			test.modifier(rpcTx)
+			j, err := json.Marshal(rpcTx)
+			require.NoError(t, err, "marshalling failed: %w", err)
+			parsed := &types.Transaction{}
+			err = parsed.UnmarshalJSON(j)
+			if test.valid {
+				require.NoError(t, err, "unmarshal failed: %w", err)
+			} else {
+				require.Error(t, err, "unmarshal should have failed but did not")
+			}
+		})
+	}
+	// [Kroma: END]
 }
 
 func testTransactionMarshal(t *testing.T, tests []txData, config *params.ChainConfig) {
@@ -839,7 +906,7 @@ func TestEstimateGas(t *testing.T) {
 		//            require(block.basefee > 0);
 		//        }
 		//    }
-		//}
+		// }
 		{
 			blockNumber: rpc.LatestBlockNumber,
 			call: TransactionArgs{

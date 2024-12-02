@@ -145,7 +145,7 @@ type Message struct {
 	// This field will be set to true for operations like RPC eth_call.
 	SkipAccountChecks bool
 
-	// Kroma rollup fields
+	IsSystemTx     bool                 // IsSystemTx indicates the message, if also a deposit, does not emit gas usage.
 	IsDepositTx    bool                 // IsDepositTx indicates the message is force-included and can persist a mint.
 	Mint           *big.Int             // Mint is the amount to mint before EVM processing, or nil if there is no minting.
 	RollupCostData types.RollupCostData // RollupCostData caches data to compute the fee we charge for data availability
@@ -154,16 +154,16 @@ type Message struct {
 // TransactionToMessage converts a transaction into a Message.
 func TransactionToMessage(tx *types.Transaction, s types.Signer, baseFee *big.Int) (*Message, error) {
 	msg := &Message{
-		Nonce:      tx.Nonce(),
-		GasLimit:   tx.Gas(),
-		GasPrice:   new(big.Int).Set(tx.GasPrice()),
-		GasFeeCap:  new(big.Int).Set(tx.GasFeeCap()),
-		GasTipCap:  new(big.Int).Set(tx.GasTipCap()),
-		To:         tx.To(),
-		Value:      tx.Value(),
-		Data:       tx.Data(),
-		AccessList: tx.AccessList(),
-		// Kroma rollup fields
+		Nonce:          tx.Nonce(),
+		GasLimit:       tx.Gas(),
+		GasPrice:       new(big.Int).Set(tx.GasPrice()),
+		GasFeeCap:      new(big.Int).Set(tx.GasFeeCap()),
+		GasTipCap:      new(big.Int).Set(tx.GasTipCap()),
+		To:             tx.To(),
+		Value:          tx.Value(),
+		Data:           tx.Data(),
+		AccessList:     tx.AccessList(),
+		IsSystemTx:     tx.IsSystemTx(),
 		IsDepositTx:    tx.IsDepositTx(),
 		Mint:           tx.Mint(),
 		RollupCostData: tx.RollupCostData(),
@@ -286,15 +286,23 @@ func (st *StateTransition) buyGas() error {
 }
 
 func (st *StateTransition) preCheck() error {
-	msg := st.msg
-	if msg.IsDepositTx {
+	if st.msg.IsDepositTx {
 		// No fee fields to check, no nonce to check, and no need to check if EOA (L1 already verified it for us)
 		// Gas is free, but no refunds!
-		st.initialGas = msg.GasLimit
-		st.gasRemaining += msg.GasLimit   // Add gas here in order to be able to execute calls.
-		return st.gp.SubGas(msg.GasLimit) // gas used by deposits may not be used by other txs
+		st.initialGas = st.msg.GasLimit
+		st.gasRemaining += st.msg.GasLimit // Add gas here in order to be able to execute calls.
+		// Don't touch the gas pool for system transactions
+		if st.msg.IsSystemTx {
+			if st.evm.ChainConfig().IsOptimismRegolith(st.evm.Context.Time) {
+				return fmt.Errorf("%w: address %v", ErrSystemTxNotSupported,
+					st.msg.From.Hex())
+			}
+			return nil
+		}
+		return st.gp.SubGas(st.msg.GasLimit) // gas used by deposits may not be used by other txs
 	}
 	// Only check transactions that are not fake
+	msg := st.msg
 	if !msg.SkipAccountChecks {
 		// Make sure this transaction's nonce is correct.
 		stNonce := st.state.GetNonce(msg.From)
@@ -394,8 +402,15 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		// Even though we revert the state changes, always increment the nonce for the next deposit transaction
 		st.state.SetNonce(st.msg.From, st.state.GetNonce(st.msg.From)+1)
 		// Record deposits as using all their gas (matches the gas pool)
+		// System Transactions are special & are not recorded as using any gas (anywhere)
+		// Regolith changes this behaviour so the actual gas used is reported.
+		// In this case the tx is invalid so is recorded as using all gas.
+		gasUsed := st.msg.GasLimit
+		if st.msg.IsSystemTx && !st.evm.ChainConfig().IsRegolith(st.evm.Context.Time) {
+			gasUsed = 0
+		}
 		result = &ExecutionResult{
-			UsedGas:    st.msg.GasLimit,
+			UsedGas:    gasUsed,
 			Err:        fmt.Errorf("failed deposit: %w", err),
 			ReturnData: nil,
 		}
@@ -471,6 +486,21 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		ret, st.gasRemaining, vmerr = st.evm.Call(sender, st.to(), msg.Data, st.gasRemaining, msg.Value)
 	}
 
+	// if deposit: skip refunds, skip tipping coinbase
+	// Regolith changes this behaviour to report the actual gasUsed instead of always reporting all gas used.
+	if st.msg.IsDepositTx && !rules.IsOptimismRegolith {
+		// Record deposits as using all their gas (matches the gas pool)
+		// System Transactions are special & are not recorded as using any gas (anywhere)
+		gasUsed := st.msg.GasLimit
+		if st.msg.IsSystemTx {
+			gasUsed = 0
+		}
+		return &ExecutionResult{
+			UsedGas:    gasUsed,
+			Err:        vmerr,
+			ReturnData: ret,
+		}, nil
+	}
 	// Note for deposit tx there is no ETH refunded for unused gas, but that's taken care of by the fact that gasPrice
 	// is always 0 for deposit tx. So calling refundGas will ensure the gasUsed accounting is correct without actually
 	// changing the sender's balance
@@ -496,29 +526,33 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		effectiveTip = cmath.BigMin(msg.GasTipCap, new(big.Int).Sub(msg.GasFeeCap, st.evm.Context.BaseFee))
 	}
 
-	kromaConfig := st.evm.ChainConfig().Kroma
-	blockNum := st.evm.Context.BlockNumber.Uint64()
-
 	if st.evm.Config.NoBaseFee && msg.GasFeeCap.Sign() == 0 && msg.GasTipCap.Sign() == 0 {
 		// Skip fee payment when NoBaseFee is set and the fee fields
 		// are 0. This avoids a negative effectiveTip being applied to
 		// the coinbase when simulating calls.
-	} else if kromaConfig != nil {
-		gasUsed := new(big.Int).SetUint64(st.gasUsed())
-		feeDist := st.evm.Context.FeeDistributionFunc(blockNum, gasUsed, st.evm.Context.BaseFee, effectiveTip)
+		// [Kroma: START]
+	} else if st.evm.ChainConfig().IsPreKromaMPT(st.evm.Context.Time) {
+		blockNum := st.evm.Context.BlockNumber.Uint64()
+		feeDist := st.evm.Context.FeeDistributionFunc(blockNum, st.gasUsed(), st.evm.Context.BaseFee, effectiveTip)
 		st.state.AddBalance(params.KromaValidatorRewardVault, feeDist.Reward)
 		st.state.AddBalance(params.KromaProtocolVault, feeDist.Protocol)
+		// [Kroma: END]
 	} else {
 		fee := new(big.Int).SetUint64(st.gasUsed())
 		fee.Mul(fee, effectiveTip)
 		st.state.AddBalance(st.evm.Context.Coinbase, fee)
 	}
 
-	if kromaConfig != nil && !st.msg.IsDepositTx {
+	// Check that we are post bedrock to enable op-geth to be able to create pseudo pre-bedrock blocks (these are pre-bedrock, but don't follow l2 geth rules)
+	// Note optimismConfig will not be nil if rules.IsOptimismBedrock is true
+	// [Kroma: START]
+	if kromaConfig := st.evm.ChainConfig().Kroma; kromaConfig != nil && rules.IsOptimismBedrock && !st.msg.IsDepositTx {
+		st.state.AddBalance(params.KromaProtocolVault, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
 		if cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); cost != nil {
 			st.state.AddBalance(params.KromaProposerRewardVault, cost)
 		}
 	}
+	// [Kroma: END]
 
 	return &ExecutionResult{
 		UsedGas:     st.gasUsed(),
