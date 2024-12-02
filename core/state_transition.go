@@ -543,13 +543,19 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		st.state.AddBalance(st.evm.Context.Coinbase, fee)
 	}
 
-	// Check that we are post bedrock to enable op-geth to be able to create pseudo pre-bedrock blocks (these are pre-bedrock, but don't follow l2 geth rules)
-	// Note optimismConfig will not be nil if rules.IsOptimismBedrock is true
 	// [Kroma: START]
+	l1FeeVault := params.OptimismL1FeeRecipient
+	if st.evm.ChainConfig().IsPreKromaMPT(st.evm.Context.Time) {
+		l1FeeVault = params.KromaProposerRewardVault
+	}
+	// Check that we are post bedrock to enable op-geth to be able to create pseudo pre-bedrock blocks (these are pre-bedrock, but don't follow l2 geth rules)
+	// Note kromaConfig will not be nil if rules.IsOptimismBedrock is true
 	if kromaConfig := st.evm.ChainConfig().Kroma; kromaConfig != nil && rules.IsOptimismBedrock && !st.msg.IsDepositTx {
-		st.state.AddBalance(params.KromaProtocolVault, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
+		if st.evm.ChainConfig().IsKromaMPT(st.evm.Context.Time) {
+			st.state.AddBalance(params.OptimismBaseFeeRecipient, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
+		}
 		if cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); cost != nil {
-			st.state.AddBalance(params.KromaProposerRewardVault, cost)
+			st.state.AddBalance(l1FeeVault, cost)
 		}
 	}
 	// [Kroma: END]
