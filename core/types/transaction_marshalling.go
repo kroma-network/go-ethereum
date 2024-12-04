@@ -164,8 +164,8 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		enc.IsSystemTx = &itx.IsSystemTransaction
 		// other fields will show up as null.
 
+	// [Kroma: START]
 	case *KromaDepositTx:
-		// [Kroma: START]
 		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
 		enc.Value = (*hexutil.Big)(itx.Value)
 		enc.Input = (*hexutil.Bytes)(&itx.Data)
@@ -177,6 +177,31 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		}
 		enc.IsSystemTx = nil
 		// other fields will show up as null.
+	case *depositTxWithNonce:
+		// NOTE(chokobole): When unmarshalling the DepositTx from the RPC transaction format,
+		// it is transformed into depositTxWithNonce. This unexpected transformation can cause data loss,
+		// so this case statement was added as a temporary measure.
+		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
+		enc.Value = (*hexutil.Big)(itx.Value)
+		enc.Input = (*hexutil.Bytes)(&itx.Data)
+		enc.To = tx.To()
+		enc.SourceHash = &itx.SourceHash
+		enc.From = &itx.From
+		if itx.Mint != nil {
+			enc.Mint = (*hexutil.Big)(itx.Mint)
+		}
+		enc.IsSystemTx = &itx.IsSystemTransaction
+	case *kromaDepositTxWithNonce:
+		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
+		enc.Value = (*hexutil.Big)(itx.Value)
+		enc.Input = (*hexutil.Bytes)(&itx.Data)
+		enc.To = tx.To()
+		enc.SourceHash = &itx.SourceHash
+		enc.From = &itx.From
+		if itx.Mint != nil {
+			enc.Mint = (*hexutil.Big)(itx.Mint)
+		}
+		enc.IsSystemTx = nil
 		// [Kroma: END]
 	}
 	return json.Marshal(&enc)
