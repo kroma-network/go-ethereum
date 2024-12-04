@@ -307,6 +307,7 @@ func (m *StateMigrator) FinalizeTransition(transitionBlock types.Block) {
 	rawdb.WriteChainConfig(m.db, genesisHash, cfg)
 
 	// Switch trie backend to MPT
+	cfg.Zktrie = false
 	m.backend.BlockChain().TrieDB().SetBackend(false)
 
 	log.Info("Wrote chain config", "bedrock-block", cfg.BedrockBlock, "zktrie", cfg.Zktrie)
