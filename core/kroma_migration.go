@@ -101,7 +101,10 @@ func SerializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte | 
 	return buf.Bytes(), nil
 }
 
-func ReadStateChanges(db ethdb.KeyValueStore, blockNumber uint64) (map[common.Address]bool, map[common.Hash][]byte, map[common.Hash]map[common.Hash][]byte, error) {
+func ReadStateChanges(
+	db ethdb.KeyValueStore,
+	blockNumber uint64,
+) (map[common.Address]bool, map[common.Hash][]byte, map[common.Hash]map[common.Hash][]byte, error) {
 	enc, err := db.Get(DestructChangesKey(blockNumber))
 	if err != nil {
 		return nil, nil, nil, err

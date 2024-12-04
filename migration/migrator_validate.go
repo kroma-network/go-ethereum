@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/trienode"
 )
 
 func (m *StateMigrator) ValidateMigratedState(mptRoot common.Hash, zkRoot common.Hash) error {
@@ -134,6 +135,203 @@ func (m *StateMigrator) ValidateMigratedState(mptRoot common.Hash, zkRoot common
 
 	if err := eg.Wait(); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// if verification succeeds, it returns nil
+func (m *StateMigrator) verifyState(tr *trie.StateTrie, set *trienode.NodeSet, prevRoot common.Hash, bn uint64) error {
+	if set == nil {
+		return nil
+	}
+	if bn == 0 {
+		return fmt.Errorf("block number must be greater than zero")
+	}
+
+	parentZktBlock := m.backend.BlockChain().GetBlockByNumber(bn - 1)
+	if parentZktBlock == nil {
+		return fmt.Errorf("failed to get zkBlock: %d", bn-1)
+	}
+	parentZkTrie, err := trie.NewZkMerkleStateTrie(parentZktBlock.Root(), m.zktdb)
+	if err != nil {
+		return err
+	}
+	zktBlock := m.backend.BlockChain().GetBlockByNumber(bn)
+	if zktBlock == nil {
+		return fmt.Errorf("failed to get zkBlock: %d", bn)
+	}
+	zkTr, err := trie.NewZkMerkleStateTrie(zktBlock.Root(), m.zktdb)
+	if err != nil {
+		return err
+	}
+
+	originTrie, err := trie.NewStateTrie(trie.StateTrieID(prevRoot), m.mptdb)
+
+	updatedRootNode := set.Nodes[""].Blob
+	originRootNode, _, err := originTrie.GetNode([]byte(""))
+	if err != nil {
+		return err
+	}
+
+	for path, node := range set.Nodes {
+		if node.IsDeleted() {
+			blob, _, err := originTrie.GetNode(trie.HexToCompact(path))
+			if err != nil {
+				return err
+			}
+			if blob != nil && trie.IsLeafNode(blob) {
+				hk, err := trie.GetKeyFromPath(originRootNode, m.db, []byte(path))
+				if err != nil {
+					return err
+				}
+				addr := common.BytesToAddress(tr.GetKey(hk))
+				err = parentZkTrie.DeleteAccount(addr)
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			if trie.IsLeafNode(node.Blob) {
+				hk, err := trie.GetKeyFromPath(updatedRootNode, m.db, []byte(path))
+				if err != nil {
+					return err
+				}
+				addr := common.BytesToAddress(tr.GetKey(hk))
+
+				acc, err := trie.NodeBlobToAccount(node.Blob)
+				if err != nil {
+					return err
+				}
+
+				// StorageRoot is already validated in storage verification stage
+				if zkAcc, err := zkTr.GetAccount(addr); err != nil {
+					return err
+				} else if zkAcc == nil {
+					acc.Root = common.Hash{}
+				} else {
+					acc.Root = zkAcc.Root
+				}
+				err = parentZkTrie.UpdateAccount(addr, acc)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	zktRoot, _, err := parentZkTrie.Commit(false)
+	if err != nil {
+		return err
+	}
+
+	if zktRoot.Cmp(zktBlock.Root()) != 0 {
+		return fmt.Errorf("invalid migrated state")
+	}
+	return nil
+}
+
+func (m *StateMigrator) verifyStorage(tr *trie.StateTrie, id *trie.ID, addr common.Address, set *trienode.NodeSet, bn uint64) error {
+	if set == nil {
+		return nil
+	}
+	if bn == 0 {
+		return fmt.Errorf("block number must be greater than zero")
+	}
+
+	parentZkBlock := m.backend.BlockChain().GetBlockByNumber(bn - 1)
+	if parentZkBlock == nil {
+		return fmt.Errorf("failed to get zkBlock: %d", bn-1)
+	}
+	parentZkTrie, err := trie.NewZkMerkleStateTrie(parentZkBlock.Root(), m.zktdb)
+	if err != nil {
+		return err
+	}
+
+	var parentZktRoot common.Hash
+	if zkAcc, err := parentZkTrie.GetAccount(addr); err != nil {
+		return err
+	} else if zkAcc == nil {
+		parentZktRoot = common.Hash{}
+	} else {
+		parentZktRoot = zkAcc.Root
+	}
+
+	parentZkt, err := trie.NewZkMerkleStateTrie(parentZktRoot, m.zktdb)
+	if err != nil {
+		return err
+	}
+
+	originTrie, err := trie.NewStateTrie(id, m.mptdb)
+
+	updatedRootNode := set.Nodes[""].Blob
+	originRootNode, _, err := originTrie.GetNode([]byte(""))
+	if err != nil {
+		return err
+	}
+
+	for path, node := range set.Nodes {
+		if node.IsDeleted() {
+			blob, _, err := originTrie.GetNode(trie.HexToCompact(path))
+			if err != nil {
+				return err
+			}
+			if blob != nil && trie.IsLeafNode(blob) {
+				hk, err := trie.GetKeyFromPath(originRootNode, m.db, []byte(path))
+				if err != nil {
+					return err
+				}
+				slot := common.BytesToHash(tr.GetKey(hk))
+				err = parentZkt.DeleteStorage(common.Address{}, slot.Bytes())
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			if trie.IsLeafNode(node.Blob) {
+				hk, err := trie.GetKeyFromPath(updatedRootNode, m.db, []byte(path))
+				if err != nil {
+					return err
+				}
+				slot := common.BytesToHash(tr.GetKey(hk)).Bytes()
+
+				val, err := trie.NodeBlobToSlot(node.Blob)
+				if err != nil {
+					return err
+				}
+
+				err = parentZkt.UpdateStorage(common.Address{}, slot, val)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	zktRoot, _, err := parentZkt.Commit(false)
+	if err != nil {
+		return err
+	}
+
+	zktBlock := m.backend.BlockChain().GetBlockByNumber(bn)
+	if zktBlock == nil {
+		return fmt.Errorf("failed to get zkBlock: %d", bn)
+	}
+
+	zkTrie, err := trie.NewZkMerkleStateTrie(zktBlock.Root(), m.zktdb)
+	if err != nil {
+		return err
+	}
+
+	if zkAcc, err := zkTrie.GetAccount(addr); err != nil {
+		return err
+	} else if zkAcc == nil {
+		return fmt.Errorf("account doesn't exist: %s", addr.Hex())
+	} else {
+		if zktRoot.Cmp(zkAcc.Root) != 0 {
+			return fmt.Errorf("invalid migrated storage of account: %s", addr.Hex())
+		}
 	}
 
 	return nil

@@ -19,15 +19,22 @@ package trie
 import (
 	"bytes"
 	"fmt"
+	"math/big"
+	"math/rand"
 	"runtime"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
 	"github.com/ethereum/go-ethereum/trie/trienode"
+	"github.com/ethereum/go-ethereum/trie/zk"
 )
 
 func newEmptySecure() *StateTrie {
@@ -147,3 +154,113 @@ func TestStateTrieConcurrency(t *testing.T) {
 	// Wait for all threads to finish
 	pend.Wait()
 }
+
+// [Kroma: START]
+func TestParsingAccountFromNodeSet(t *testing.T) {
+	memdb := rawdb.NewMemoryDatabase()
+	db := NewDatabase(memdb, &Config{
+		Preimages: true,
+		HashDB:    hashdb.Defaults,
+	})
+	id := StateTrieID(types.EmptyRootHash)
+	mpt, err := NewStateTrie(id, db)
+	require.NoError(t, err)
+
+	updatedAccountsNum := 50000
+	updatedAccounts := make(map[common.Address]*types.StateAccount)
+	for i := 0; i < updatedAccountsNum; i++ {
+		acc := types.NewEmptyStateAccount(false)
+		ii := new(big.Int).SetUint64(uint64(i))
+		acc.Balance = new(big.Int).Add(common.Big1, ii)
+		addr := common.BigToAddress(acc.Balance)
+		err = mpt.UpdateAccount(addr, acc)
+		updatedAccounts[addr] = acc
+		require.NoError(t, err)
+	}
+
+	newRoot, set, err := mpt.Commit(true)
+	require.NoError(t, err)
+	err = db.Update(newRoot, id.Root, 0, trienode.NewWithNodeSet(set), nil)
+	require.NoError(t, err)
+	err = db.Commit(newRoot, true)
+	require.NoError(t, err)
+
+	rootNode := set.Nodes[""]
+	accounts := make(map[common.Address]*types.StateAccount)
+	for path, node := range set.Nodes {
+		if IsLeafNode(node.Blob) {
+			fullPath, err := GetKeyFromPath(rootNode.Blob, memdb, []byte(path))
+			require.NoError(t, err)
+			addr := mpt.GetKey(fullPath)
+			acc, err := NodeBlobToAccount(node.Blob)
+			require.NoError(t, err)
+			accounts[common.BytesToAddress(addr)] = acc
+		}
+	}
+
+	require.Equal(t, updatedAccounts, accounts)
+}
+
+func TestParsingStorageFromNodeSet(t *testing.T) {
+	memdb := rawdb.NewMemoryDatabase()
+	db := NewDatabase(memdb, &Config{
+		Preimages: true,
+		HashDB:    hashdb.Defaults,
+	})
+	id := StateTrieID(types.EmptyRootHash)
+	mpt, err := NewStateTrie(id, db)
+	require.NoError(t, err)
+
+	updatedStoragesNum := 50000
+	updatedStorages := make(map[common.Hash][]byte)
+
+	random := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	acc := types.NewEmptyStateAccount(false)
+	acc.Balance = big.NewInt(1)
+	addr := common.BigToAddress(acc.Balance)
+	err = mpt.UpdateAccount(addr, acc)
+	storageId := StorageTrieID(id.Root, common.BytesToHash(zk.MustNewSecureHash(addr.Bytes()).Bytes()), acc.Root)
+	storageMpt, err := NewStateTrie(storageId, db)
+	require.NoError(t, err)
+
+	for i := 0; i < updatedStoragesNum; i++ {
+		// randomValue's minimum is 1
+		randomValue := common.BigToHash(new(big.Int).Add(common.Big1, big.NewInt(random.Int63()))).Bytes()
+		slot := big.NewInt(random.Int63()).Bytes()
+		err = storageMpt.UpdateStorage(common.Address{}, slot, randomValue)
+		updatedStorages[common.BytesToHash(slot)] = randomValue
+		require.NoError(t, err)
+	}
+
+	newRoot, set, err := mpt.Commit(true)
+	require.NoError(t, err)
+	err = db.Update(newRoot, id.Root, 0, trienode.NewWithNodeSet(set), nil)
+	require.NoError(t, err)
+	err = db.Commit(newRoot, true)
+	require.NoError(t, err)
+
+	newStorageRoot, set, err := storageMpt.Commit(true)
+	require.NoError(t, err)
+	err = db.Update(newStorageRoot, storageId.Root, 0, trienode.NewWithNodeSet(set), nil)
+	require.NoError(t, err)
+	err = db.Commit(newStorageRoot, true)
+	require.NoError(t, err)
+
+	rootNode := set.Nodes[""]
+	storages := make(map[common.Hash][]byte)
+	for path, node := range set.Nodes {
+		if IsLeafNode(node.Blob) {
+			fullPath, err := GetKeyFromPath(rootNode.Blob, memdb, []byte(path))
+			require.NoError(t, err)
+			slot := mpt.GetKey(fullPath)
+			slotValue, err := NodeBlobToSlot(node.Blob)
+
+			require.NoError(t, err)
+			storages[common.BytesToHash(slot)] = slotValue
+		}
+	}
+	require.Equal(t, updatedStorages, storages)
+}
+
+// [Kroma: END]

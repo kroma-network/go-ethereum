@@ -182,10 +182,11 @@ func (m *StateMigrator) migrateAccount(header *types.Header) error {
 		return err
 	}
 
-	root, err := m.commit(mpt, types.EmptyRootHash)
+	root, _, err := m.commit(mpt, types.EmptyRootHash)
 	if err != nil {
 		return err
 	}
+
 	log.Info("Account migration finished", "accounts", accounts.Load(), "elapsed", time.Since(startAt))
 
 	if err := m.migratedRef.Update(root, header.Number.Uint64()); err != nil {
@@ -239,10 +240,11 @@ func (m *StateMigrator) migrateStorage(
 		return common.Hash{}, err
 	}
 
-	root, err := m.commit(mpt, types.EmptyRootHash)
+	root, _, err := m.commit(mpt, types.EmptyRootHash)
 	if err != nil {
 		return common.Hash{}, err
 	}
+
 	log.Debug("Storage migration finished", "account", address, "slots", slots.Load(), "elapsed", time.Since(startAt))
 	return root, nil
 }
@@ -259,14 +261,14 @@ func (m *StateMigrator) readZkPreimage(hashKey common.Hash) ([]byte, error) {
 	return []byte{}, fmt.Errorf("preimage does not exist: %s", hashKey.Hex())
 }
 
-func (m *StateMigrator) commit(mpt *trie.StateTrie, parentHash common.Hash) (common.Hash, error) {
+func (m *StateMigrator) commit(mpt *trie.StateTrie, parentHash common.Hash) (common.Hash, *trienode.NodeSet, error) {
 	root, set, err := mpt.Commit(true)
 	if err != nil {
-		return common.Hash{}, err
+		return common.Hash{}, nil, err
 	}
 	if set == nil {
 		log.Warn("Tried to commit state changes, but nothing has changed.", "root", root)
-		return root, nil
+		return root, nil, nil
 	}
 
 	// NOTE(pangssu): It is possible that the keccak256 and poseidon hashes collide, and data loss can occur.
@@ -276,17 +278,17 @@ func (m *StateMigrator) commit(mpt *trie.StateTrie, parentHash common.Hash) (com
 			continue
 		}
 		if node, err := zk.NewTreeNodeFromBlob(data); err == nil {
-			return common.Hash{}, fmt.Errorf("hash collision detected: hashKey: %v, path: %v, data: %v, zkNode: %v", mptNode.Hash, path, data, node.Hash())
+			return common.Hash{}, nil, fmt.Errorf("hash collision detected: hashKey: %v, path: %v, data: %v, zkNode: %v", mptNode.Hash, path, data, node.Hash())
 		}
 	}
 
 	if err := m.mptdb.Update(root, parentHash, 0, trienode.NewWithNodeSet(set), nil); err != nil {
-		return common.Hash{}, err
+		return common.Hash{}, nil, err
 	}
 	if err := m.mptdb.Commit(root, false); err != nil {
-		return common.Hash{}, err
+		return common.Hash{}, nil, err
 	}
-	return root, nil
+	return root, set, nil
 }
 
 func (m *StateMigrator) FinalizeTransition(transitionBlock types.Block) {
@@ -310,20 +312,4 @@ func (m *StateMigrator) FinalizeTransition(transitionBlock types.Block) {
 	m.backend.BlockChain().TrieDB().SetBackend(false)
 
 	log.Info("Wrote chain config", "bedrock-block", cfg.BedrockBlock, "zktrie", cfg.Zktrie)
-
-	// TODO(pangssu): Delete this goroutine when other validation logic is implemented.
-	// Perform a final validation of all migrated state. This takes a long time.
-	go func() {
-		startAt := time.Now()
-		log.Info("Start validation for all migrated state")
-		zkBlock := m.backend.BlockChain().GetBlockByNumber(m.migratedRef.BlockNumber())
-		if zkBlock == nil {
-			panic(fmt.Errorf("zk block %d not found", m.migratedRef.BlockNumber()))
-		}
-		if err := m.ValidateMigratedState(m.migratedRef.Root(), zkBlock.Root()); err != nil {
-			panic(err)
-		}
-		log.Info("All migrated state have been validated", "elapsed", time.Since(startAt))
-		m.cancel()
-	}()
 }
