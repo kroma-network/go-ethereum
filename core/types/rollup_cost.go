@@ -55,7 +55,10 @@ var (
 	EcotoneL1AttributesSelector = []byte{0x44, 0x0a, 0x5e, 0x20}
 
 	// L1BlockAddr is the address of the L1Block contract which stores the L1 gas attributes.
-	L1BlockAddr = common.HexToAddress("0x4200000000000000000000000000000000000002")
+	L1BlockAddr = common.HexToAddress("0x4200000000000000000000000000000000000015")
+	// [Kroma: START]
+	KromaL1BlockAddr = common.HexToAddress("0x4200000000000000000000000000000000000002")
+	// [Kroma: END]
 
 	L1BaseFeeSlot = common.BigToHash(big.NewInt(1))
 	OverheadSlot  = common.BigToHash(big.NewInt(5))
@@ -133,8 +136,15 @@ func NewL1CostFunc(config *params.ChainConfig, statedb StateGetter) L1CostFunc {
 			if !config.IsOptimismEcotone(blockTime) {
 				cachedFunc = newL1CostFuncBedrock(config, statedb, blockTime)
 			} else {
-				l1BlobBaseFee := statedb.GetState(L1BlockAddr, L1BlobBaseFeeSlot).Big()
-				l1FeeScalars := statedb.GetState(L1BlockAddr, L1FeeScalarsSlot).Bytes()
+				// [Kroma: START]
+				l1BlockAddr := KromaL1BlockAddr
+				if config.IsKromaMPT(blockTime) {
+					l1BlockAddr = L1BlockAddr
+				}
+				// [Kroma: END]
+
+				l1BlobBaseFee := statedb.GetState(l1BlockAddr, L1BlobBaseFeeSlot).Big()
+				l1FeeScalars := statedb.GetState(l1BlockAddr, L1FeeScalarsSlot).Bytes()
 
 				// Edge case: the very first Ecotone block requires we use the Bedrock cost
 				// function. We detect this scenario by checking if the Ecotone parameters are
@@ -145,7 +155,7 @@ func NewL1CostFunc(config *params.ChainConfig, statedb StateGetter) L1CostFunc {
 					log.Info("using bedrock l1 cost func for first Ecotone block", "time", blockTime)
 					cachedFunc = newL1CostFuncBedrock(config, statedb, blockTime)
 				} else {
-					l1BaseFee := statedb.GetState(L1BlockAddr, L1BaseFeeSlot).Big()
+					l1BaseFee := statedb.GetState(l1BlockAddr, L1BaseFeeSlot).Big()
 					offset := scalarSectionStart
 					l1BaseFeeScalar := new(big.Int).SetBytes(l1FeeScalars[offset : offset+4])
 					l1BlobBaseFeeScalar := new(big.Int).SetBytes(l1FeeScalars[offset+4 : offset+8])
@@ -161,9 +171,16 @@ func NewL1CostFunc(config *params.ChainConfig, statedb StateGetter) L1CostFunc {
 // newL1CostFuncBedrock returns an L1 cost function suitable for Bedrock, Regolith, and the first
 // block only of the Ecotone upgrade.
 func newL1CostFuncBedrock(config *params.ChainConfig, statedb StateGetter, blockTime uint64) l1CostFunc {
-	l1BaseFee := statedb.GetState(L1BlockAddr, L1BaseFeeSlot).Big()
-	overhead := statedb.GetState(L1BlockAddr, OverheadSlot).Big()
-	scalar := statedb.GetState(L1BlockAddr, ScalarSlot).Big()
+	// [Kroma: START]
+	l1BlockAddr := KromaL1BlockAddr
+	if config.IsKromaMPT(blockTime) {
+		l1BlockAddr = L1BlockAddr
+	}
+	// [Kroma: END]
+
+	l1BaseFee := statedb.GetState(l1BlockAddr, L1BaseFeeSlot).Big()
+	overhead := statedb.GetState(l1BlockAddr, OverheadSlot).Big()
+	scalar := statedb.GetState(l1BlockAddr, ScalarSlot).Big()
 	isRegolith := config.IsRegolith(blockTime)
 	return newL1CostFuncBedrockHelper(l1BaseFee, overhead, scalar, isRegolith)
 }
