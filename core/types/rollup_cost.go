@@ -244,7 +244,9 @@ func extractL1GasParams(config *params.ChainConfig, time uint64, data []byte) (l
 		// edge case: for the very first Ecotone block we still need to use the Bedrock
 		// function. We detect this edge case by seeing if the function selector is the old one
 		if len(data) >= 4 && !bytes.Equal(data[0:4], BedrockL1AttributesSelector) {
-			l1BaseFee, costFunc, err = extractL1GasParamsEcotone(data)
+			// [Kroma: START]
+			l1BaseFee, costFunc, err = extractL1GasParamsEcotone(data, config.IsKromaMPT(time))
+			// [Kroma: END]
 			return
 		}
 	}
@@ -266,10 +268,15 @@ func extractL1GasParams(config *params.ChainConfig, time uint64, data []byte) (l
 
 // extractEcotoneL1GasParams extracts the gas parameters necessary to compute gas from L1 attribute
 // info calldata after the Ecotone upgrade, but not for the very first Ecotone block.
-func extractL1GasParamsEcotone(data []byte) (l1BaseFee *big.Int, costFunc l1CostFunc, err error) {
-	if len(data) != 196 {
+func extractL1GasParamsEcotone(data []byte, isKromaMPT bool) (l1BaseFee *big.Int, costFunc l1CostFunc, err error) {
+	// [Kroma: START]
+	if len(data) != 196 && !isKromaMPT {
 		return nil, nil, fmt.Errorf("expected 196 L1 info bytes, got %d", len(data))
+	} else if len(data) != 164 && isKromaMPT {
+		return nil, nil, fmt.Errorf("expected 164 L1 info bytes, got %d", len(data))
 	}
+	// [Kroma: END]
+
 	// data layout assumed for Ecotone:
 	// offset type varname
 	// 0      <selector>

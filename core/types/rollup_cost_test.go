@@ -105,7 +105,7 @@ func TestExtractEcotoneGasParams(t *testing.T) {
 
 	// make sure wrong amont of data results in error
 	data = append(data, 0x00) // tack on garbage byte
-	_, _, err = extractL1GasParamsEcotone(data)
+	_, _, err = extractL1GasParamsEcotone(data, false)
 	require.Error(t, err)
 }
 
