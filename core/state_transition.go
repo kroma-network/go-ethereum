@@ -547,7 +547,9 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	// Note optimismConfig will not be nil if rules.IsOptimismBedrock is true
 	// [Kroma: START]
 	if kromaConfig := st.evm.ChainConfig().Kroma; kromaConfig != nil && rules.IsOptimismBedrock && !st.msg.IsDepositTx {
-		st.state.AddBalance(params.KromaProtocolVault, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
+		if st.evm.ChainConfig().IsKromaMPT(st.evm.Context.Time) {
+			st.state.AddBalance(params.KromaProtocolVault, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
+		}
 		if cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); cost != nil {
 			st.state.AddBalance(params.KromaProposerRewardVault, cost)
 		}
