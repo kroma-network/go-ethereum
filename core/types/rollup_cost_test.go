@@ -93,7 +93,7 @@ func TestExtractEcotoneGasParams(t *testing.T) {
 	}
 	require.True(t, config.IsOptimismEcotone(0))
 
-	data := getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScalar)
+	data := getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScalar, false)
 
 	_, costFunc, _, err := extractL1GasParams(config, 0, data)
 	require.NoError(t, err)
@@ -108,6 +108,36 @@ func TestExtractEcotoneGasParams(t *testing.T) {
 	_, _, err = extractL1GasParamsEcotone(data, false)
 	require.Error(t, err)
 }
+
+// [Kroma: START]
+func TestExtractKromaMPTGasParams(t *testing.T) {
+	zeroTime := uint64(0)
+	// create a config where ecotone upgrade is active
+	config := &params.ChainConfig{
+		Kroma:        params.KromaTestConfig.Kroma,
+		RegolithTime: &zeroTime,
+		EcotoneTime:  &zeroTime,
+		KromaMPTTime: &zeroTime,
+	}
+	require.True(t, config.IsOptimismEcotone(0))
+
+	data := getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScalar, true)
+
+	_, costFunc, _, err := extractL1GasParams(config, 0, data)
+	require.NoError(t, err)
+
+	c, g := costFunc(emptyTx.RollupCostData())
+
+	require.Equal(t, ecotoneGas, g)
+	require.Equal(t, ecotoneFee, c)
+
+	// make sure wrong amount of data results in error
+	data = append(data, 0x00) // tack on garbage byte
+	_, _, err = extractL1GasParamsEcotone(data, true)
+	require.Error(t, err)
+}
+
+// [Kroma: END]
 
 // make sure the first block of the ecotone upgrade is properly detected, and invokes the bedrock
 // cost function appropriately
@@ -145,7 +175,7 @@ func getBedrockL1Attributes(baseFee, overhead, scalar *big.Int) []byte {
 	return data
 }
 
-func getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScalar *big.Int) []byte {
+func getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScalar *big.Int, isKromaMPT bool) []byte {
 	ignored := big.NewInt(1234)
 	data := []byte{}
 	uint256 := make([]byte, 32)
@@ -162,7 +192,9 @@ func getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScal
 	data = append(data, ignored.FillBytes(uint256)...)
 	data = append(data, ignored.FillBytes(uint256)...)
 	// [Kroma: START]
-	data = append(data, ignored.FillBytes(uint256)...)
+	if !isKromaMPT {
+		data = append(data, ignored.FillBytes(uint256)...)
+	}
 	// [Kroma: END]
 	return data
 }

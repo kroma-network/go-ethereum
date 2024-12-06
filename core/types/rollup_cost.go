@@ -270,6 +270,8 @@ func extractL1GasParams(config *params.ChainConfig, time uint64, data []byte) (l
 // info calldata after the Ecotone upgrade, but not for the very first Ecotone block.
 func extractL1GasParamsEcotone(data []byte, isKromaMPT bool) (l1BaseFee *big.Int, costFunc l1CostFunc, err error) {
 	// [Kroma: START]
+	// Since validatorRewardScalar is removed after the Kroma MPT upgrade, the calldata can be 164 bytes long.
+	// Validate the length of the L1 info bytes accordingly.
 	if len(data) != 196 && !isKromaMPT {
 		return nil, nil, fmt.Errorf("expected 196 L1 info bytes, got %d", len(data))
 	} else if len(data) != 164 && isKromaMPT {
@@ -289,7 +291,6 @@ func extractL1GasParamsEcotone(data []byte, isKromaMPT bool) (l1BaseFee *big.Int
 	// 68    uint256 _blobBaseFee,
 	// 100   bytes32 _hash,
 	// 132   bytes32 _batcherHash,
-	// 164   uint256 _validatorRewardScalar
 	l1BaseFee = new(big.Int).SetBytes(data[36:68])
 	l1BlobBaseFee := new(big.Int).SetBytes(data[68:100])
 	l1BaseFeeScalar := new(big.Int).SetBytes(data[4:8])
