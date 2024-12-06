@@ -93,7 +93,7 @@ func TestExtractEcotoneGasParams(t *testing.T) {
 	}
 	require.True(t, config.IsOptimismEcotone(0))
 
-	data := getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScalar, false)
+	data := getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScalar)
 
 	_, costFunc, _, err := extractL1GasParams(config, 0, data)
 	require.NoError(t, err)
@@ -112,16 +112,18 @@ func TestExtractEcotoneGasParams(t *testing.T) {
 // [Kroma: START]
 func TestExtractKromaMPTGasParams(t *testing.T) {
 	zeroTime := uint64(0)
-	// create a config where ecotone upgrade is active
+	// create a config where Kroma MPT upgrade is active
 	config := &params.ChainConfig{
 		Kroma:        params.KromaTestConfig.Kroma,
 		RegolithTime: &zeroTime,
 		EcotoneTime:  &zeroTime,
 		KromaMPTTime: &zeroTime,
 	}
-	require.True(t, config.IsOptimismEcotone(0))
+	require.True(t, config.IsKromaMPT(0))
 
-	data := getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScalar, true)
+	data := getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScalar)
+	// Remove last 32 bytes (validatorRewardScalar).
+	data = data[:len(data)-32]
 
 	_, costFunc, _, err := extractL1GasParams(config, 0, data)
 	require.NoError(t, err)
@@ -175,7 +177,7 @@ func getBedrockL1Attributes(baseFee, overhead, scalar *big.Int) []byte {
 	return data
 }
 
-func getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScalar *big.Int, isKromaMPT bool) []byte {
+func getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScalar *big.Int) []byte {
 	ignored := big.NewInt(1234)
 	data := []byte{}
 	uint256 := make([]byte, 32)
@@ -192,9 +194,7 @@ func getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScal
 	data = append(data, ignored.FillBytes(uint256)...)
 	data = append(data, ignored.FillBytes(uint256)...)
 	// [Kroma: START]
-	if !isKromaMPT {
-		data = append(data, ignored.FillBytes(uint256)...)
-	}
+	data = append(data, ignored.FillBytes(uint256)...)
 	// [Kroma: END]
 	return data
 }
