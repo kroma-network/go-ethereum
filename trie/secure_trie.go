@@ -17,8 +17,11 @@
 package trie
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie/trienode"
 )
@@ -288,3 +291,133 @@ func (t *StateTrie) getSecKeyCache() map[string][]byte {
 	}
 	return t.secKeyCache
 }
+
+// [Kroma: START]
+func NodeBlobToAccount(node []byte) (*types.StateAccount, error) {
+	n := mustDecodeNodeUnsafe(nil, node)
+	var cn valueNode
+	switch n.(type) {
+	case *fullNode:
+		fn := n.(*fullNode)
+		v := fn.Children[16]
+		if v == nil {
+			return nil, fmt.Errorf("the fullnode doesnt't have child")
+		}
+		if _, ok := v.(valueNode); ok {
+			cn = v.(valueNode)
+			ret := new(types.StateAccount)
+			err := rlp.DecodeBytes(cn, ret)
+			return ret, err
+		}
+	case *shortNode:
+		sn := n.(*shortNode)
+		if _, ok := sn.Val.(valueNode); ok {
+			cn = sn.Val.(valueNode)
+			ret := new(types.StateAccount)
+			err := rlp.DecodeBytes(cn, ret)
+			return ret, err
+		}
+	}
+	return nil, fmt.Errorf("cannot reach here")
+}
+
+func NodeBlobToSlot(node []byte) ([]byte, error) {
+	n := mustDecodeNodeUnsafe(nil, node)
+	var cn valueNode
+	switch n.(type) {
+	case *fullNode:
+		fn := n.(*fullNode)
+		v := fn.Children[16]
+		if v == nil {
+			return nil, fmt.Errorf("the fullnode doesnt't have child")
+		}
+		if _, ok := v.(valueNode); ok {
+			cn = v.(valueNode)
+			_, content, _, err := rlp.Split(cn)
+			return content, err
+		}
+	case *shortNode:
+		sn := n.(*shortNode)
+		if _, ok := sn.Val.(valueNode); ok {
+			cn = sn.Val.(valueNode)
+			_, content, _, err := rlp.Split(cn)
+			return content, err
+		}
+	}
+	return nil, fmt.Errorf("cannot reach here")
+}
+
+func HexToCompact(hex string) []byte {
+	return hexToCompact([]byte(hex))
+}
+
+func IsLeafNode(node []byte) bool {
+	n := mustDecodeNodeUnsafe(nil, node)
+	switch n.(type) {
+	case *fullNode:
+		fn := n.(*fullNode)
+		v := fn.Children[16]
+		if v == nil {
+			break
+		}
+		if _, ok := v.(valueNode); ok {
+			return true
+		}
+	case *shortNode:
+		sn := n.(*shortNode)
+		if _, ok := sn.Val.(valueNode); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func GetKeyFromPath(rootNode []byte, db ethdb.Database, path []byte) ([]byte, error) {
+	var fullpath []byte
+	cnt := 0
+	if err := traverseNode(mustDecodeNodeUnsafe(nil, rootNode), path, 0, &fullpath, db, cnt); err != nil {
+		return nil, err
+	}
+	result := hexToKeybytes(fullpath)
+	if len(result) != 32 {
+		return nil, fmt.Errorf("fullpath length in not 32")
+	}
+	return result, nil
+}
+
+// when traverseNode is finished, fullpath will be filled with hashed key
+func traverseNode(n node, path []byte, pos int, fullpath *[]byte, db ethdb.Database, cnt int) error {
+	var err error
+	switch n := n.(type) {
+	case *shortNode:
+		*fullpath = append(*fullpath, n.Key...)
+		err = traverseNode(n.Val, path, pos+len(n.Key), fullpath, db, cnt+1)
+	case *fullNode:
+		*fullpath = append(*fullpath, path[pos])
+		err = traverseNode(n.Children[path[pos]], path, pos+1, fullpath, db, cnt+1)
+	case hashNode:
+		child, err := resolveNode(common.BytesToHash(n), db)
+		if err != nil {
+			return fmt.Errorf("cannot get resolveNode %x:%v", n, err)
+		}
+		err = traverseNode(child, path, pos, fullpath, db, cnt)
+		if err != nil {
+			return fmt.Errorf("cannot get resolveNode %x:%v", n, err)
+		}
+	}
+	return err
+}
+
+func resolveNode(hash common.Hash, db ethdb.Database) (node, error) {
+	buf, _ := db.Get(hash[:])
+	if buf == nil {
+		return nil, fmt.Errorf("proof node (hash %064x) missing", hash)
+	}
+	n, err := decodeNode(hash[:], buf)
+	if err != nil {
+		return nil, fmt.Errorf("bad proof node %v", err)
+	}
+	return n, err
+}
+
+// [Kroma: END]
