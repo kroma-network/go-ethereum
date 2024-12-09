@@ -105,6 +105,24 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 
 		// The individual checks for blob validity (version-check + not empty)
 		// happens in StateTransition.
+
+		// [Kroma: START]
+		if tx.IsDepositTx() {
+			otx, err := tx.MarshalBinary()
+			if err != nil {
+				return fmt.Errorf("failed to marshal transaction: %w", err)
+			}
+			isKromaDepTx, err := types.IsKromaDepositTx(otx[1:])
+			if err != nil {
+				return fmt.Errorf("failed to determine whether tx is a KromaDepositTx: %w", err)
+			}
+			// Before KromaMPT activation, the tx must be of the KromaDepositTx,
+			// and after activation, it must be of the DepositTx (not KromaDepositTx).
+			if v.config.IsPreKromaMPT(block.Time()) != isKromaDepTx {
+				return fmt.Errorf("unexpected deposit tx type in transaction at index %d", i)
+			}
+		}
+		// [Kroma: END]
 	}
 
 	// Check blob gas usage.
