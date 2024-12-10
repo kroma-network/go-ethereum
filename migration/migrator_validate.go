@@ -18,6 +18,16 @@ import (
 	"github.com/ethereum/go-ethereum/trie/trienode"
 )
 
+type Slot struct {
+	key   []byte
+	value []byte
+}
+
+type StateAccount struct {
+	addr  common.Address
+	value *types.StateAccount
+}
+
 func (m *StateMigrator) ValidateMigratedState(mptRoot common.Hash, zkRoot common.Hash) error {
 	var accounts atomic.Uint64
 	var slots atomic.Uint64
@@ -141,8 +151,8 @@ func (m *StateMigrator) ValidateMigratedState(mptRoot common.Hash, zkRoot common
 	return nil
 }
 
-// if verification succeeds, it returns nil
-func (m *StateMigrator) verifyState(tr *trie.StateTrie, set *trienode.NodeSet, prevRoot common.Hash, bn uint64) error {
+// if validation succeeds, it returns nil
+func (m *StateMigrator) validateState(tr *trie.StateTrie, set *trienode.NodeSet, prevRoot common.Hash, bn uint64) error {
 	if set == nil {
 		return nil
 	}
@@ -174,6 +184,9 @@ func (m *StateMigrator) verifyState(tr *trie.StateTrie, set *trienode.NodeSet, p
 	if err != nil {
 		return err
 	}
+
+	var deletedLeaves []*StateAccount
+	var updatedLeaves []*StateAccount
 	for path, node := range set.Nodes {
 		if node.IsDeleted() {
 			blob, _, err := originTrie.GetNode(trie.HexToCompact(path))
@@ -190,10 +203,7 @@ func (m *StateMigrator) verifyState(tr *trie.StateTrie, set *trienode.NodeSet, p
 					return fmt.Errorf("failed to get preimage for hashKey: %x", hk)
 				}
 				addr := common.BytesToAddress(preimage)
-				err = parentZkTrie.DeleteAccount(addr)
-				if err != nil {
-					return err
-				}
+				deletedLeaves = append(deletedLeaves, &StateAccount{addr, nil})
 			}
 		} else {
 			if trie.IsLeafNode(node.Blob) {
@@ -218,13 +228,24 @@ func (m *StateMigrator) verifyState(tr *trie.StateTrie, set *trienode.NodeSet, p
 				} else {
 					acc.Root = zkAcc.Root
 				}
-				err = parentZkTrie.UpdateAccount(addr, acc)
-				if err != nil {
-					return err
-				}
+				updatedLeaves = append(updatedLeaves, &StateAccount{addr, acc})
 			}
 		}
 	}
+
+	for _, leave := range deletedLeaves {
+		err = parentZkTrie.DeleteAccount(leave.addr)
+		if err != nil {
+			return err
+		}
+	}
+	for _, leave := range updatedLeaves {
+		err = parentZkTrie.UpdateAccount(leave.addr, leave.value)
+		if err != nil {
+			return err
+		}
+	}
+
 	zktRoot, _, err := parentZkTrie.Commit(false)
 	if err != nil {
 		return err
@@ -235,7 +256,7 @@ func (m *StateMigrator) verifyState(tr *trie.StateTrie, set *trienode.NodeSet, p
 	return nil
 }
 
-func (m *StateMigrator) verifyStorage(tr *trie.StateTrie, id *trie.ID, addr common.Address, set *trienode.NodeSet, bn uint64) error {
+func (m *StateMigrator) validateStorage(tr *trie.StateTrie, id *trie.ID, addr common.Address, set *trienode.NodeSet, bn uint64) error {
 	if set == nil {
 		return nil
 	}
@@ -271,12 +292,16 @@ func (m *StateMigrator) verifyStorage(tr *trie.StateTrie, id *trie.ID, addr comm
 	if err != nil {
 		return err
 	}
+
+	var deletedLeaves []*Slot
+	var updatedLeaves []*Slot
 	for path, node := range set.Nodes {
 		if node.IsDeleted() {
 			blob, _, err := originTrie.GetNode(trie.HexToCompact(path))
 			if err != nil {
 				return err
 			}
+
 			if blob != nil && trie.IsLeafNode(blob) {
 				hk, err := trie.GetKeyFromPath(originRootNode, m.db, []byte(path))
 				if err != nil {
@@ -286,14 +311,14 @@ func (m *StateMigrator) verifyStorage(tr *trie.StateTrie, id *trie.ID, addr comm
 				if preimage == nil {
 					return fmt.Errorf("failed to get preimage for hashKey: %x", hk)
 				}
-				slot := common.BytesToHash(preimage)
-				err = parentZkt.DeleteStorage(common.Address{}, slot.Bytes())
-				if err != nil {
-					return err
+				slot := common.BytesToHash(preimage).Bytes()
+				deletedLeaves = append(deletedLeaves, &Slot{slot, nil})
+				if addr.Cmp(common.HexToAddress("0x51901916b0a8A67b18299bb6fA16da4D7428f9cA")) == 0 {
+					if bytes.Compare(slot, hexutils.HexToBytes("5be7a1449cff78980bfa293037675a1770f220327e9386d49ba469c7210536a4")) == 0 {
+						fmt.Printf("[DeleteStorage]\n")
+					}
 				}
-				if bytes.Compare(slot.Bytes(), hexutils.HexToBytes("1db7b1394727b4ec83580f945ddf3bdf76fcb71f6c6109779c749ee7ec003004")) == 0 {
-					log.Info(fmt.Sprintf("[DeleteStorage] slot : %x", slot))
-				}
+
 			}
 		} else {
 			if trie.IsLeafNode(node.Blob) {
@@ -310,16 +335,29 @@ func (m *StateMigrator) verifyStorage(tr *trie.StateTrie, id *trie.ID, addr comm
 				if err != nil {
 					return err
 				}
-				if bytes.Compare(slot, hexutils.HexToBytes("1db7b1394727b4ec83580f945ddf3bdf76fcb71f6c6109779c749ee7ec003004")) == 0 {
-					log.Info(fmt.Sprintf("[UpdateStorage] slot : %x , value : %x", slot, val))
-				}
-				err = parentZkt.UpdateStorage(common.Address{}, slot, val)
-				if err != nil {
-					return err
+				updatedLeaves = append(updatedLeaves, &Slot{slot, val})
+				if addr.Cmp(common.HexToAddress("0x51901916b0a8A67b18299bb6fA16da4D7428f9cA")) == 0 {
+					if bytes.Compare(slot, hexutils.HexToBytes("5be7a1449cff78980bfa293037675a1770f220327e9386d49ba469c7210536a4")) == 0 {
+						fmt.Printf("[UpdateStorage] path %x slot %x\n", []byte(path), slot)
+					}
 				}
 			}
 		}
 	}
+
+	for _, leave := range deletedLeaves {
+		err = parentZkt.DeleteStorage(common.Address{}, leave.key)
+		if err != nil {
+			return err
+		}
+	}
+	for _, leave := range updatedLeaves {
+		err = parentZkt.UpdateStorage(common.Address{}, leave.key, leave.value)
+		if err != nil {
+			return err
+		}
+	}
+
 	zktRoot, _, err := parentZkt.Commit(false)
 	if err != nil {
 		return err
@@ -338,29 +376,34 @@ func (m *StateMigrator) verifyStorage(tr *trie.StateTrie, id *trie.ID, addr comm
 		return fmt.Errorf("account doesn't exist: %s", addr.Hex())
 	} else {
 		if zktRoot.Cmp(zkAcc.Root) != 0 {
-			err := m.printStoragesForDebug(zkAcc.Root, parentZkt)
-			if err != nil {
-				panic(err)
-			}
+			//err := m.printStoragesForDebug(zkAcc.Root, parentZkt)
+			//if err != nil {
+			//	panic(err)
+			//}
 			return fmt.Errorf("invalid migrated storage of account: %s", addr.Hex())
 		}
 	}
 	return nil
 }
 
+// TODO(Ben) : this func should be removed before this branch is merged
 func (m *StateMigrator) printStoragesForDebug(expectedStorageRoot common.Hash, actualZkt *trie.ZkMerkleStateTrie) error {
 	expectedZkt, err := trie.NewZkMerkleStateTrie(expectedStorageRoot, m.zktdb)
 	if err != nil {
 		return err
 	}
+	log.Info(fmt.Sprintf("expectedStorageRoot : %x\n", expectedStorageRoot))
+	log.Info(fmt.Sprintf("actualtorageRoot : %x\n", actualZkt.Hash()))
 
 	nodeIt, err := expectedZkt.NodeIterator(nil)
 	if err != nil {
 		return fmt.Errorf("failed to open node iterator (root: %s): %w", expectedZkt.Hash(), err)
 	}
 	iter := trie.NewIterator(nodeIt)
+	storageNum := 0
+	actualStorages := make(map[common.Hash]bool)
 	for iter.Next() {
-
+		storageNum++
 		hk := trie.IteratorKeyToHash(iter.Key, true)
 		preimage, err := m.readZkPreimage(*hk)
 		if err != nil {
@@ -374,18 +417,50 @@ func (m *StateMigrator) printStoragesForDebug(expectedStorageRoot common.Hash, a
 			log.Error("Failed to get storage value in MPT", "err", err)
 			return err
 		}
+		actualStorages[common.BytesToHash(slot)] = true
 		if !bytes.Equal(actualVal, zktVal) {
-
 			log.Warn(fmt.Sprintf("expected - slot : %x, val : %x\n", slot, zktVal))
 			log.Warn(fmt.Sprintf("actual - slot : %x, val : %x\n", slot, actualVal))
+		} else {
+			log.Info(fmt.Sprintf("passed validation - slot : %x, val : %x\n", slot, actualVal))
 		}
 
 		if err != nil {
 			return err
 		}
 	}
+	log.Info(fmt.Sprintf("expected storageNum : %d\n", storageNum))
 	if iter.Err != nil {
 		return fmt.Errorf("failed to traverse state trie (root: %s): %w", actualZkt.Hash(), iter.Err)
+	}
+
+	actualStorageNum := 0
+	{
+		nodeIt, err := actualZkt.NodeIterator(nil)
+		if err != nil {
+			return fmt.Errorf("failed to open actual zkt node iterator (root: %s): %w", actualZkt.Hash(), err)
+		}
+		iter := trie.NewIterator(nodeIt)
+		for iter.Next() {
+			actualStorageNum++
+			hk := trie.IteratorKeyToHash(iter.Key, true)
+			preimage, err := m.readZkPreimage(*hk)
+			if err != nil {
+				return err
+			}
+			slot := common.BytesToHash(preimage).Bytes()
+			zktVal := common.BytesToHash(iter.Value).Bytes()
+
+			if _, ok := actualStorages[common.BytesToHash(slot)]; !ok {
+				log.Warn("actualStorage has a slot doesn't exist in expectedStorage")
+				log.Warn(fmt.Sprintf("actual - slot : %x, val : %x\n", slot, zktVal))
+			}
+		}
+		log.Info(fmt.Sprintf("actual storageNum : %d\n", actualStorageNum))
+	}
+
+	if storageNum != actualStorageNum {
+		log.Warn(fmt.Sprintf("storage num is not equal : expected %d, actual %d\n", storageNum, actualStorageNum))
 	}
 
 	return nil

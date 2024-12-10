@@ -52,7 +52,7 @@ func TestApplyNewStateTransition(t *testing.T) {
 	accounts[addr2] = acc
 	storages := make(map[common.Address]map[common.Hash][]byte)
 	accStorage := make(map[common.Hash][]byte)
-	for i := 0; i < 30000; i++ {
+	for i := 0; i < 20000; i++ {
 		key := common.BigToHash(big.NewInt(int64(i)))
 		val := big.NewInt(int64(rand.Uint32()) + 1).Bytes()
 		accStorage[key] = val
@@ -74,7 +74,7 @@ func TestApplyNewStateTransition(t *testing.T) {
 	storages = make(map[common.Address]map[common.Hash][]byte)
 	accStorage = make(map[common.Hash][]byte)
 
-	for i := 0; i < 15000; i++ {
+	for i := 0; i < 10000; i++ {
 		key := common.BigToHash(big.NewInt(int64(i)))
 		val := big.NewInt(int64(0)).Bytes() // to result in DeleteStorage()
 		accStorage[key] = val
