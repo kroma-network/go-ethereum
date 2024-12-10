@@ -97,7 +97,7 @@ func (m *StateMigrator) applyAccountChanges(tr *trie.StateTrie, bn uint64, root 
 			}
 			// if set is nil, it means there are no changes, so we skip verification in that case.
 			if set != nil {
-				if err := m.verifyStorage(storageTr, id, addr, set, bn); err != nil {
+				if err := m.validateStorage(storageTr, id, addr, set, bn); err != nil {
 					return err
 				}
 			}
@@ -158,10 +158,9 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 		if err != nil {
 			return err
 		}
-
 		// if set is nil, it means there are no changes, so we skip verification in that case.
 		if set != nil {
-			if err := m.verifyState(tr, set, prevRoot, i); err != nil {
+			if err := m.validateState(tr, set, prevRoot, i); err != nil {
 				return err
 			}
 		}
