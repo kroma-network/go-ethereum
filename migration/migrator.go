@@ -86,7 +86,7 @@ func (m *StateMigrator) Start() {
 				return
 			}
 
-			err = m.ValidateMigratedState(m.migratedRef.Root(), safeHead.Root)
+			err = m.ValidateStateWithIterator(m.migratedRef.Root(), safeHead.Root)
 			if err != nil {
 				log.Error("Migrated state is invalid", "error", err)
 				return
@@ -100,15 +100,15 @@ func (m *StateMigrator) Start() {
 		for {
 			select {
 			case <-ticker.C:
-				currentBlock := m.backend.BlockChain().CurrentSafeBlock()
+				safeBlockNum := m.backend.BlockChain().CurrentSafeBlock()
 				// Skip block that have already been migrated.
-				if currentBlock == nil || m.migratedRef.BlockNumber() >= currentBlock.Number.Uint64() {
+				if safeBlockNum == nil || m.migratedRef.BlockNumber() >= safeBlockNum.Number.Uint64() {
 					continue
 				}
-				if m.backend.BlockChain().Config().IsKromaMPT(currentBlock.Time) {
+				if m.backend.BlockChain().Config().IsKromaMPT(safeBlockNum.Time) {
 					return
 				}
-				err := m.applyNewStateTransition(currentBlock.Number.Uint64())
+				err := m.applyNewStateTransition(safeBlockNum.Number.Uint64())
 				if err != nil {
 					log.Error("Failed to apply new state transition", "error", err)
 				}
@@ -321,7 +321,7 @@ func (m *StateMigrator) FinalizeTransition(transitionBlock types.Block) {
 		if zkBlock == nil {
 			panic(fmt.Errorf("zk block %d not found", m.migratedRef.BlockNumber()))
 		}
-		if err := m.ValidateMigratedState(m.migratedRef.Root(), zkBlock.Root()); err != nil {
+		if err := m.ValidateStateWithIterator(m.migratedRef.Root(), zkBlock.Root()); err != nil {
 			panic(err)
 		}
 		log.Info("All migrated state have been validated", "elapsed", time.Since(startAt))

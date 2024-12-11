@@ -111,32 +111,42 @@ func DeserializeStateChanges[T map[common.Address]bool | map[common.Hash][]byte 
 	return result, nil
 }
 
-func ReadStateChanges(db ethdb.KeyValueStore, blockNumber uint64) (map[common.Address]bool, map[common.Hash][]byte, map[common.Hash]map[common.Hash][]byte, error) {
+type StateChanges struct {
+	Accounts map[common.Hash][]byte
+	Storages map[common.Hash]map[common.Hash][]byte
+	Destruct map[common.Address]bool
+}
+
+func ReadStateChanges(db ethdb.KeyValueStore, blockNumber uint64) (*StateChanges, error) {
 	enc, err := db.Get(DestructChangesKey(blockNumber))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	destruct, err := DeserializeStateChanges[map[common.Address]bool](enc)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	enc, err = db.Get(AccountChangesKey(blockNumber))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	accounts, err := DeserializeStateChanges[map[common.Hash][]byte](enc)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	enc, err = db.Get(StorageChangesKey(blockNumber))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	storages, err := DeserializeStateChanges[map[common.Hash]map[common.Hash][]byte](enc)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
-	return destruct, accounts, storages, nil
+	return &StateChanges{
+		Accounts: accounts,
+		Storages: storages,
+		Destruct: destruct,
+	}, nil
 }
 
 // WriteStateChanges should be called in Kroma MPT migration time

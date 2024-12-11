@@ -122,25 +122,25 @@ func (m *StateMigrator) applyStorageChanges(mptStorageTrie *trie.StateTrie, stor
 	return m.commit(mptStorageTrie, storageRoot)
 }
 
-func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
-	start := m.migratedRef.BlockNumber() + 1
+func (m *StateMigrator) applyNewStateTransition(safeBlockNum uint64) error {
+	startBlockNum := m.migratedRef.BlockNumber() + 1
 	prevRoot := m.migratedRef.Root()
-	for i := start; i <= headNumber; i++ {
-		log.Info("Apply new state to MPT", "block", i, "prevRoot", prevRoot.TerminalString())
+	for blockNum := startBlockNum; blockNum <= safeBlockNum; blockNum++ {
+		log.Info("Apply new state to MPT", "block", blockNum, "prevRoot", prevRoot.TerminalString())
 
 		mptStateTrie, err := trie.NewStateTrie(trie.StateTrieID(prevRoot), m.mptdb)
 		if err != nil {
 			return err
 		}
 
-		destructChanges, accountChanges, storageChanges, err := core.ReadStateChanges(m.db, i)
+		changes, err := core.ReadStateChanges(m.db, blockNum)
 		if err != nil {
 			return err
 		}
-		if err := m.applyDestructChanges(mptStateTrie, prevRoot, destructChanges); err != nil {
+		if err := m.applyDestructChanges(mptStateTrie, prevRoot, changes.Destruct); err != nil {
 			return err
 		}
-		if err := m.applyAccountChanges(mptStateTrie, prevRoot, accountChanges, storageChanges); err != nil {
+		if err := m.applyAccountChanges(mptStateTrie, prevRoot, changes.Accounts, changes.Storages); err != nil {
 			return err
 		}
 
@@ -148,11 +148,14 @@ func (m *StateMigrator) applyNewStateTransition(headNumber uint64) error {
 		if err != nil {
 			return err
 		}
-		if err := m.migratedRef.Update(root, i); err != nil {
+		// Validate that the state has been properly stored in the MPT.
+		if err := m.ValidateNewState(blockNum, root, changes); err != nil {
 			return err
 		}
-
-		if err := core.DeleteStateChanges(m.db, i); err != nil {
+		if err := m.migratedRef.Update(root, blockNum); err != nil {
+			return err
+		}
+		if err := core.DeleteStateChanges(m.db, blockNum); err != nil {
 			return err
 		}
 
