@@ -59,11 +59,12 @@ type leaf struct {
 // NodeSet contains a set of nodes collected during the commit operation.
 // Each node is keyed by path. It's not thread-safe to use.
 type NodeSet struct {
-	Owner   common.Hash
-	Leaves  []*leaf
-	Nodes   map[string]*Node
-	updates int // the count of updated and inserted nodes
-	deletes int // the count of deleted nodes
+	Owner       common.Hash
+	Leaves      []*leaf
+	Nodes       map[string]*Node
+	updates     int // the count of updated and inserted nodes
+	deletes     int // the count of deleted nodes
+	DeletedKeys map[common.Hash]bool
 }
 
 // NewNodeSet initializes a node set. The owner is zero for the account trie and
@@ -142,7 +143,7 @@ func (set *NodeSet) Hashes() []common.Hash {
 
 // Summary returns a string-representation of the NodeSet.
 func (set *NodeSet) Summary() string {
-	var out = new(strings.Builder)
+	out := new(strings.Builder)
 	fmt.Fprintf(out, "nodeset owner: %v\n", set.Owner)
 	if set.Nodes != nil {
 		for path, n := range set.Nodes {

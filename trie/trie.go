@@ -448,6 +448,9 @@ func (t *Trie) delete(n node, prefix, key []byte) (bool, node, error) {
 			// need to be tracked at all since it's always embedded.
 			t.tracer.onDelete(prefix)
 
+			// [Kroma: START]
+			t.tracer.onDeleteKroma(hexToKeybytes(append(prefix, key...)))
+			// [Kroma: END]
 			return true, nil, nil // remove n entirely for whole matches
 		}
 		// The key is longer than n.Key. Remove the remaining suffix
@@ -528,8 +531,8 @@ func (t *Trie) delete(n node, prefix, key []byte) (bool, node, error) {
 					// Replace the entire full node with the short node.
 					// Mark the original short node as deleted since the
 					// value is embedded into the parent now.
-					t.tracer.onDelete(append(prefix, byte(pos)))
 
+					t.tracer.onDelete(append(prefix, byte(pos)))
 					k := append([]byte{byte(pos)}, cnode.Key...)
 					return true, &shortNode{k, cnode.Val, t.newFlag()}, nil
 				}
@@ -625,6 +628,9 @@ func (t *Trie) Commit(collectLeaf bool) (common.Hash, *trienode.NodeSet, error) 
 		for _, path := range paths {
 			nodes.AddNode([]byte(path), trienode.NewDeleted())
 		}
+		// [Kroma: START]
+		nodes.DeletedKeys = t.tracer.deletedKeys
+		// [Kroma: END]
 		return types.EmptyRootHash, nodes, nil // case (b)
 	}
 	// Derive the hash for all dirty nodes first. We hold the assumption
@@ -643,6 +649,9 @@ func (t *Trie) Commit(collectLeaf bool) (common.Hash, *trienode.NodeSet, error) 
 	for _, path := range t.tracer.deletedNodes() {
 		nodes.AddNode([]byte(path), trienode.NewDeleted())
 	}
+	// [Kroma: START]
+	nodes.DeletedKeys = t.tracer.deletedKeys
+	// [Kroma: END]
 	t.root = newCommitter(nodes, t.tracer, collectLeaf).Commit(t.root)
 	return rootHash, nodes, nil
 }

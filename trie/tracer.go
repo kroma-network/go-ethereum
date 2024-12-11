@@ -43,6 +43,9 @@ type tracer struct {
 	inserts    map[string]struct{}
 	deletes    map[string]struct{}
 	accessList map[string][]byte
+	// [Kroma: START]
+	deletedKeys map[common.Hash]bool
+	// [Kroma: ENd]
 }
 
 // newTracer initializes the tracer for capturing trie changes.
@@ -51,6 +54,9 @@ func newTracer() *tracer {
 		inserts:    make(map[string]struct{}),
 		deletes:    make(map[string]struct{}),
 		accessList: make(map[string][]byte),
+		// [Kroma: START]
+		deletedKeys: make(map[common.Hash]bool),
+		// [Kroma: END]
 	}
 }
 
@@ -88,6 +94,9 @@ func (t *tracer) reset() {
 	t.inserts = make(map[string]struct{})
 	t.deletes = make(map[string]struct{})
 	t.accessList = make(map[string][]byte)
+	// [Kroma: START]
+	t.deletedKeys = make(map[common.Hash]bool)
+	// [Kroma: END]
 }
 
 // copy returns a deep copied tracer instance.
@@ -128,3 +137,10 @@ func (t *tracer) deletedNodes() []string {
 	}
 	return paths
 }
+
+// [Kroma: START]
+func (t *tracer) onDeleteKroma(key []byte) {
+	t.deletedKeys[common.BytesToHash(key)] = true
+}
+
+// [Kroma: END]

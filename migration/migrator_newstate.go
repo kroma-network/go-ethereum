@@ -97,7 +97,7 @@ func (m *StateMigrator) applyAccountChanges(tr *trie.StateTrie, bn uint64, root 
 			}
 			// if set is nil, it means there are no changes, so we skip verification in that case.
 			if set != nil {
-				if err := m.validateStorage(storageTr, id, addr, set, bn); err != nil {
+				if err := m.validateStorage(storageTr, addr, set, bn); err != nil {
 					return err
 				}
 			}

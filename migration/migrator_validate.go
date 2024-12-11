@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/status-im/keycard-go/hexutils"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -175,39 +174,29 @@ func (m *StateMigrator) validateState(tr *trie.StateTrie, set *trienode.NodeSet,
 	if err != nil {
 		return err
 	}
-	originTrie, err := trie.NewStateTrie(trie.StateTrieID(prevRoot), m.mptdb)
-	if err != nil {
-		return err
-	}
-	updatedRootNode := set.Nodes[""].Blob
-	originRootNode, _, err := originTrie.GetNode([]byte(""))
+
+	rootNode := set.Nodes[""].Blob
 	if err != nil {
 		return err
 	}
 
 	var deletedLeaves []*StateAccount
 	var updatedLeaves []*StateAccount
-	for path, node := range set.Nodes {
-		if node.IsDeleted() {
-			blob, _, err := originTrie.GetNode(trie.HexToCompact(path))
-			if err != nil {
-				return err
-			}
-			if blob != nil && trie.IsLeafNode(blob) {
-				hk, err := trie.GetKeyFromPath(originRootNode, m.db, []byte(path))
-				if err != nil {
-					return err
-				}
-				preimage := tr.GetKey(hk)
-				if preimage == nil {
-					return fmt.Errorf("failed to get preimage for hashKey: %x", hk)
-				}
-				addr := common.BytesToAddress(preimage)
-				deletedLeaves = append(deletedLeaves, &StateAccount{addr, nil})
-			}
+
+	for hk := range set.DeletedKeys {
+		preimage := tr.GetKey(hk.Bytes())
+		if preimage == nil {
+			return fmt.Errorf("failed to get preimage for hashKey: %x", hk)
 		} else {
+			addr := common.BytesToAddress(preimage)
+			deletedLeaves = append(deletedLeaves, &StateAccount{addr, nil})
+		}
+	}
+
+	for path, node := range set.Nodes {
+		if !node.IsDeleted() {
 			if trie.IsLeafNode(node.Blob) {
-				hk, err := trie.GetKeyFromPath(updatedRootNode, m.db, []byte(path))
+				hk, err := trie.GetKeyFromPath(rootNode, m.db, []byte(path))
 				if err != nil {
 					return err
 				}
@@ -256,7 +245,7 @@ func (m *StateMigrator) validateState(tr *trie.StateTrie, set *trienode.NodeSet,
 	return nil
 }
 
-func (m *StateMigrator) validateStorage(tr *trie.StateTrie, id *trie.ID, addr common.Address, set *trienode.NodeSet, bn uint64) error {
+func (m *StateMigrator) validateStorage(tr *trie.StateTrie, addr common.Address, set *trienode.NodeSet, bn uint64) error {
 	if set == nil {
 		return nil
 	}
@@ -283,46 +272,29 @@ func (m *StateMigrator) validateStorage(tr *trie.StateTrie, id *trie.ID, addr co
 	if err != nil {
 		return err
 	}
-	originTrie, err := trie.NewStateTrie(id, m.mptdb)
-	if err != nil {
-		return err
-	}
-	updatedRootNode := set.Nodes[""].Blob
-	originRootNode, _, err := originTrie.GetNode([]byte(""))
+	rootNode := set.Nodes[""].Blob
 	if err != nil {
 		return err
 	}
 
 	var deletedLeaves []*Slot
 	var updatedLeaves []*Slot
-	for path, node := range set.Nodes {
-		if node.IsDeleted() {
-			blob, _, err := originTrie.GetNode(trie.HexToCompact(path))
-			if err != nil {
-				return err
-			}
 
-			if blob != nil && trie.IsLeafNode(blob) {
-				hk, err := trie.GetKeyFromPath(originRootNode, m.db, []byte(path))
-				if err != nil {
-					return err
-				}
-				preimage := tr.GetKey(hk)
-				if preimage == nil {
-					return fmt.Errorf("failed to get preimage for hashKey: %x", hk)
-				}
-				slot := common.BytesToHash(preimage).Bytes()
-				deletedLeaves = append(deletedLeaves, &Slot{slot, nil})
-				if addr.Cmp(common.HexToAddress("0x51901916b0a8A67b18299bb6fA16da4D7428f9cA")) == 0 {
-					if bytes.Compare(slot, hexutils.HexToBytes("5be7a1449cff78980bfa293037675a1770f220327e9386d49ba469c7210536a4")) == 0 {
-						fmt.Printf("[DeleteStorage]\n")
-					}
-				}
-
-			}
+	for hk := range set.DeletedKeys {
+		preimage := tr.GetKey(hk.Bytes())
+		if preimage == nil {
+			return fmt.Errorf("failed to get preimage for hashKey: %x", hk)
 		} else {
+			slot := common.BytesToHash(preimage).Bytes()
+			deletedLeaves = append(deletedLeaves, &Slot{slot, nil})
+
+		}
+	}
+
+	for path, node := range set.Nodes {
+		if !node.IsDeleted() {
 			if trie.IsLeafNode(node.Blob) {
-				hk, err := trie.GetKeyFromPath(updatedRootNode, m.db, []byte(path))
+				hk, err := trie.GetKeyFromPath(rootNode, m.db, []byte(path))
 				if err != nil {
 					return err
 				}
@@ -336,11 +308,6 @@ func (m *StateMigrator) validateStorage(tr *trie.StateTrie, id *trie.ID, addr co
 					return err
 				}
 				updatedLeaves = append(updatedLeaves, &Slot{slot, val})
-				if addr.Cmp(common.HexToAddress("0x51901916b0a8A67b18299bb6fA16da4D7428f9cA")) == 0 {
-					if bytes.Compare(slot, hexutils.HexToBytes("5be7a1449cff78980bfa293037675a1770f220327e9386d49ba469c7210536a4")) == 0 {
-						fmt.Printf("[UpdateStorage] path %x slot %x\n", []byte(path), slot)
-					}
-				}
 			}
 		}
 	}
@@ -376,10 +343,10 @@ func (m *StateMigrator) validateStorage(tr *trie.StateTrie, id *trie.ID, addr co
 		return fmt.Errorf("account doesn't exist: %s", addr.Hex())
 	} else {
 		if zktRoot.Cmp(zkAcc.Root) != 0 {
-			//err := m.printStoragesForDebug(zkAcc.Root, parentZkt)
-			//if err != nil {
-			//	panic(err)
-			//}
+			err := m.printStoragesForDebug(zkAcc.Root, parentZkt)
+			if err != nil {
+				panic(err)
+			}
 			return fmt.Errorf("invalid migrated storage of account: %s", addr.Hex())
 		}
 	}
