@@ -5,9 +5,10 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -215,6 +216,10 @@ func (sg *testStateGetter) GetState(addr common.Address, slot common.Hash) commo
 		sg.scalar.FillBytes(buf[:])
 	case L1BlobBaseFeeSlot:
 		sg.blobBaseFee.FillBytes(buf[:])
+	// [Kroma: START]
+	case KromaL1BlobBaseFeeSlot:
+		sg.blobBaseFee.FillBytes(buf[:])
+	// [Kroma: END]
 	case L1FeeScalarsSlot:
 		offset := scalarSectionStart
 		binary.BigEndian.PutUint32(buf[offset:offset+4], sg.baseFeeScalar)
