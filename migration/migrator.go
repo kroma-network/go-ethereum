@@ -311,20 +311,4 @@ func (m *StateMigrator) FinalizeTransition(transitionBlock types.Block) {
 	m.backend.BlockChain().TrieDB().SetBackend(false)
 
 	log.Info("Wrote chain config", "bedrock-block", cfg.BedrockBlock, "zktrie", cfg.Zktrie)
-
-	// TODO(pangssu): Delete this goroutine when other validation logic is implemented.
-	// Perform a final validation of all migrated state. This takes a long time.
-	go func() {
-		startAt := time.Now()
-		log.Info("Start validation for all migrated state")
-		zkBlock := m.backend.BlockChain().GetBlockByNumber(m.migratedRef.BlockNumber())
-		if zkBlock == nil {
-			panic(fmt.Errorf("zk block %d not found", m.migratedRef.BlockNumber()))
-		}
-		if err := m.ValidateStateWithIterator(m.migratedRef.Root(), zkBlock.Root()); err != nil {
-			panic(err)
-		}
-		log.Info("All migrated state have been validated", "elapsed", time.Since(startAt))
-		m.cancel()
-	}()
 }
