@@ -56,24 +56,24 @@ var (
 
 	// L1BlockAddr is the address of the L1Block contract which stores the L1 gas attributes.
 	L1BlockAddr = common.HexToAddress("0x4200000000000000000000000000000000000015")
-	// [Kroma: START]
-	KromaL1BlockAddr = common.HexToAddress("0x4200000000000000000000000000000000000002")
-	// [Kroma: END]
 
 	L1BaseFeeSlot = common.BigToHash(big.NewInt(1))
 	OverheadSlot  = common.BigToHash(big.NewInt(5))
 	ScalarSlot    = common.BigToHash(big.NewInt(6))
 
-	// [Kroma: START]
-	// The addition of validatorRewardScalar pushes slot back by one space
-	// L2BlobBaseFeeSlot was added with the Ecotone upgrade and stores the blobBaseFee L1 gas
+	// L1BlobBaseFeeSlot was added with the Ecotone upgrade and stores the blobBaseFee L1 gas
 	// attribute.
-	L1BlobBaseFeeSlot = common.BigToHash(big.NewInt(8))
-	// [Kroma: END]
+	L1BlobBaseFeeSlot = common.BigToHash(big.NewInt(7))
 	// L1FeeScalarsSlot as of the Ecotone upgrade stores the 32-bit basefeeScalar and
 	// blobBaseFeeScalar L1 gas attributes at offsets `BaseFeeScalarSlotOffset` and
 	// `BlobBaseFeeScalarSlotOffset` respectively.
 	L1FeeScalarsSlot = common.BigToHash(big.NewInt(3))
+
+	// [Kroma: START]
+	KromaL1BlockAddr = common.HexToAddress("0x4200000000000000000000000000000000000002")
+	// The addition of validatorRewardScalar pushes slot back by one space
+	KromaL1BlobBaseFeeSlot = common.BigToHash(big.NewInt(8))
+	// [Kroma: END]
 
 	oneMillion     = big.NewInt(1_000_000)
 	ecotoneDivisor = big.NewInt(1_000_000 * 16)
@@ -138,12 +138,14 @@ func NewL1CostFunc(config *params.ChainConfig, statedb StateGetter) L1CostFunc {
 			} else {
 				// [Kroma: START]
 				l1BlockAddr := KromaL1BlockAddr
+				l1BlobBaseFeeSlot := KromaL1BlobBaseFeeSlot
 				if config.IsKromaMPT(blockTime) {
 					l1BlockAddr = L1BlockAddr
+					l1BlobBaseFeeSlot = L1BlobBaseFeeSlot
 				}
 				// [Kroma: END]
 
-				l1BlobBaseFee := statedb.GetState(l1BlockAddr, L1BlobBaseFeeSlot).Big()
+				l1BlobBaseFee := statedb.GetState(l1BlockAddr, l1BlobBaseFeeSlot).Big()
 				l1FeeScalars := statedb.GetState(l1BlockAddr, L1FeeScalarsSlot).Bytes()
 
 				// Edge case: the very first Ecotone block requires we use the Bedrock cost
