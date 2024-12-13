@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	zktrie "github.com/kroma-network/zktrie/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -39,6 +40,16 @@ func TestApplyNewStateTransition(t *testing.T) {
 
 	m, err := NewStateMigrator(&eth)
 	require.NoError(t, err)
+
+	for i := 0; i < 50; i++ {
+		err = addBlockWithRandomChanges(m, []common.Address{
+			common.HexToAddress("0x0000000000000000000000000000000000001234"),
+			common.HexToAddress("0x0000000000000000000000000000000000001235"),
+			common.HexToAddress("0x0000000000000000000000000000000000001236"),
+		})
+		require.NoError(t, err)
+	}
+
 	head := rawdb.ReadHeadHeader(m.db)
 	err = m.migrateAccount(head)
 	require.NoError(t, err)
@@ -53,7 +64,7 @@ func TestApplyNewStateTransition(t *testing.T) {
 	}
 
 	for i := 0; i < 50; i++ {
-		err = addBlockWithRandomChanges(addresses, m)
+		err = addBlockWithRandomChanges(m, addresses)
 		require.NoError(t, err)
 		head = rawdb.ReadHeadHeader(m.db)
 		err = m.applyNewStateTransition(head.Number.Uint64())
@@ -66,20 +77,21 @@ func TestApplyNewStateTransition(t *testing.T) {
 		destructChanges[addresses[i]] = nil
 	}
 	err = addBlock(m, destructChanges, nil, nil)
-	head = rawdb.ReadHeadHeader(m.db)
 	require.NoError(t, err)
+
+	head = rawdb.ReadHeadHeader(m.db)
 	err = m.applyNewStateTransition(head.Number.Uint64())
 	require.NoError(t, err)
 
-	err = addBlockWithRandomChanges([]common.Address{addresses[0]}, m)
+	err = addBlockWithRandomChanges(m, []common.Address{addresses[0]})
 	require.NoError(t, err)
+
 	head = rawdb.ReadHeadHeader(m.db)
-	require.NoError(t, err)
 	err = m.applyNewStateTransition(head.Number.Uint64())
 	require.NoError(t, err)
 }
 
-// the storageRoot in accountState is calculated in this function. don't need to setting storageRoot
+// the storageRoot in accountState is calculated in this function. don't need to set storageRoot outside
 func addBlock(m *StateMigrator, destructChanges map[common.Address]*types.StateAccount, accountChanges map[common.Address]*types.StateAccount, storageChanges map[common.Address]map[common.Hash][]byte) error {
 	head := rawdb.ReadHeadHeader(m.db)
 
@@ -118,12 +130,7 @@ func addBlock(m *StateMigrator, destructChanges map[common.Address]*types.StateA
 			iter := trie.NewIterator(nodeIt)
 			for iter.Next() {
 				hk := trie.IteratorKeyToHash(iter.Key, true)
-				preimage, err := m.readZkPreimage(*hk)
-				if err != nil {
-					return err
-				}
-				slot := common.BytesToHash(preimage).Bytes()
-				if err := storageZkt.DeleteStorage(common.Address{}, slot); err != nil {
+				if err := storageZkt.MerkleTree.Delete(zktrie.ReverseByteOrder(hk.Bytes())); err != nil {
 					return err
 				}
 			}
@@ -234,7 +241,7 @@ func addBlock(m *StateMigrator, destructChanges map[common.Address]*types.StateA
 	return nil
 }
 
-func addBlockWithRandomChanges(addresses []common.Address, m *StateMigrator) error {
+func addBlockWithRandomChanges(m *StateMigrator, addresses []common.Address) error {
 	s := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(s)
 	accounts := make(map[common.Address]*types.StateAccount)
@@ -266,7 +273,6 @@ func randomBigInt(r *rand.Rand) *big.Int {
 	return big.NewInt(int64(r.Uint64() + uint64(1)))
 }
 
-// chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "eth/db/chaindata/", false)
 type fakeEthBackend struct {
 	chainDb    ethdb.Database
 	blockchain *core.BlockChain
