@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	zktrie "github.com/kroma-network/zktrie/types"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -163,6 +164,13 @@ func (m *StateMigrator) ValidateNewState(num uint64, mptRoot common.Hash, stateC
 	if err != nil {
 		return fmt.Errorf("failed to create zk state trie: %w", err)
 	}
+	zkt.WithTransformKey(func(key []byte) ([]byte, error) {
+		secureKey, err := zktrie.ToSecureKey(key)
+		if err != nil {
+			return nil, err
+		}
+		return zktrie.NewHashFromBigInt(secureKey)[:], nil
+	})
 	mpt, err := trie.NewStateTrie(trie.StateTrieID(mptRoot), m.mptdb)
 	if err != nil {
 		return fmt.Errorf("fail to create state trie: %w", err)
@@ -232,6 +240,13 @@ func (m *StateMigrator) ValidateNewState(num uint64, mptRoot common.Hash, stateC
 				if err != nil {
 					return fmt.Errorf("failed to create zkt storage: %w", err)
 				}
+				zktStorage.WithTransformKey(func(key []byte) ([]byte, error) {
+					secureKey, err := zktrie.ToSecureKey(key)
+					if err != nil {
+						return nil, err
+					}
+					return zktrie.NewHashFromBigInt(secureKey)[:], nil
+				})
 
 				for _, slot := range slots {
 					val, err := mptStorage.GetStorage(addr, slot.Bytes())
@@ -252,10 +267,7 @@ func (m *StateMigrator) ValidateNewState(num uint64, mptRoot common.Hash, stateC
 					}
 				}
 
-				zktAcc.Root, _, err = zktStorage.Commit(false)
-				if err != nil {
-					return fmt.Errorf("failed to commit zkt storage. address: %s, err: %w", addr, err)
-				}
+				zktAcc.Root = common.BytesToHash(zktStorage.MerkleTree.Hash())
 			}
 
 			err = zkt.UpdateAccount(addr, zktAcc)
@@ -264,10 +276,7 @@ func (m *StateMigrator) ValidateNewState(num uint64, mptRoot common.Hash, stateC
 			}
 		}
 	}
-	root, _, err := zkt.Commit(false)
-	if err != nil {
-		return fmt.Errorf("failed to commit zkt state. parent root: %s, err: %w", parent.Root, err)
-	}
+	root := common.BytesToHash(zkt.MerkleTree.Hash())
 	if header.Root != root {
 		return fmt.Errorf("failed to validate new state. expected root hash is %s, but got %s", header.Root, root)
 	}
