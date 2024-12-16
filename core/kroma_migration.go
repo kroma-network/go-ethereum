@@ -22,6 +22,8 @@ var (
 	destructChangesPrefix    = []byte("dC-")
 	migratedRootKey          = []byte("MigratedRoot")
 	migratedNumberKey        = []byte("MigratedNumber")
+	MigratedAccountsNumKey   = []byte("M-AN")
+	MigratedSlotsNumKey      = []byte("M-SN")
 )
 
 type MigratedRef struct {

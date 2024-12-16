@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -38,8 +39,10 @@ type StateMigrator struct {
 	allocPreimage map[common.Hash][]byte
 	migratedRef   *core.MigratedRef
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx      context.Context
+	cancel   context.CancelFunc
+	accounts uint64
+	slots    uint64
 }
 
 func NewStateMigrator(backend ethBackend) (*StateMigrator, error) {
@@ -48,6 +51,15 @@ func NewStateMigrator(backend ethBackend) (*StateMigrator, error) {
 	allocPreimage, err := zkPreimageFromAlloc(db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read genesis alloc: %w", err)
+	}
+
+	var migratedAccountsNum uint64
+	var migratedSlotsNum uint64
+	if b, _ := db.Get(core.MigratedAccountsNumKey); len(b) > 0 {
+		migratedAccountsNum = hexutil.MustDecodeUint64(string(b))
+	}
+	if b, _ := db.Get(core.MigratedSlotsNumKey); len(b) > 0 {
+		migratedSlotsNum = hexutil.MustDecodeUint64(string(b))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -63,8 +75,10 @@ func NewStateMigrator(backend ethBackend) (*StateMigrator, error) {
 		allocPreimage: allocPreimage,
 		migratedRef:   core.NewMigratedRef(db),
 
-		ctx:    ctx,
-		cancel: cancel,
+		ctx:      ctx,
+		cancel:   cancel,
+		accounts: migratedAccountsNum,
+		slots:    migratedSlotsNum,
 	}, nil
 }
 
@@ -97,6 +111,22 @@ func (m *StateMigrator) Start() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 		log.Info("Start a loop to apply state of new block")
+
+		// In progress logger
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go func() {
+			ticker := time.NewTicker(time.Minute)
+			for {
+				select {
+				case <-ticker.C:
+					log.Info("Migrated state validation in progress", "accounts", m.accounts, "slots", m.slots)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+
 		for {
 			select {
 			case <-ticker.C:
@@ -327,4 +357,14 @@ func (m *StateMigrator) FinalizeTransition(transitionBlock types.Block) {
 		log.Info("All migrated state have been validated", "elapsed", time.Since(startAt))
 		m.cancel()
 	}()
+}
+
+func (m *StateMigrator) UpdateMigratedNums(accounts, slots uint64) error {
+	if err := m.db.Put(core.MigratedAccountsNumKey, []byte(hexutil.EncodeUint64(accounts))); err != nil {
+		return fmt.Errorf("failed to update migrated accounts num : %w", err)
+	}
+	if err := m.db.Put(core.MigratedSlotsNumKey, []byte(hexutil.EncodeUint64(slots))); err != nil {
+		return fmt.Errorf("failed to update migrated slots num : %w", err)
+	}
+	return nil
 }

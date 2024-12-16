@@ -117,6 +117,13 @@ func (m *StateMigrator) ValidateStateWithIterator(mptRoot common.Hash, zkRoot co
 			return err
 		}
 
+		if err := m.UpdateMigratedNums(accounts.Load(), slots.Load()); err != nil {
+			return err
+		}
+
+		m.accounts = accounts.Load()
+		m.slots = slots.Load()
+
 		return nil
 	})
 
@@ -209,6 +216,7 @@ func (m *StateMigrator) ValidateNewState(num uint64, mptRoot common.Hash, stateC
 			if err != nil {
 				return fmt.Errorf("failed to delete zkt account. address: %s, err: %w", addr, err)
 			}
+			m.accounts -= 1
 		} else {
 			zktAcc, err := zkt.GetAccount(addr)
 			if err != nil {
@@ -217,6 +225,7 @@ func (m *StateMigrator) ValidateNewState(num uint64, mptRoot common.Hash, stateC
 			// If it is a new account, create and use an empty account.
 			if zktAcc == nil {
 				zktAcc = types.NewEmptyStateAccount(true)
+				m.accounts += 1
 			}
 			zktAcc.Balance = mptAcc.Balance
 			zktAcc.Nonce = mptAcc.Nonce
@@ -252,11 +261,21 @@ func (m *StateMigrator) ValidateNewState(num uint64, mptRoot common.Hash, stateC
 						if err != nil {
 							return fmt.Errorf("failed to delete zkt storage value. address: %s, slot: %s, err: %w", addr, slot, err)
 						}
+						m.slots -= 1
 					} else {
+						origin, err := zktStorage.GetStorage(addr, slot.Bytes())
+						if err != nil {
+							return fmt.Errorf("failed to get zkt storage value. address: %s, slot: %s, err: %w", addr, slot, err)
+						}
+						if origin == nil {
+							m.slots += 1
+						}
+
 						err = zktStorage.UpdateStorage(addr, slot.Bytes(), val)
 						if err != nil {
 							return fmt.Errorf("failed to update zkt storage value. address: %s, slot: %s, err: %w", addr, slot, err)
 						}
+
 					}
 				}
 

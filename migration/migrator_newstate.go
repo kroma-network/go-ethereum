@@ -111,11 +111,13 @@ func (m *StateMigrator) applyStorageChanges(mptStorageTrie *trie.StateTrie, stor
 			if err := mptStorageTrie.DeleteStorage(common.Address{}, slotKey); err != nil {
 				return common.Hash{}, err
 			}
+			// TODO slots--
 		} else {
 			trimmed := common.TrimLeftZeroes(common.BytesToHash(val).Bytes())
 			if err := mptStorageTrie.UpdateStorage(common.Address{}, slotKey, trimmed); err != nil {
 				return common.Hash{}, err
 			}
+			// TODO if 0 -> !0 Update -> then, slots++. Accounts도 마찬가지이고 m.commit할때에 db에 쓰자. start할때에 load하고
 		}
 	}
 
@@ -155,6 +157,11 @@ func (m *StateMigrator) applyNewStateTransition(safeBlockNum uint64) error {
 		if err := m.migratedRef.Update(root, blockNum); err != nil {
 			return err
 		}
+
+		if err := m.UpdateMigratedNums(m.accounts, m.slots); err != nil {
+			return err
+		}
+
 		if err := core.DeleteStateChanges(m.db, blockNum); err != nil {
 			return err
 		}
