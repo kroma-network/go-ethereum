@@ -3,7 +3,6 @@ package migration
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -151,16 +150,21 @@ func (m *StateMigrator) migrateAccount(header *types.Header) error {
 	if err != nil {
 		return err
 	}
-	var mu sync.Mutex
-	err = hashRangeIterator(m.ctx, zkt, NumProcessAccount, func(key, value []byte) error {
-		hk := trie.IteratorKeyToHash(key, true)
+
+	nodeIt, err := zkt.NodeIterator(nil)
+	if err != nil {
+		return fmt.Errorf("failed to open node iterator (root: %s): %w", zkt.Hash(), err)
+	}
+	iter := trie.NewIterator(nodeIt)
+	for iter.Next() {
+		hk := trie.IteratorKeyToHash(iter.Key, true)
 		preimage, err := m.readZkPreimage(*hk)
 		if err != nil {
 			return err
 		}
 		address := common.BytesToAddress(preimage)
 		log.Debug("Start migrate account", "address", address.Hex())
-		acc, err := types.NewStateAccount(value, true)
+		acc, err := types.NewStateAccount(iter.Value, true)
 		if err != nil {
 			return err
 		}
@@ -168,18 +172,14 @@ func (m *StateMigrator) migrateAccount(header *types.Header) error {
 		if err != nil {
 			return err
 		}
-		mu.Lock()
-		defer mu.Unlock()
 		if err := mpt.UpdateAccount(address, acc); err != nil {
 			return err
 		}
-
 		accounts.Add(1)
-		log.Trace("Account updated in MPT", "account", address.Hex(), "index", common.BytesToHash(key).Hex())
-		return nil
-	})
-	if err != nil {
-		return err
+		log.Trace("Account updated in MPT", "account", address.Hex(), "index", common.BytesToHash(iter.Key).Hex())
+	}
+	if iter.Err != nil {
+		return fmt.Errorf("failed to traverse state trie (root: %s): %w", zkt.Hash(), iter.Err)
 	}
 
 	root, err := m.commit(mpt, types.EmptyRootHash)
@@ -215,28 +215,29 @@ func (m *StateMigrator) migrateStorage(
 		return common.Hash{}, err
 	}
 
-	var mu sync.Mutex
+	nodeIt, err := zkt.NodeIterator(nil)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to open node iterator (root: %s): %w", zkt.Hash(), err)
+	}
+	iter := trie.NewIterator(nodeIt)
 	var slots atomic.Uint64
-	err = hashRangeIterator(m.ctx, zkt, NumProcessStorage, func(key, value []byte) error {
-		hk := trie.IteratorKeyToHash(key, true)
+	for iter.Next() {
+		hk := trie.IteratorKeyToHash(iter.Key, true)
 		preimage, err := m.readZkPreimage(*hk)
 		if err != nil {
-			return err
+			return common.Hash{}, err
 		}
 		slot := common.BytesToHash(preimage).Bytes()
-		trimmed := common.TrimLeftZeroes(common.BytesToHash(value).Bytes())
-		mu.Lock()
-		defer mu.Unlock()
+		trimmed := common.TrimLeftZeroes(common.BytesToHash(iter.Value).Bytes())
 		if err := mpt.UpdateStorage(address, slot, trimmed); err != nil {
-			return err
+			return common.Hash{}, err
 		}
 
 		slots.Add(1)
-		log.Trace("Updated storage slot to MPT", "contract", address.Hex(), "index", common.BytesToHash(key).Hex())
-		return nil
-	})
-	if err != nil {
-		return common.Hash{}, err
+		log.Trace("Updated storage slot to MPT", "contract", address.Hex(), "index", common.BytesToHash(iter.Key).Hex())
+	}
+	if iter.Err != nil {
+		return common.Hash{}, fmt.Errorf("failed to traverse state trie (root: %s): %w", zkt.Hash(), iter.Err)
 	}
 
 	root, err := m.commit(mpt, types.EmptyRootHash)
