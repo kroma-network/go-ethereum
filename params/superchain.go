@@ -8,26 +8,31 @@ import (
 	"strings"
 
 	"github.com/ethereum-optimism/superchain-registry/superchain"
+
 	"github.com/ethereum/go-ethereum/common"
 )
 
 type KromaChainConfig struct {
-	CanyonTime  *uint64
-	EcotoneTime *uint64
+	CanyonTime   *uint64
+	EcotoneTime  *uint64
+	KromaMPTTime *uint64
 }
 
 var KromaChainConfigs = map[uint64]*KromaChainConfig{
 	KromaMainnetChainID: {
-		CanyonTime:  uint64ptr(1708502400),
-		EcotoneTime: uint64ptr(1714032001),
+		CanyonTime:   uint64ptr(1708502400),
+		EcotoneTime:  uint64ptr(1714032001),
+		KromaMPTTime: nil,
 	},
 	KromaSepoliaChainID: {
-		CanyonTime:  uint64ptr(1707897600),
-		EcotoneTime: uint64ptr(1713340800),
+		CanyonTime:   uint64ptr(1707897600),
+		EcotoneTime:  uint64ptr(1713340800),
+		KromaMPTTime: nil,
 	},
 	KromaDevnetChainID: {
-		CanyonTime:  uint64ptr(1707292800),
-		EcotoneTime: uint64ptr(1712908800),
+		CanyonTime:   uint64ptr(1707292800),
+		EcotoneTime:  uint64ptr(1712908800),
+		KromaMPTTime: uint64ptr(1735189200),
 	},
 }
 
@@ -88,6 +93,7 @@ func LoadKromaChainConfig(chainID uint64) (*ChainConfig, error) {
 		RegolithTime:                  &genesisActivation,
 		CanyonTime:                    kromaChainConfig.CanyonTime,
 		EcotoneTime:                   kromaChainConfig.EcotoneTime,
+		KromaMPTTime:                  kromaChainConfig.KromaMPTTime,
 		TerminalTotalDifficulty:       common.Big0,
 		TerminalTotalDifficultyPassed: true,
 		Ethash:                        nil,

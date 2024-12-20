@@ -72,6 +72,7 @@ var (
 		utils.OverrideOptimismCanyon,
 		utils.OverrideOptimismEcotone,
 		utils.OverrideOptimismInterop,
+		utils.OverrideKromaMPT,
 		utils.EnablePersonal,
 		utils.TxPoolLocalsFlag,
 		utils.TxPoolNoLocalsFlag,
@@ -152,8 +153,10 @@ var (
 		utils.GpoMinSuggestedPriorityFeeFlag,
 		/* [kroma unsupported]
 		utils.RollupSequencerHTTPFlag,
+		*/
 		utils.RollupHistoricalRPCFlag,
 		utils.RollupHistoricalRPCTimeoutFlag,
+		/* [kroma unsupported]
 		utils.RollupDisableTxPoolGossipFlag,
 		*/
 		utils.RollupComputePendingBlock,
@@ -162,6 +165,7 @@ var (
 		utils.RollupSuperchainUpgradesFlag,
 		*/
 		utils.KromaZKTrie,
+		utils.DisableMPTMigrationFlag,
 		configFileFlag,
 		utils.LogDebugFlag,
 		utils.LogBacktraceAtFlag,
