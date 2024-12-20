@@ -126,9 +126,6 @@ func (m *StateMigrator) ValidateStateWithIterator(mptRoot common.Hash, zkRoot co
 		}
 
 		accounts.Add(1)
-		if err != nil {
-			return err
-		}
 	}
 	if iter.Err != nil {
 		return fmt.Errorf("failed to traverse state trie (root: %s): %w", zkt.Hash(), iter.Err)
