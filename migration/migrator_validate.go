@@ -39,7 +39,6 @@ func (m *StateMigrator) ValidateStateWithIterator(mptRoot common.Hash, zkRoot co
 		log.Error("Failed to create state trie", "root", mptRoot, "err", err)
 		return err
 	}
-
 	zkt, err := trie.NewZkMerkleStateTrie(zkRoot, m.zktdb)
 	if err != nil {
 		log.Error("Failed to create zk state trie", "root", zkRoot, "err", err)
