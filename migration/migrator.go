@@ -177,6 +177,11 @@ func (m *StateMigrator) migrateAccount(header *types.Header) error {
 		}
 		accounts.Add(1)
 		log.Trace("Account updated in MPT", "account", address.Hex(), "index", common.BytesToHash(iter.Key).Hex())
+		select {
+		case <-m.ctx.Done():
+			return m.ctx.Err()
+		default:
+		}
 	}
 	if iter.Err != nil {
 		return fmt.Errorf("failed to traverse state trie (root: %s): %w", zkt.Hash(), iter.Err)
