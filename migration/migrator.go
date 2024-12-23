@@ -71,23 +71,28 @@ func (m *StateMigrator) Start() {
 	log.Info("Start state migrator to migrate ZKT to MPT")
 	go func() {
 		if m.migratedRef.Root() == (common.Hash{}) {
-			var safeHead *types.Header
-			if safe := m.backend.BlockChain().CurrentSafeBlock(); safe != nil {
-				safeHead = safe
-			} else {
-				safeHead = m.backend.BlockChain().Genesis().Header()
+			targetBlock := m.backend.BlockChain().CurrentBlock()
+			if targetBlock == nil {
+				targetBlock = m.backend.BlockChain().Genesis().Header()
 			}
-			log.Info("Start migrate past state")
-			// Start migration from the head block. It takes long time.
-			err := m.migrateAccount(safeHead)
+
+			// Wait until migration becomes possible. For migration to be possible, the target block must become safe,
+			// and the state changes of the block following the target block must be stored in the db.
+			log.Info("Waiting until migration becomes possible", "block", targetBlock.Number)
+			m.waitForMigrationReady(targetBlock)
+
+			// Start migration for all state up to the safe block using the zk trie iterator.
+			// This process takes a long time.
+			log.Info("Start migrate past state", "block", targetBlock.Number)
+			err := m.migrateAccount(targetBlock)
 			if err != nil {
-				log.Error("Failed to migrate state", "error", err)
+				log.Error("Failed to migrate past state", "error", err)
 				return
 			}
 
-			err = m.ValidateStateWithIterator(m.migratedRef.Root(), safeHead.Root)
+			err = m.ValidateStateWithIterator(m.migratedRef.Root(), targetBlock.Root)
 			if err != nil {
-				log.Error("Migrated state is invalid", "error", err)
+				log.Error("Migrated past state is invalid", "error", err)
 				return
 			}
 			log.Info("Migrated past state have been validated")
@@ -271,7 +276,7 @@ func (m *StateMigrator) commit(mpt *trie.StateTrie, parentHash common.Hash) (com
 		return common.Hash{}, err
 	}
 	if set == nil {
-		log.Warn("Tried to commit state changes, but nothing has changed.", "root", root)
+		log.Warn("Tried to commit state changes, but nothing has changed", "root", root)
 		return root, nil
 	}
 
@@ -317,4 +322,27 @@ func (m *StateMigrator) FinalizeTransition(transitionBlock types.Block) {
 	m.backend.BlockChain().TrieDB().SetBackend(false)
 
 	log.Info("Wrote chain config", "bedrock-block", cfg.BedrockBlock, "zktrie", cfg.Zktrie)
+}
+
+func (m *StateMigrator) waitForMigrationReady(target *types.Header) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			// Wait until the given target block becomes a safe block.
+			safe := m.backend.BlockChain().CurrentSafeBlock()
+			if safe == nil || safe.Number.Uint64() < target.Number.Uint64() {
+				continue
+			}
+			// Wait until the state changes of the given target block are stored in the database.
+			_, err := core.ReadStateChanges(m.db, target.Number.Uint64()+1)
+			if err != nil {
+				continue
+			}
+			return
+		case <-m.ctx.Done():
+			break
+		}
+	}
 }
