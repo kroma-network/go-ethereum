@@ -311,10 +311,18 @@ func (m *StateMigrator) FinalizeTransition(transitionBlock types.Block) {
 	// Write the chain config to disk.
 	genesisHash := rawdb.ReadCanonicalHash(m.db, 0)
 	rawdb.WriteChainConfig(m.db, genesisHash, cfg)
+	log.Info("Wrote chain config", "bedrock-block", cfg.BedrockBlock, "zktrie", cfg.Zktrie)
 
 	// Switch trie backend to MPT
 	cfg.Zktrie = false
 	m.backend.BlockChain().TrieDB().SetBackend(false)
 
-	log.Info("Wrote chain config", "bedrock-block", cfg.BedrockBlock, "zktrie", cfg.Zktrie)
+	// Delete all state changes.
+	go func() {
+		if err := core.DeleteAllStateChanges(m.db); err != nil {
+			log.Warn("Failed to delete all state changes for MPT migration", "err", err)
+		} else {
+			log.Info("All state changes have been deleted for MPT migration")
+		}
+	}()
 }
