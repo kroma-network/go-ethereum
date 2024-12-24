@@ -345,7 +345,7 @@ func (m *StateMigrator) waitForMigrationReady(target *types.Header) {
 			}
 			return
 		case <-m.ctx.Done():
-			break
+			return
 		}
 	}
 }
