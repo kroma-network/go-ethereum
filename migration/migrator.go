@@ -282,6 +282,9 @@ func (m *StateMigrator) commit(mpt *trie.StateTrie, parentHash common.Hash) (com
 
 	// NOTE(pangssu): It is possible that the keccak256 and poseidon hashes collide, and data loss can occur.
 	for path, mptNode := range set.Nodes {
+		if mptNode.IsDeleted() {
+			continue
+		}
 		data, _ := m.db.Get(mptNode.Hash.Bytes())
 		if len(data) == 0 {
 			continue
