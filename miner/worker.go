@@ -745,10 +745,10 @@ func (w *worker) makeEnv(parent *types.Header, header *types.Header, coinbase co
 
 	// [Kroma: ZKT to MPT]
 	if w.chainConfig.IsKromaMPTActivationBlock(header.Time) {
-		w.chainConfig.Zktrie = false
-		w.chain.TrieDB().SetBackend(false)
 		migratedRef := w.chain.GetMigratedRef()
 		if migratedRef.BlockNumber() > 0 && migratedRef.BlockNumber() == header.Number.Uint64()-1 {
+			w.chainConfig.Zktrie = false
+			w.chain.TrieDB().SetBackend(false)
 			state, err = w.chain.StateAt(migratedRef.Root())
 		} else {
 			err = errors.New("migration has not been completed")
