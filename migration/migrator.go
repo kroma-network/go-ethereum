@@ -325,13 +325,19 @@ func (m *StateMigrator) FinalizeTransition(transitionBlock types.Block) {
 }
 
 func (m *StateMigrator) waitForMigrationReady(target *types.Header) {
+	safe := m.backend.BlockChain().CurrentSafeBlock()
+	// There is no gap between the safe block and the unsafe block, no waiting is required.
+	if safe != nil && safe.Number.Uint64() == target.Number.Uint64() {
+		return
+	}
+
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
 			// Wait until the given target block becomes a safe block.
-			safe := m.backend.BlockChain().CurrentSafeBlock()
+			safe = m.backend.BlockChain().CurrentSafeBlock()
 			if safe == nil || safe.Number.Uint64() < target.Number.Uint64() {
 				continue
 			}
