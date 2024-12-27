@@ -210,6 +210,7 @@ func DeleteAllStateChanges(db ethdb.KeyValueStore) error {
 	batch := db.NewBatch()
 	deleteFunc := func(prefix []byte) error {
 		it := db.NewIterator(prefix, nil)
+		defer it.Release()
 		for it.Next() {
 			err := batch.Delete(it.Key())
 			if err != nil {
