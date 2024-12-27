@@ -104,15 +104,15 @@ func (m *StateMigrator) Start() {
 		for {
 			select {
 			case <-ticker.C:
-				safeBlockNum := m.backend.BlockChain().CurrentSafeBlock()
+				safeBlock := m.backend.BlockChain().CurrentSafeBlock()
 				// Skip block that have already been migrated.
-				if safeBlockNum == nil || m.migratedRef.BlockNumber() >= safeBlockNum.Number.Uint64() {
+				if safeBlock == nil || m.migratedRef.BlockNumber() >= safeBlock.Number.Uint64() {
 					continue
 				}
-				if m.backend.BlockChain().Config().IsKromaMPT(safeBlockNum.Time) {
+				if m.backend.BlockChain().Config().IsKromaMPT(safeBlock.Time) {
 					return
 				}
-				err := m.applyNewStateTransition(safeBlockNum.Number.Uint64())
+				err := m.applyNewStateTransition(safeBlock.Number.Uint64())
 				if err != nil {
 					log.Error("Failed to apply new state transition", "error", err)
 				}
