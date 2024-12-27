@@ -205,3 +205,31 @@ func DeleteStateChanges(db ethdb.KeyValueStore, blockNumber uint64) error {
 	}
 	return batch.Write()
 }
+
+func DeleteAllStateChanges(db ethdb.KeyValueStore) error {
+	batch := db.NewBatch()
+	deleteFunc := func(prefix []byte) error {
+		it := db.NewIterator(prefix, nil)
+		defer it.Release()
+		for it.Next() {
+			err := batch.Delete(it.Key())
+			if err != nil {
+				return err
+			}
+		}
+		if it.Error() != nil {
+			return it.Error()
+		}
+		return nil
+	}
+	if err := deleteFunc(destructChangesPrefix); err != nil {
+		return err
+	}
+	if err := deleteFunc(accountChangesPrefix); err != nil {
+		return err
+	}
+	if err := deleteFunc(storageChangesPrefix); err != nil {
+		return err
+	}
+	return batch.Write()
+}
