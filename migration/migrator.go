@@ -324,15 +324,6 @@ func (m *StateMigrator) FinalizeTransition(transitionBlock types.Block) {
 	// Switch trie backend to MPT
 	cfg.Zktrie = false
 	m.backend.BlockChain().TrieDB().SetBackend(false)
-
-	// Delete all state changes.
-	go func() {
-		if err := core.DeleteAllStateChanges(m.db); err != nil {
-			log.Warn("Failed to delete all state changes for MPT migration", "err", err)
-		} else {
-			log.Info("All state changes have been deleted for MPT migration")
-		}
-	}()
 }
 
 func (m *StateMigrator) waitForMigrationReady(target *types.Header) {
