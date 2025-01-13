@@ -5,9 +5,10 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -105,9 +106,41 @@ func TestExtractEcotoneGasParams(t *testing.T) {
 
 	// make sure wrong amont of data results in error
 	data = append(data, 0x00) // tack on garbage byte
-	_, _, err = extractL1GasParamsEcotone(data)
+	_, _, err = extractL1GasParamsEcotone(data, false)
 	require.Error(t, err)
 }
+
+// [Kroma: START]
+func TestExtractKromaMPTGasParams(t *testing.T) {
+	zeroTime := uint64(0)
+	// create a config where Kroma MPT upgrade is active
+	config := &params.ChainConfig{
+		Kroma:        params.KromaTestConfig.Kroma,
+		RegolithTime: &zeroTime,
+		EcotoneTime:  &zeroTime,
+		KromaMPTTime: &zeroTime,
+	}
+	require.True(t, config.IsKromaMPT(0))
+
+	data := getEcotoneL1Attributes(baseFee, blobBaseFee, baseFeeScalar, blobBaseFeeScalar)
+	// Remove last 32 bytes (validatorRewardScalar).
+	data = data[:len(data)-32]
+
+	_, costFunc, _, err := extractL1GasParams(config, 0, data)
+	require.NoError(t, err)
+
+	c, g := costFunc(emptyTx.RollupCostData())
+
+	require.Equal(t, ecotoneGas, g)
+	require.Equal(t, ecotoneFee, c)
+
+	// make sure wrong amount of data results in error
+	data = append(data, 0x00) // tack on garbage byte
+	_, _, err = extractL1GasParamsEcotone(data, true)
+	require.Error(t, err)
+}
+
+// [Kroma: END]
 
 // make sure the first block of the ecotone upgrade is properly detected, and invokes the bedrock
 // cost function appropriately
@@ -183,6 +216,10 @@ func (sg *testStateGetter) GetState(addr common.Address, slot common.Hash) commo
 		sg.scalar.FillBytes(buf[:])
 	case L1BlobBaseFeeSlot:
 		sg.blobBaseFee.FillBytes(buf[:])
+	// [Kroma: START]
+	case KromaL1BlobBaseFeeSlot:
+		sg.blobBaseFee.FillBytes(buf[:])
+	// [Kroma: END]
 	case L1FeeScalarsSlot:
 		offset := scalarSectionStart
 		binary.BigEndian.PutUint32(buf[offset:offset+4], sg.baseFeeScalar)

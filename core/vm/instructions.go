@@ -17,11 +17,12 @@
 package vm
 
 import (
+	"github.com/holiman/uint256"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/holiman/uint256"
 )
 
 func opAdd(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
@@ -817,6 +818,12 @@ func opStop(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 }
 
 func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	// [Kroma: START]
+	// NOTE: Since zkEVM cannot prove this opcode, it is disabled before KromaMPTTime.
+	if interpreter.evm.chainConfig.IsPreKromaMPT(interpreter.evm.Context.Time) {
+		return opUndefined(pc, interpreter, scope)
+	}
+	// [Kroma: END]
 	if interpreter.readOnly {
 		return nil, ErrWriteProtection
 	}
@@ -832,6 +839,12 @@ func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 }
 
 func opSelfdestruct6780(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	// [Kroma: START]
+	// NOTE: Since zkEVM cannot prove this opcode, it is disabled before KromaMPTTime.
+	if interpreter.evm.chainConfig.IsPreKromaMPT(interpreter.evm.Context.Time) {
+		return opUndefined(pc, interpreter, scope)
+	}
+	// [Kroma: END]
 	if interpreter.readOnly {
 		return nil, ErrWriteProtection
 	}

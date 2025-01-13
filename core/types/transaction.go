@@ -90,9 +90,7 @@ type TxData interface {
 	value() *big.Int
 	nonce() uint64
 	to() *common.Address
-	/* [kroma unsupported]
 	isSystemTx() bool
-	*/
 
 	rawSignatureValues() (v, r, s *big.Int)
 	setSignatureValues(chainID, v, r, s *big.Int)
@@ -214,7 +212,17 @@ func (tx *Transaction) decodeTyped(b []byte) (TxData, error) {
 	case BlobTxType:
 		inner = new(BlobTx)
 	case DepositTxType:
-		inner = new(DepositTx)
+		// [Kroma: START]
+		isKromaDepTx, err := IsKromaDepositTx(b[1:])
+		if err != nil {
+			return nil, err
+		}
+		if isKromaDepTx {
+			inner = new(KromaDepositTx)
+		} else {
+			inner = new(DepositTx)
+		}
+		// [Kroma: END]
 	default:
 		return nil, ErrTxTypeNotSupported
 	}
@@ -339,6 +347,11 @@ func (tx *Transaction) SourceHash() common.Hash {
 	if dep, ok := tx.inner.(*DepositTx); ok {
 		return dep.SourceHash
 	}
+	// [Kroma: START]
+	if dep, ok := tx.inner.(*KromaDepositTx); ok {
+		return dep.SourceHash
+	}
+	// [Kroma: END]
 	return common.Hash{}
 }
 
@@ -348,12 +361,23 @@ func (tx *Transaction) Mint() *big.Int {
 	if dep, ok := tx.inner.(*DepositTx); ok {
 		return dep.Mint
 	}
+	// [Kroma: START]
+	if dep, ok := tx.inner.(*KromaDepositTx); ok {
+		return dep.Mint
+	}
+	// [Kroma: END]
 	return nil
 }
 
 // IsDepositTx returns true if the transaction is a deposit tx type.
 func (tx *Transaction) IsDepositTx() bool {
 	return tx.Type() == DepositTxType
+}
+
+// IsSystemTx returns true for deposits that are system transactions. These transactions
+// are executed in an unmetered environment & do not contribute to the block gas limit.
+func (tx *Transaction) IsSystemTx() bool {
+	return tx.inner.isSystemTx()
 }
 
 // Cost returns (gas * gasPrice) + (blobGas * blobGasPrice) + value.

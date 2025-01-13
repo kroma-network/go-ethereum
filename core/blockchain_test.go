@@ -26,6 +26,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -39,7 +42,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/stretchr/testify/assert"
 )
 
 // So we can deterministically seed different blockchains
@@ -2238,9 +2240,9 @@ func testSideImport(t *testing.T, numCanonBlocksInSidechain, blocksBetweenCommon
 //	[ Cn, Cn+1, Cc, Sn+3 ... Sm]
 //	^    ^    ^  pruned
 func TestPrunedImportSide(t *testing.T) {
-	//glogger := log.NewGlogHandler(log.StreamHandler(os.Stdout, log.TerminalFormat(false)))
-	//glogger.Verbosity(3)
-	//log.Root().SetHandler(log.Handler(glogger))
+	// glogger := log.NewGlogHandler(log.StreamHandler(os.Stdout, log.TerminalFormat(false)))
+	// glogger.Verbosity(3)
+	// log.Root().SetHandler(log.Handler(glogger))
 	testSideImport(t, 3, 3, -1)
 	testSideImport(t, 3, -3, -1)
 	testSideImport(t, 10, 0, -1)
@@ -2249,9 +2251,9 @@ func TestPrunedImportSide(t *testing.T) {
 }
 
 func TestPrunedImportSideWithMerging(t *testing.T) {
-	//glogger := log.NewGlogHandler(log.StreamHandler(os.Stdout, log.TerminalFormat(false)))
-	//glogger.Verbosity(3)
-	//log.Root().SetHandler(log.Handler(glogger))
+	// glogger := log.NewGlogHandler(log.StreamHandler(os.Stdout, log.TerminalFormat(false)))
+	// glogger.Verbosity(3)
+	// log.Root().SetHandler(log.Handler(glogger))
 	testSideImport(t, 3, 3, 0)
 	testSideImport(t, 3, -3, 0)
 	testSideImport(t, 10, 0, 0)
@@ -3118,6 +3120,58 @@ func TestSelfDestructDisabled(t *testing.T) {
 
 // [Scroll: END]
 
+// [Kroma: START]
+// TestSelfDestructReEnabled
+func TestSelfDestructReEnabled(t *testing.T) {
+	var (
+		// Generate a canonical chain to act as the main dataset
+		engine = ethash.NewFaker()
+		db     = rawdb.NewMemoryDatabase()
+		// A sender who makes transactions, has some funds
+		key, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		address = crypto.PubkeyToAddress(key.PublicKey)
+		funds   = big.NewInt(1000000000000000)
+
+		aa        = common.HexToAddress("0x7217d81b76bdd8707601e959454e3d776aee5f43")
+		aaStorage = make(map[common.Hash]common.Hash)          // Initial storage in AA
+		aaCode    = []byte{byte(vm.PC), byte(vm.SELFDESTRUCT)} // Code for AA (simple selfdestruct)
+	)
+
+	// Enable KromaMPT
+	zero := uint64(0)
+	params.KromaTestConfig.KromaMPTTime = &zero
+	gspec := &Genesis{
+		Config: params.KromaTestConfig,
+		Alloc: GenesisAlloc{
+			address: {Balance: funds},
+			// The address 0xAAAAA selfdestructs if called
+			aa: {
+				// Code needs to just selfdestruct
+				Code:    aaCode,
+				Nonce:   1,
+				Balance: big.NewInt(0),
+				Storage: aaStorage,
+			},
+		},
+	}
+	gspec.Config.KromaMPTTime = &zero
+	genesis := gspec.MustCommit(db, trie.NewDatabase(db, trie.GetHashDefaults(gspec.Config.Zktrie)))
+
+	_, receipts := GenerateChain(params.KromaTestConfig, genesis, engine, db, 1, func(i int, b *BlockGen) {
+		b.SetCoinbase(common.Address{1})
+		// One transaction to AA, to kill it
+		tx, _ := types.SignTx(types.NewTransaction(0, aa,
+			big.NewInt(0), 50000, b.header.BaseFee, nil), types.HomesteadSigner{}, key)
+		b.AddTx(tx)
+	})
+
+	if receipts[0][0].Status != types.ReceiptStatusSuccessful {
+		t.Fatalf("Expected transaction triggering SELFDESTRUCT to success")
+	}
+}
+
+// [Kroma: END]
+
 // TestDeleteCreateRevert tests a weird state transition corner case that we hit
 // while changing the internals of statedb. The workflow is that a contract is
 // self destructed, then in a followup transaction (but same block) it's created
@@ -3697,8 +3751,8 @@ func testInitThenFailCreateContract(t *testing.T, scheme string) {
 
 	// Import the canonical chain
 	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfigWithScheme(scheme), gspec, nil, engine, vm.Config{
-		//Debug:  true,
-		//Tracer: vm.NewJSONLogger(nil, os.Stdout),
+		// Debug:  true,
+		// Tracer: vm.NewJSONLogger(nil, os.Stdout),
 	}, nil, nil)
 	if err != nil {
 		t.Fatalf("failed to create tester chain: %v", err)
@@ -3967,7 +4021,7 @@ func TestSetCanonical(t *testing.T) {
 }
 
 func testSetCanonical(t *testing.T, scheme string) {
-	//log.Root().SetHandler(log.LvlFilterHandler(log.LvlDebug, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	// log.Root().SetHandler(log.LvlFilterHandler(log.LvlDebug, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
 	var (
 		key, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
@@ -4442,8 +4496,8 @@ func testCreateThenDelete(t *testing.T, config *params.ChainConfig) {
 	})
 	// Import the canonical chain
 	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), nil, gspec, nil, engine, vm.Config{
-		//Debug:  true,
-		//Tracer: vm.NewJSONLogger(nil, os.Stdout),
+		// Debug:  true,
+		// Tracer: vm.NewJSONLogger(nil, os.Stdout),
 	}, nil, nil)
 	if err != nil {
 		t.Fatalf("failed to create tester chain: %v", err)
@@ -4883,7 +4937,7 @@ func TestPoseidonCodeHash(t *testing.T) {
 // TestTransactionCountLimit tests that the chain reject blocks with too many transactions.
 func TestTransactionCountLimit(t *testing.T) {
 	testFunc := func(txCountLimit int) {
-		config := params.TestChainConfig
+		config := *params.TestChainConfig
 		config.MaxTxPerBlock = new(int)
 		*config.MaxTxPerBlock = txCountLimit
 
@@ -4893,7 +4947,7 @@ func TestTransactionCountLimit(t *testing.T) {
 			key, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 			address = crypto.PubkeyToAddress(key.PublicKey)
 			funds   = big.NewInt(1000000000000000)
-			gspec   = &Genesis{Config: config, Alloc: GenesisAlloc{address: {Balance: funds}}}
+			gspec   = &Genesis{Config: &config, Alloc: GenesisAlloc{address: {Balance: funds}}}
 			genesis = gspec.MustCommit(db, trie.NewDatabase(db, trie.GetHashDefaults(config.Zktrie)))
 		)
 
@@ -4911,7 +4965,7 @@ func TestTransactionCountLimit(t *testing.T) {
 		defer blockchain.Stop()
 
 		// Insert empty block
-		block1, _ := GenerateChain(config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
+		block1, _ := GenerateChain(&config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
 			// empty
 		})
 
@@ -4920,7 +4974,7 @@ func TestTransactionCountLimit(t *testing.T) {
 		}
 
 		// Insert block with 1 transaction
-		block2, _ := GenerateChain(config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
+		block2, _ := GenerateChain(&config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
 			addTx(b)
 		})
 
@@ -4929,7 +4983,7 @@ func TestTransactionCountLimit(t *testing.T) {
 		}
 
 		// Insert block with 2 transactions
-		block3, _ := GenerateChain(config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
+		block3, _ := GenerateChain(&config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
 			addTx(b)
 			addTx(b)
 		})
@@ -4954,7 +5008,7 @@ func TestTransactionCountLimit(t *testing.T) {
 
 func TestBlockPayloadSizeLimit(t *testing.T) {
 	testFunc := func(blockLimit int) {
-		config := params.TestChainConfig
+		config := *params.TestChainConfig
 		config.MaxTxPayloadBytesPerBlock = new(int)
 		*config.MaxTxPayloadBytesPerBlock = blockLimit
 		config.MaxTxPerBlock = nil
@@ -4965,7 +5019,7 @@ func TestBlockPayloadSizeLimit(t *testing.T) {
 			key, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 			address = crypto.PubkeyToAddress(key.PublicKey)
 			funds   = big.NewInt(1000000000000000)
-			gspec   = &Genesis{Config: config, Alloc: GenesisAlloc{address: {Balance: funds}}}
+			gspec   = &Genesis{Config: &config, Alloc: GenesisAlloc{address: {Balance: funds}}}
 			genesis = gspec.MustCommit(db, trie.NewDatabase(db, trie.GetHashDefaults(config.Zktrie)))
 		)
 
@@ -4983,7 +5037,7 @@ func TestBlockPayloadSizeLimit(t *testing.T) {
 		defer blockchain.Stop()
 
 		// Insert empty block
-		block1, _ := GenerateChain(config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
+		block1, _ := GenerateChain(&config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
 			// empty
 		})
 
@@ -4992,7 +5046,7 @@ func TestBlockPayloadSizeLimit(t *testing.T) {
 		}
 
 		// Insert block with 1 transaction
-		block2, _ := GenerateChain(config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
+		block2, _ := GenerateChain(&config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
 			addTx(b)
 		})
 
@@ -5001,7 +5055,7 @@ func TestBlockPayloadSizeLimit(t *testing.T) {
 		}
 
 		// Insert block with 2 transactions
-		block3, _ := GenerateChain(config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
+		block3, _ := GenerateChain(&config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
 			addTx(b)
 			addTx(b)
 		})
@@ -5025,3 +5079,136 @@ func TestBlockPayloadSizeLimit(t *testing.T) {
 }
 
 // [Scroll: END]
+
+// [Kroma: START]
+func TestValidateDepositTxType(t *testing.T) {
+	zero := uint64(0)
+	one := uint64(1)
+	future := uint64(9999999999)
+	tests := []struct {
+		name         string
+		kromaMPTTime *uint64
+		depositTx    *types.Transaction
+		valid        bool
+	}{
+		{
+			name:         "KromaMPTNotSet_DepositTx",
+			kromaMPTTime: nil,
+			depositTx: types.NewTx(&types.DepositTx{
+				SourceHash: common.HexToHash("0x1234"),
+				Mint:       big.NewInt(34),
+			}),
+			valid: false,
+		},
+		{
+			name:         "KromaMPTNotSet_KromaDepositTx",
+			kromaMPTTime: nil,
+			depositTx: types.NewTx(&types.KromaDepositTx{
+				SourceHash: common.HexToHash("0x1234"),
+				Mint:       big.NewInt(34),
+			}),
+			valid: true,
+		},
+		{
+			name:         "KromaMPTNotActivateYet_DepositTx",
+			kromaMPTTime: &future,
+			depositTx: types.NewTx(&types.DepositTx{
+				SourceHash: common.HexToHash("0x1234"),
+				Mint:       big.NewInt(34),
+			}),
+			valid: false,
+		},
+		{
+			name:         "KromaMPTNotActivateYet_KromaDepositTx",
+			kromaMPTTime: &future,
+			depositTx: types.NewTx(&types.KromaDepositTx{
+				SourceHash: common.HexToHash("0x1234"),
+				Mint:       big.NewInt(34),
+			}),
+			valid: true,
+		},
+		{
+			name:         "KromaMPTAtGenesis_DepositTx",
+			kromaMPTTime: &zero,
+			depositTx: types.NewTx(&types.DepositTx{
+				SourceHash: common.HexToHash("0x1234"),
+				Mint:       big.NewInt(34),
+			}),
+			valid: true,
+		},
+		{
+			name:         "KromaMPTAtGenesis_KromaDepositTx",
+			kromaMPTTime: &zero,
+			depositTx: types.NewTx(&types.KromaDepositTx{
+				SourceHash: common.HexToHash("0x1234"),
+				Mint:       big.NewInt(34),
+			}),
+			valid: false,
+		},
+		{
+			name:         "KromaMPTActivatedAfterGenesis_DepositTx",
+			kromaMPTTime: &one,
+			depositTx: types.NewTx(&types.DepositTx{
+				SourceHash: common.HexToHash("0x1234"),
+				Mint:       big.NewInt(34),
+			}),
+			valid: true,
+		},
+		{
+			name:         "KromaMPTActivatedAfterGenesis_KromaDepositTx",
+			kromaMPTTime: &one,
+			depositTx: types.NewTx(&types.KromaDepositTx{
+				SourceHash: common.HexToHash("0x1234"),
+				Mint:       big.NewInt(34),
+			}),
+			valid: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(st *testing.T) {
+			config := *params.TestChainConfig
+			config.Kroma = &params.KromaConfig{
+				EIP1559Elasticity:        6,
+				EIP1559Denominator:       50,
+				EIP1559DenominatorCanyon: 250,
+			}
+			config.Optimism = &params.OptimismConfig{
+				EIP1559Elasticity:        6,
+				EIP1559Denominator:       50,
+				EIP1559DenominatorCanyon: 250,
+			}
+			config.KromaMPTTime = test.kromaMPTTime
+
+			var (
+				engine  = ethash.NewFaker()
+				db      = rawdb.NewMemoryDatabase()
+				key, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+				address = crypto.PubkeyToAddress(key.PublicKey)
+				funds   = big.NewInt(1000000000000000)
+				gspec   = &Genesis{Config: &config, Alloc: GenesisAlloc{address: {Balance: funds}}}
+				genesis = gspec.MustCommit(db, trie.NewDatabase(db, trie.GetHashDefaults(config.Zktrie)))
+			)
+
+			// Initialize blockchain
+			blockchain, err := NewBlockChain(db, nil, gspec, nil, engine, vm.Config{}, nil, nil)
+			if err != nil {
+				st.Fatalf("failed to create new chain manager: %v", err)
+			}
+			defer blockchain.Stop()
+
+			// Insert block with given deposit tx
+			block1, _ := GenerateChain(&config, genesis, ethash.NewFaker(), db, 1, func(i int, b *BlockGen) {
+				b.AddTx(test.depositTx)
+			})
+
+			_, err = blockchain.InsertChain(block1)
+			require.Equal(st, test.valid, err == nil, fmt.Errorf("expected no error, but got %w", err))
+			if err != nil {
+				require.Equal(st, errors.New("unexpected deposit tx type in transaction at index 0"), err)
+			}
+		})
+	}
+}
+
+// [Kroma: END]

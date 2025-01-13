@@ -86,6 +86,7 @@ type Backend interface {
 
 	ChainConfig() *params.ChainConfig
 	Engine() consensus.Engine
+	HistoricalRPCService() *rpc.Client
 	Genesis() *types.Block
 
 	// This is copied from filters.Backend

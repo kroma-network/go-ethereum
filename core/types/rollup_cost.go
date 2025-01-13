@@ -55,22 +55,25 @@ var (
 	EcotoneL1AttributesSelector = []byte{0x44, 0x0a, 0x5e, 0x20}
 
 	// L1BlockAddr is the address of the L1Block contract which stores the L1 gas attributes.
-	L1BlockAddr = common.HexToAddress("0x4200000000000000000000000000000000000002")
+	L1BlockAddr = common.HexToAddress("0x4200000000000000000000000000000000000015")
 
 	L1BaseFeeSlot = common.BigToHash(big.NewInt(1))
 	OverheadSlot  = common.BigToHash(big.NewInt(5))
 	ScalarSlot    = common.BigToHash(big.NewInt(6))
 
-	// [Kroma: START]
-	// The addition of validatorRewardScalar pushes slot back by one space
-	// L2BlobBaseFeeSlot was added with the Ecotone upgrade and stores the blobBaseFee L1 gas
+	// L1BlobBaseFeeSlot was added with the Ecotone upgrade and stores the blobBaseFee L1 gas
 	// attribute.
-	L1BlobBaseFeeSlot = common.BigToHash(big.NewInt(8))
-	// [Kroma: END]
+	L1BlobBaseFeeSlot = common.BigToHash(big.NewInt(7))
 	// L1FeeScalarsSlot as of the Ecotone upgrade stores the 32-bit basefeeScalar and
 	// blobBaseFeeScalar L1 gas attributes at offsets `BaseFeeScalarSlotOffset` and
 	// `BlobBaseFeeScalarSlotOffset` respectively.
 	L1FeeScalarsSlot = common.BigToHash(big.NewInt(3))
+
+	// [Kroma: START]
+	KromaL1BlockAddr = common.HexToAddress("0x4200000000000000000000000000000000000002")
+	// The addition of validatorRewardScalar pushes slot back by one space
+	KromaL1BlobBaseFeeSlot = common.BigToHash(big.NewInt(8))
+	// [Kroma: END]
 
 	oneMillion     = big.NewInt(1_000_000)
 	ecotoneDivisor = big.NewInt(1_000_000 * 16)
@@ -133,8 +136,17 @@ func NewL1CostFunc(config *params.ChainConfig, statedb StateGetter) L1CostFunc {
 			if !config.IsOptimismEcotone(blockTime) {
 				cachedFunc = newL1CostFuncBedrock(config, statedb, blockTime)
 			} else {
-				l1BlobBaseFee := statedb.GetState(L1BlockAddr, L1BlobBaseFeeSlot).Big()
-				l1FeeScalars := statedb.GetState(L1BlockAddr, L1FeeScalarsSlot).Bytes()
+				// [Kroma: START]
+				l1BlockAddr := KromaL1BlockAddr
+				l1BlobBaseFeeSlot := KromaL1BlobBaseFeeSlot
+				if config.IsKromaMPT(blockTime) {
+					l1BlockAddr = L1BlockAddr
+					l1BlobBaseFeeSlot = L1BlobBaseFeeSlot
+				}
+				// [Kroma: END]
+
+				l1BlobBaseFee := statedb.GetState(l1BlockAddr, l1BlobBaseFeeSlot).Big()
+				l1FeeScalars := statedb.GetState(l1BlockAddr, L1FeeScalarsSlot).Bytes()
 
 				// Edge case: the very first Ecotone block requires we use the Bedrock cost
 				// function. We detect this scenario by checking if the Ecotone parameters are
@@ -145,7 +157,7 @@ func NewL1CostFunc(config *params.ChainConfig, statedb StateGetter) L1CostFunc {
 					log.Info("using bedrock l1 cost func for first Ecotone block", "time", blockTime)
 					cachedFunc = newL1CostFuncBedrock(config, statedb, blockTime)
 				} else {
-					l1BaseFee := statedb.GetState(L1BlockAddr, L1BaseFeeSlot).Big()
+					l1BaseFee := statedb.GetState(l1BlockAddr, L1BaseFeeSlot).Big()
 					offset := scalarSectionStart
 					l1BaseFeeScalar := new(big.Int).SetBytes(l1FeeScalars[offset : offset+4])
 					l1BlobBaseFeeScalar := new(big.Int).SetBytes(l1FeeScalars[offset+4 : offset+8])
@@ -161,9 +173,16 @@ func NewL1CostFunc(config *params.ChainConfig, statedb StateGetter) L1CostFunc {
 // newL1CostFuncBedrock returns an L1 cost function suitable for Bedrock, Regolith, and the first
 // block only of the Ecotone upgrade.
 func newL1CostFuncBedrock(config *params.ChainConfig, statedb StateGetter, blockTime uint64) l1CostFunc {
-	l1BaseFee := statedb.GetState(L1BlockAddr, L1BaseFeeSlot).Big()
-	overhead := statedb.GetState(L1BlockAddr, OverheadSlot).Big()
-	scalar := statedb.GetState(L1BlockAddr, ScalarSlot).Big()
+	// [Kroma: START]
+	l1BlockAddr := KromaL1BlockAddr
+	if config.IsKromaMPT(blockTime) {
+		l1BlockAddr = L1BlockAddr
+	}
+	// [Kroma: END]
+
+	l1BaseFee := statedb.GetState(l1BlockAddr, L1BaseFeeSlot).Big()
+	overhead := statedb.GetState(l1BlockAddr, OverheadSlot).Big()
+	scalar := statedb.GetState(l1BlockAddr, ScalarSlot).Big()
 	isRegolith := config.IsRegolith(blockTime)
 	return newL1CostFuncBedrockHelper(l1BaseFee, overhead, scalar, isRegolith)
 }
@@ -227,7 +246,9 @@ func extractL1GasParams(config *params.ChainConfig, time uint64, data []byte) (l
 		// edge case: for the very first Ecotone block we still need to use the Bedrock
 		// function. We detect this edge case by seeing if the function selector is the old one
 		if len(data) >= 4 && !bytes.Equal(data[0:4], BedrockL1AttributesSelector) {
-			l1BaseFee, costFunc, err = extractL1GasParamsEcotone(data)
+			// [Kroma: START]
+			l1BaseFee, costFunc, err = extractL1GasParamsEcotone(data, config.IsKromaMPT(time))
+			// [Kroma: END]
 			return
 		}
 	}
@@ -249,10 +270,17 @@ func extractL1GasParams(config *params.ChainConfig, time uint64, data []byte) (l
 
 // extractEcotoneL1GasParams extracts the gas parameters necessary to compute gas from L1 attribute
 // info calldata after the Ecotone upgrade, but not for the very first Ecotone block.
-func extractL1GasParamsEcotone(data []byte) (l1BaseFee *big.Int, costFunc l1CostFunc, err error) {
-	if len(data) != 196 {
+func extractL1GasParamsEcotone(data []byte, isKromaMPT bool) (l1BaseFee *big.Int, costFunc l1CostFunc, err error) {
+	// [Kroma: START]
+	// Since validatorRewardScalar is removed after the Kroma MPT upgrade, the calldata can be 164 bytes long.
+	// Validate the length of the L1 info bytes accordingly.
+	if len(data) != 196 && !isKromaMPT {
 		return nil, nil, fmt.Errorf("expected 196 L1 info bytes, got %d", len(data))
+	} else if len(data) != 164 && isKromaMPT {
+		return nil, nil, fmt.Errorf("expected 164 L1 info bytes, got %d", len(data))
 	}
+	// [Kroma: END]
+
 	// data layout assumed for Ecotone:
 	// offset type varname
 	// 0      <selector>
@@ -265,7 +293,6 @@ func extractL1GasParamsEcotone(data []byte) (l1BaseFee *big.Int, costFunc l1Cost
 	// 68    uint256 _blobBaseFee,
 	// 100   bytes32 _hash,
 	// 132   bytes32 _batcherHash,
-	// 164   uint256 _validatorRewardScalar
 	l1BaseFee = new(big.Int).SetBytes(data[36:68])
 	l1BlobBaseFee := new(big.Int).SetBytes(data[68:100])
 	l1BaseFeeScalar := new(big.Int).SetBytes(data[4:8])

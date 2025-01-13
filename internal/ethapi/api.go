@@ -29,6 +29,7 @@ import (
 	zktrie "github.com/kroma-network/zktrie/types"
 	"github.com/tyler-smith/go-bip39"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
@@ -638,7 +639,6 @@ func (s *BlockChainAPI) BlockNumber() hexutil.Uint64 {
 // given block number. The rpc.LatestBlockNumber and rpc.PendingBlockNumber meta
 // block numbers are also allowed.
 func (s *BlockChainAPI) GetBalance(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Big, error) {
-	/* [kroma unsupported]
 	header, err := headerByNumberOrHash(ctx, s.b, blockNrOrHash)
 	if err != nil {
 		return nil, err
@@ -656,7 +656,6 @@ func (s *BlockChainAPI) GetBalance(ctx context.Context, address common.Address, 
 			return nil, rpc.ErrNoHistoricalFallback
 		}
 	}
-	*/
 
 	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
@@ -697,7 +696,6 @@ func (n *proofList) Delete(key []byte) error {
 
 // GetProof returns the Merkle-proof for a given account and optionally some storage keys.
 func (s *BlockChainAPI) GetProof(ctx context.Context, address common.Address, storageKeys []string, blockNrOrHash rpc.BlockNumberOrHash) (*AccountResult, error) {
-	/* [kroma unsupported]
 	header, err := headerByNumberOrHash(ctx, s.b, blockNrOrHash)
 	if err != nil {
 		return nil, err
@@ -714,7 +712,6 @@ func (s *BlockChainAPI) GetProof(ctx context.Context, address common.Address, st
 			return nil, rpc.ErrNoHistoricalFallback
 		}
 	}
-	*/
 	var (
 		keys         = make([]common.Hash, len(storageKeys))
 		keyLengths   = make([]int, len(storageKeys))
@@ -941,7 +938,6 @@ func (s *BlockChainAPI) GetUncleCountByBlockHash(ctx context.Context, blockHash 
 
 // GetCode returns the code stored at the given address in the state for the given block number.
 func (s *BlockChainAPI) GetCode(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
-	/* [kroma unsupported]
 	header, err := headerByNumberOrHash(ctx, s.b, blockNrOrHash)
 	if err != nil {
 		return nil, err
@@ -959,7 +955,6 @@ func (s *BlockChainAPI) GetCode(ctx context.Context, address common.Address, blo
 			return nil, rpc.ErrNoHistoricalFallback
 		}
 	}
-	*/
 	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
 		return nil, err
@@ -973,7 +968,6 @@ func (s *BlockChainAPI) GetCode(ctx context.Context, address common.Address, blo
 // block number. The rpc.LatestBlockNumber and rpc.PendingBlockNumber meta block
 // numbers are also allowed.
 func (s *BlockChainAPI) GetStorageAt(ctx context.Context, address common.Address, hexKey string, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Bytes, error) {
-	/* [kroma unsupported]
 	header, err := headerByNumberOrHash(ctx, s.b, blockNrOrHash)
 	if err != nil {
 		return nil, err
@@ -991,7 +985,6 @@ func (s *BlockChainAPI) GetStorageAt(ctx context.Context, address common.Address
 			return nil, rpc.ErrNoHistoricalFallback
 		}
 	}
-	*/
 	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
 		return nil, err
@@ -1005,7 +998,6 @@ func (s *BlockChainAPI) GetStorageAt(ctx context.Context, address common.Address
 	return res[:], state.Error()
 }
 
-/* [kroma unsupported]
 // The HeaderByNumberOrHash method returns a nil error and nil header
 // if the header is not found, but only for nonexistent block numbers. This is
 // different from StateAndHeaderByNumberOrHash. To account for this discrepancy,
@@ -1017,7 +1009,6 @@ func headerByNumberOrHash(ctx context.Context, b Backend, blockNrOrHash rpc.Bloc
 	}
 	return header, err
 }
-*/
 
 // GetBlockReceipts returns the block receipts for the given block hash or number or tag.
 func (s *BlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) ([]map[string]interface{}, error) {
@@ -1278,7 +1269,6 @@ func (e *revertError) ErrorData() interface{} {
 // Note, this function doesn't make and changes in the state/blockchain and is
 // useful to execute and retrieve values.
 func (s *BlockChainAPI) Call(ctx context.Context, args TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash, overrides *StateOverride, blockOverrides *BlockOverrides) (hexutil.Bytes, error) {
-	/* [kroma unsupported]
 	if blockNrOrHash == nil {
 		latest := rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
 		blockNrOrHash = &latest
@@ -1301,7 +1291,6 @@ func (s *BlockChainAPI) Call(ctx context.Context, args TransactionArgs, blockNrO
 			return nil, rpc.ErrNoHistoricalFallback
 		}
 	}
-	*/
 	result, err := DoCall(ctx, s.b, args, *blockNrOrHash, overrides, blockOverrides, s.b.RPCEVMTimeout(), s.b.RPCGasCap())
 	if err != nil {
 		return nil, err
@@ -1360,7 +1349,6 @@ func (s *BlockChainAPI) EstimateGas(ctx context.Context, args TransactionArgs, b
 		bNrOrHash = *blockNrOrHash
 	}
 
-	/* [kroma unsupported]
 	header, err := headerByNumberOrHash(ctx, s.b, bNrOrHash)
 	if err != nil {
 		return 0, err
@@ -1378,7 +1366,6 @@ func (s *BlockChainAPI) EstimateGas(ctx context.Context, args TransactionArgs, b
 			return 0, rpc.ErrNoHistoricalFallback
 		}
 	}
-	*/
 	return DoEstimateGas(ctx, s.b, args, bNrOrHash, overrides, s.b.RPCGasCap())
 }
 
@@ -1504,9 +1491,7 @@ type RPCTransaction struct {
 	// deposit-tx only
 	SourceHash *common.Hash `json:"sourceHash,omitempty"`
 	Mint       *hexutil.Big `json:"mint,omitempty"`
-	/* [kroma unsupported]
 	IsSystemTx *bool        `json:"isSystemTx,omitempty"`
-	*/
 	// deposit-tx post-Canyon only
 	DepositReceiptVersion *hexutil.Uint64 `json:"depositReceiptVersion,omitempty"`
 }
@@ -1540,16 +1525,21 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 	switch tx.Type() {
 	case types.DepositTxType:
 		srcHash := tx.SourceHash()
-		/* [kroma unsupported]
 		isSystemTx := tx.IsSystemTx()
-		*/
 		result.SourceHash = &srcHash
-		/* [kroma unsupported]
-		if isSystemTx {
+		// [Kroma: START]
+		// KromaDepositTx does not have an isSystemTransaction field, so
+		// DepositTx must always contain an isSystemTx field to distinguish it.
+		/* if isSystemTx {
 			// Only include IsSystemTx when true
 			result.IsSystemTx = &isSystemTx
+		}*/
+		if b, _ := tx.MarshalBinary(); len(b) > 0 {
+			if isKromaDeposit, _ := types.IsKromaDepositTx(b[1:]); !isKromaDeposit {
+				result.IsSystemTx = &isSystemTx
+			}
 		}
-		*/
+		// [Kroma: END]
 		result.Mint = (*hexutil.Big)(tx.Mint())
 		if receipt != nil && receipt.DepositNonce != nil {
 			result.Nonce = hexutil.Uint64(*receipt.DepositNonce)
@@ -1689,7 +1679,6 @@ func (s *BlockChainAPI) CreateAccessList(ctx context.Context, args TransactionAr
 	if blockNrOrHash != nil {
 		bNrOrHash = *blockNrOrHash
 	}
-	/* [kroma unsupported]
 	header, err := headerByNumberOrHash(ctx, s.b, bNrOrHash)
 	if err == nil && header != nil && s.b.ChainConfig().IsOptimismPreBedrock(header.Number) {
 		if s.b.HistoricalRPCService() != nil {
@@ -1703,7 +1692,6 @@ func (s *BlockChainAPI) CreateAccessList(ctx context.Context, args TransactionAr
 			return nil, rpc.ErrNoHistoricalFallback
 		}
 	}
-	*/
 	acl, gasUsed, vmerr, err := AccessList(ctx, s.b, bNrOrHash, args)
 	if err != nil {
 		return nil, err
@@ -1854,7 +1842,6 @@ func (s *TransactionAPI) GetTransactionCount(ctx context.Context, address common
 		return (*hexutil.Uint64)(&nonce), nil
 	}
 	// Resolve block number and use its state to ask for the nonce
-	/* [kroma unsupported]
 	header, err := headerByNumberOrHash(ctx, s.b, blockNrOrHash)
 	if err != nil {
 		return nil, err
@@ -1872,7 +1859,6 @@ func (s *TransactionAPI) GetTransactionCount(ctx context.Context, address common
 			return nil, rpc.ErrNoHistoricalFallback
 		}
 	}
-	*/
 	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
 		return nil, err

@@ -276,7 +276,8 @@ type ChainOverrides struct {
 	OverrideOptimismInterop *uint64
 
 	// kroma
-	CircuitParams *params.CircuitParams
+	CircuitParams    *params.CircuitParams
+	OverrideKromaMPT *uint64
 }
 
 // SetupGenesisBlock writes or updates the genesis block in db.
@@ -304,6 +305,16 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		if config != nil {
 			// [Kroma: START]
 			if config.IsKroma() {
+				zero := uint64(0)
+				var bedrockBlock *big.Int
+				if config.BedrockBlock != nil {
+					bedrockBlock = new(big.Int).Set(config.BedrockBlock)
+				}
+				var optimismConfig params.OptimismConfig
+				if config.Optimism != nil {
+					optimismConfig = *config.Optimism
+				}
+
 				// Load the chain-config for the given chain id, and overrides it if it exists.
 				if config.ChainID != nil && config.ChainID.IsUint64() {
 					conf, err := params.LoadKromaChainConfig(config.ChainID.Uint64())
@@ -314,9 +325,13 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 					}
 				}
 
+				if bedrockBlock != nil && bedrockBlock.Uint64() > 0 {
+					config.BedrockBlock = bedrockBlock
+					config.Optimism = &optimismConfig
+				} else {
+					config.BedrockBlock = new(big.Int).SetUint64(zero)
+				}
 				// NOTE: kroma always post-regolith
-				zero := uint64(0)
-				config.BedrockBlock = new(big.Int).SetUint64(zero)
 				config.RegolithTime = &zero
 			}
 			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxTxs != nil {
@@ -324,6 +339,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 			}
 			if overrides != nil && overrides.CircuitParams != nil && overrides.CircuitParams.MaxCalldata != nil {
 				config.MaxTxPayloadBytesPerBlock = overrides.CircuitParams.MaxCalldata
+			}
+			if overrides != nil && overrides.OverrideKromaMPT != nil {
+				config.KromaMPTTime = overrides.OverrideKromaMPT
 			}
 			// [Kroma: END]
 

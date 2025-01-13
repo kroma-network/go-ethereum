@@ -22,10 +22,11 @@ import (
 	"io"
 	"math/big"
 
+	"github.com/holiman/uint256"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/holiman/uint256"
 )
 
 // txJSON is the JSON representation of transactions.
@@ -53,6 +54,7 @@ type txJSON struct {
 	SourceHash *common.Hash    `json:"sourceHash,omitempty"`
 	From       *common.Address `json:"from,omitempty"`
 	Mint       *hexutil.Big    `json:"mint,omitempty"`
+	IsSystemTx *bool           `json:"isSystemTx,omitempty"`
 
 	// Only used for encoding:
 	Hash common.Hash `json:"hash"`
@@ -159,11 +161,11 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		if itx.Mint != nil {
 			enc.Mint = (*hexutil.Big)(itx.Mint)
 		}
+		enc.IsSystemTx = &itx.IsSystemTransaction
 		// other fields will show up as null.
-	// NOTE(chokobole): When unmarshalling the DepositTx from the RPC transaction format,
-	// it is transformed into depositTxWithNonce. This unexpected transformation can cause data loss,
-	// so this case statement was added as a temporary measure.
-	case *depositTxWithNonce:
+
+	// [Kroma: START]
+	case *KromaDepositTx:
 		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
 		enc.Value = (*hexutil.Big)(itx.Value)
 		enc.Input = (*hexutil.Bytes)(&itx.Data)
@@ -173,7 +175,34 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		if itx.Mint != nil {
 			enc.Mint = (*hexutil.Big)(itx.Mint)
 		}
+		enc.IsSystemTx = nil
 		// other fields will show up as null.
+	case *depositTxWithNonce:
+		// NOTE(chokobole): When unmarshalling the DepositTx from the RPC transaction format,
+		// it is transformed into depositTxWithNonce. This unexpected transformation can cause data loss,
+		// so this case statement was added as a temporary measure.
+		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
+		enc.Value = (*hexutil.Big)(itx.Value)
+		enc.Input = (*hexutil.Bytes)(&itx.Data)
+		enc.To = tx.To()
+		enc.SourceHash = &itx.SourceHash
+		enc.From = &itx.From
+		if itx.Mint != nil {
+			enc.Mint = (*hexutil.Big)(itx.Mint)
+		}
+		enc.IsSystemTx = &itx.IsSystemTransaction
+	case *kromaDepositTxWithNonce:
+		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
+		enc.Value = (*hexutil.Big)(itx.Value)
+		enc.Input = (*hexutil.Bytes)(&itx.Data)
+		enc.To = tx.To()
+		enc.SourceHash = &itx.SourceHash
+		enc.From = &itx.From
+		if itx.Mint != nil {
+			enc.Mint = (*hexutil.Big)(itx.Mint)
+		}
+		enc.IsSystemTx = nil
+		// [Kroma: END]
 	}
 	return json.Marshal(&enc)
 }
@@ -470,9 +499,31 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 			return errors.New("missing required field 'sourceHash' in transaction")
 		}
 		itx.SourceHash = *dec.SourceHash
-		if dec.Nonce != nil {
-			inner = &depositTxWithNonce{DepositTx: itx, EffectiveNonce: uint64(*dec.Nonce)}
+		// IsSystemTx may be omitted. Defaults to false.
+		// [Kroma: START]
+		if dec.IsSystemTx != nil {
+			itx.IsSystemTransaction = *dec.IsSystemTx
+
+			if dec.Nonce != nil {
+				inner = &depositTxWithNonce{DepositTx: itx, EffectiveNonce: uint64(*dec.Nonce)}
+			}
+		} else {
+			kromaDepTx := KromaDepositTx{
+				SourceHash: itx.SourceHash,
+				From:       itx.From,
+				To:         itx.To,
+				Mint:       itx.Mint,
+				Value:      itx.Value,
+				Gas:        itx.Gas,
+				Data:       itx.Data,
+			}
+			inner = &kromaDepTx
+
+			if dec.Nonce != nil {
+				inner = &kromaDepositTxWithNonce{KromaDepositTx: kromaDepTx, EffectiveNonce: uint64(*dec.Nonce)}
+			}
 		}
+		// [Kroma: END]
 	default:
 		return ErrTxTypeNotSupported
 	}
@@ -495,3 +546,18 @@ func (tx *depositTxWithNonce) EncodeRLP(w io.Writer) error {
 }
 
 func (tx *depositTxWithNonce) effectiveNonce() *uint64 { return &tx.EffectiveNonce }
+
+// [Kroma: START]
+type kromaDepositTxWithNonce struct {
+	KromaDepositTx
+	EffectiveNonce uint64
+}
+
+// EncodeRLP ensures that RLP encoding this transaction excludes the nonce. Otherwise, the tx Hash would change
+func (tx *kromaDepositTxWithNonce) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, tx.KromaDepositTx)
+}
+
+func (tx *kromaDepositTxWithNonce) effectiveNonce() *uint64 { return &tx.EffectiveNonce }
+
+// [Kroma: END]
