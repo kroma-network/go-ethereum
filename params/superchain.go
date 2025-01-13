@@ -27,7 +27,7 @@ var KromaChainConfigs = map[uint64]*KromaChainConfig{
 	KromaSepoliaChainID: {
 		CanyonTime:   uint64ptr(1707897600),
 		EcotoneTime:  uint64ptr(1713340800),
-		KromaMPTTime: nil,
+		KromaMPTTime: uint64ptr(1737090000),
 	},
 	KromaDevnetChainID: {
 		CanyonTime:   uint64ptr(1707292800),
