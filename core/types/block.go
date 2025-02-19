@@ -23,6 +23,7 @@ import (
 	"io"
 	"math/big"
 	"reflect"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -267,9 +268,11 @@ func NewBlockWithWithdrawals(header *Header, txs []*Transaction, uncles []*Heade
 		b.header.WithdrawalsHash = nil
 	} else if len(withdrawals) == 0 {
 		b.header.WithdrawalsHash = &EmptyWithdrawalsHash
+		b.withdrawals = Withdrawals{}
 	} else {
 		h := DeriveSha(Withdrawals(withdrawals), hasher)
 		b.header.WithdrawalsHash = &h
+		b.withdrawals = slices.Clone(withdrawals)
 	}
 
 	return b.WithWithdrawals(withdrawals)
@@ -382,6 +385,14 @@ func (b *Block) TxHash() common.Hash      { return b.header.TxHash }
 func (b *Block) ReceiptHash() common.Hash { return b.header.ReceiptHash }
 func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
+
+func (b *Block) WithdrawalsRoot() *common.Hash {
+	if b.header.WithdrawalsHash == nil {
+		return nil
+	}
+	h := *b.header.WithdrawalsHash
+	return &h
+}
 
 func (b *Block) BaseFee() *big.Int {
 	if b.header.BaseFee == nil {
