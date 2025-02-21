@@ -29,11 +29,12 @@ import (
 	"math/big"
 	"os"
 
+	"golang.org/x/crypto/sha3"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie/zk"
-	"golang.org/x/crypto/sha3"
 )
 
 // SignatureLength indicates the byte length required to carry a signature with recovery id.
@@ -178,6 +179,9 @@ func FromECDSA(priv *ecdsa.PrivateKey) []byte {
 func UnmarshalPubkey(pub []byte) (*ecdsa.PublicKey, error) {
 	x, y := elliptic.Unmarshal(S256(), pub)
 	if x == nil {
+		return nil, errInvalidPubkey
+	}
+	if !S256().IsOnCurve(x, y) {
 		return nil, errInvalidPubkey
 	}
 	return &ecdsa.PublicKey{Curve: S256(), X: x, Y: y}, nil
